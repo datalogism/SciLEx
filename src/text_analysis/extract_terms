@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Feb  3 14:29:41 2023
+
+@author: cringwal
+"""
+import pandas as pd
+import yake
+from multi_rake import Rake
+from summa import keywords as summa_k
+import csv 
+import yaml
+
+
+############ 
+# SCRIPT FOR EXTRACTING KEYWORDS FROM ABSTRACTS AND TITLES
+############
+
+
+
+research_coll="knowledge_extraction_surveys"
+collect_dir="/user/cringwal/home/Desktop/THESE YEAR1/SAT/"+research_coll
+data = pd.read_csv(collect_dir+'/results_filtered.csv')
+
+
+relevant_data=data[data["relevant"].fillna(-1).astype('int')==1]
+
+
+doc_terms={}
+terms_global={}
+
+for index, row in relevant_data.iterrows():
+    tempo={"rake":{},"yake":{},"summa":{}}
+    print(row["index"]) 
+    full_text = row["title"] +", "+ row["abstract"]
+  
+    print(">>>> rake extract")
+    kw_extractor = yake.KeywordExtractor(top=50, stopwords=None)
+    keywords = kw_extractor.extract_keywords(full_text)
+    for kw, v in keywords:
+        tempo["rake"][kw]=v
+    
+    rake = Rake()
+    keywords = rake.apply(full_text)
+    for kw, v in keywords:
+        tempo["yake"][kw]=v
+  
+    TR_keywords = summa_k.keywords(full_text, scores=True)
+    for kw, v in keywords:
+        tempo["summa"][kw]=v
+
+    doc_terms[row["index"]]=tempo
+    
+    
+
+terms_global={}
+for k in doc_terms.keys():
+    doc=doc_terms[k]
+    for k2 in doc.keys():
+        for term in doc[k2].keys():
+            if(term not in terms_global):
+                terms_global[term]={"list":[],"avg_score":0,"nb":0}
+            terms_global[term]["list"].append(float(doc[k2][term]))
+    
+
+for term in terms_global.keys():
+    terms_global[term]["nb"]=len(terms_global[term]["list"])
+    if(sum(terms_global[term]["list"])!=0):
+        terms_global[term]["avg_score"]=terms_global[term]["nb"]/sum(terms_global[term]["list"])
+
+final_data=[]
+for term in terms_global.keys():    
+    temp={"term":"","nb":0,"score":0}
+    temp["term"]=term
+    temp["nb"]=terms_global[term]["nb"]
+    temp["score"]=terms_global[term]["avg_score"]
+    final_data.append(temp)
+
+df = pd.DataFrame(final_data)
+df.to_csv(collect_dir+"/terms_found.csv",sep=";", quotechar='"',quoting=csv.QUOTE_NONNUMERIC)

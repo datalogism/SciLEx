@@ -1,0 +1,18 @@
+email: "YOURMAIL"
+collect:
+    dir: 'YOURZOTEROEXPORTDIR'
+    base_dir: 'YOURYOURWORKDIR'
+zotero:
+    api_key: "YOURAPIKEY"
+springer:
+    api_key: "YOURAPIKEY"
+sem_scholar:
+    api_key: "YOURAPIKEY"
+elsevier:
+    api_key: "YOURAPIKEY"
+ieee:
+    api_key: "YOURAPIKEY"
+orcid:
+    dir: 'YOURWORKDIR'
+    client_id: "YOURCLIENTID"
+    client_secret: "YOURAPIKEY"
