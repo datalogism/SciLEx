@@ -5,7 +5,7 @@ The SciLEx (Science Literature Exploration) project is a basic python toolbox ma
 * Request and run API crawler related to a research field
 * Managing / Parsing / Deduplicating the collected papers
 * Consolidate and Enrich a benchmark  
-* Exploring the citation  obtained and expanding a network of sci. papers
+* Exploring the citations links and expanding a network of sci. papers
 
 I developed ScilEx scripts in the context of a systematic review conducted during my Phd, and introduced in :  
 > Celian Ringwald. Learning Pattern-Based Extractors from Natural Language and Knowledge Graphs: Applying Large Language Models to Wikipedia and Linked Open Data. AAAI-24 - 38th AAAI Conference on Artificial Intelligence, Feb 2024, Vancouver, France. pp.23411-23412, ⟨10.1609/aaai.v38i21.30406⟩. ⟨hal-04526050⟩
