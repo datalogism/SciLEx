@@ -1,7 +1,7 @@
 ![Scilex](img/projectLogoScilex.png)
 # Scilex
 
-The SciLEx (Science Literature Exploration) project is a basic python toolbox made for :
+The SciLEx (Science Literature Exploration) project is a basic python scriptbox made for :
 * Request and run API crawler related to a research field
 * Managing / Parsing / Deduplicating the collected papers
 * Consolidate and Enrich a benchmark  
@@ -27,34 +27,42 @@ I developed ScilEx scripts in the context of a systematic review conducted durin
 
 ## Testing APIs :file_folder: /src/API_tests/ 
 
-* ElsevierAPI.py
-* HALAPI.py
-* IEEEAPI
-* IstexAPI.py
-* OKGK.py [not finished]
-* OpenAlexAPI.py
-* SemanticScholardAPI.py
-* SpringerAPI.py
-* arxivAPI.py
-* dblpAPI.py
-* scholar_test.py
-* wikipedia_article_scrapper.py- [not finished]
+Working APIs:
+* [ElsevierAPI.py](https://github.com/datalogism/SciLEx/blob/main/src/API_tests/ElsevierAPI.py)
+* [HALAPI.py](https://github.com/datalogism/SciLEx/blob/main/src/API_tests/HALAPI.py)
+* [IEEEAPI](https://github.com/datalogism/SciLEx/blob/main/src/API_tests/IEEEAPI.py)
+* [IstexAPI.py](https://github.com/datalogism/SciLEx/blob/main/src/API_tests/IstexAPI.py)
+* [OpenAlexAPI.py](https://github.com/datalogism/SciLEx/blob/main/src/API_tests/OpenAlexAPI.py)
+* [SemanticScholardAPI.py](https://github.com/datalogism/SciLEx/blob/main/src/API_tests/SemanticScholardAPI.py)
+* [SpringerAPI.py](https://github.com/datalogism/SciLEx/blob/main/src/API_tests/SpringerAPI.py)
+* [arxivAPI.py](https://github.com/datalogism/SciLEx/blob/main/src/API_tests/arxivAPI.py)
+* [dblpAPI.py](https://github.com/datalogism/SciLEx/blob/main/src/API_tests/dblpAPI.py)
+* [scholar_test.py](https://github.com/datalogism/SciLEx/blob/main/src/API_tests/scholar_test.py)
+
+Not Finished:
+
+* OKGK.py 
+* wikipedia_article_scrapper.py
 
 ## Create a collect: :file_folder: /src/crawlers
 
-* Collectors (could be extended): [https://github.com/datalogism/SciLEx/blob/main/src/crawlers/collectors.py](https://github.com/datalogism/SciLEx/blob/main/src/crawlers/collectors.py)
-* Aggregate functions and Zotero format constraining: [https://github.com/datalogism/SciLEx/blob/main/src/crawlers/aggregate.py](https://github.com/datalogism/SciLEx/blob/main/src/crawlers/aggregate.py)
-* Run a collect : [https://github.com/datalogism/SciLEx/blob/main/src/crawlers/run_collecte.py](https://github.com/datalogism/SciLEx/blob/main/src/crawlers/run_collecte.py)
+* Declaration of collectors : [collectors.py](https://github.com/datalogism/SciLEx/blob/main/src/crawlers/collectors.py) (could be extended)
+* Aggregate functions and Zotero format constraining: [aggregate.py](https://github.com/datalogism/SciLEx/blob/main/src/crawlers/aggregate.py)
+* Run a collect : [run_collecte.py](https://github.com/datalogism/SciLEx/blob/main/src/crawlers/run_collecte.py)
 > Choose your keywords and configure your filepaths
 
 
-## Push results on Zotero: :file_folder: /src/Zotero
+##  Zotero: :file_folder: /src/Zotero
 
-- addLastPapers.py
-- getZotero.py
-- push_to_Zotero.py
+- Push collect to Zotero : push_to_Zotero.py
+- Add new papers : addLastPapers.py
+- Get papers data from Zotero: getZotero.py
 
 ## Paper With Code: :file_folder: /src/PWC
+- Push collect to Zotero : push_to_Zotero.py
+- Add new papers : addLastPapers.py
+- Get papers data from Zotero: getZotero.py
+- 
 ## Citations : :file_folder: /src/citations
 ## Manage Tags: :file_folder: /src/PWC
 ## GetDOI and ORCID : :file_folder: /src/ORCID + /src/DOI
