@@ -1,5 +1,5 @@
 ![Scilex](img/projectLogoScilex.png)
-# Scilex
+# SciLEx
 
 The SciLEx (Science Literature Exploration) project is a basic python scriptbox made for :
 * Request and run API crawler related to a research field
@@ -19,52 +19,35 @@ I developed ScilEx scripts in the context of a systematic review conducted durin
 ![Framework](img/Framework.png)
 ---
 
-## First steps
-* [Install Zotero and Zotero Connector](https://www.zotero.org/download/)
-* [Create a Zotero API key](https://www.zotero.org/support/dev/web_api/v3/start)
-* Creating API tokens for Elsevier/IEEE/Springer/SemanticScholar
-* fill [https://github.com/datalogism/SciLEx/blob/main/src/scilex.config.yml](https://github.com/datalogism/SciLEx/blob/main/src/scilex.config.yml) with your API credits
+## :electric_plug: First steps
+:heavy_plus_sign: [Install Zotero and Zotero Connector](https://www.zotero.org/download/)
 
-## Testing APIs :file_folder: /src/API_tests/ 
+:heavy_plus_sign: [Create a Zotero API key](https://www.zotero.org/support/dev/web_api/v3/start)
 
-Working APIs:
-* [ElsevierAPI.py](https://github.com/datalogism/SciLEx/blob/main/src/API_tests/ElsevierAPI.py)
-* [HALAPI.py](https://github.com/datalogism/SciLEx/blob/main/src/API_tests/HALAPI.py)
-* [IEEEAPI](https://github.com/datalogism/SciLEx/blob/main/src/API_tests/IEEEAPI.py)
-* [IstexAPI.py](https://github.com/datalogism/SciLEx/blob/main/src/API_tests/IstexAPI.py)
-* [OpenAlexAPI.py](https://github.com/datalogism/SciLEx/blob/main/src/API_tests/OpenAlexAPI.py)
-* [SemanticScholardAPI.py](https://github.com/datalogism/SciLEx/blob/main/src/API_tests/SemanticScholardAPI.py)
-* [SpringerAPI.py](https://github.com/datalogism/SciLEx/blob/main/src/API_tests/SpringerAPI.py)
-* [arxivAPI.py](https://github.com/datalogism/SciLEx/blob/main/src/API_tests/arxivAPI.py)
-* [dblpAPI.py](https://github.com/datalogism/SciLEx/blob/main/src/API_tests/dblpAPI.py)
-* [scholar_test.py](https://github.com/datalogism/SciLEx/blob/main/src/API_tests/scholar_test.py)
+:heavy_plus_sign: Create an account for following APIs:
+* [SemanticScholar](https://www.semanticscholar.org/product/api/tutorial)
+* [Springer](https://dev.springernature.com/)
+* [IEEE](https://developer.ieee.org/)
+* [Elsevier](https://dev.elsevier.com/)
 
-Not Finished:
+ 
+ :heavy_plus_sign: :bangbang: **ADD ALL OF YOUR CREDITS** IN [scilex.config.yml](https://github.com/datalogism/SciLEx/blob/main/src/scilex.config.yml)  :clipboard:
 
-* OKGK.py 
-* wikipedia_article_scrapper.py
+-----
+##  :open_file_folder: ScriptBox Content:
 
-## Create a collect: :file_folder: /src/crawlers
+*  :clipboard: [Testing APIs scripts](https://github.com/datalogism/SciLEx/blob/main/src/API_tests/) : test and check API services
+*  :clipboard: [Collect scripts]( 
+https://github.com/datalogism/SciLEx/tree/main/src/crawlers) : run a collect > aggregate it and define new collectors 
+*  :clipboard: [Zotero scripts]( 
+https://github.com/datalogism/SciLEx/tree/main/src/Zotero) : extract or push papers data in the lib 
+*  :wrench: [Paper With Code scripts]( 
+https://github.com/datalogism/SciLEx/tree/main/src/PWC) : extract or push papers data in the lib 
+*  :wrench: [Citations scripts]( 
+https://github.com/datalogism/SciLEx/tree/main/src/citations) : extract or push papers data in the lib 
+* :wrench: [DOI and ORCID scripts]( 
+https://github.com/datalogism/SciLEx/tree/main/src/citations) : extract or push papers data in the lib 
+* :wrench:[Textmining scripts]( 
+https://github.com/datalogism/SciLEx/tree/main/src/text) : extract or push papers data in the lib 
 
-* Declaration of collectors : [collectors.py](https://github.com/datalogism/SciLEx/blob/main/src/crawlers/collectors.py) (could be extended)
-* Aggregate functions and Zotero format constraining: [aggregate.py](https://github.com/datalogism/SciLEx/blob/main/src/crawlers/aggregate.py)
-* Run a collect : [run_collecte.py](https://github.com/datalogism/SciLEx/blob/main/src/crawlers/run_collecte.py)
-> Choose your keywords and configure your filepaths
-
-
-##  Zotero: :file_folder: /src/Zotero
-
-- Push collect to Zotero : push_to_Zotero.py
-- Add new papers : addLastPapers.py
-- Get papers data from Zotero: getZotero.py
-
-## Paper With Code: :file_folder: /src/PWC
-- Push collect to Zotero : push_to_Zotero.py
-- Add new papers : addLastPapers.py
-- Get papers data from Zotero: getZotero.py
-- 
-## Citations : :file_folder: /src/citations
-## Manage Tags: :file_folder: /src/PWC
-## GetDOI and ORCID : :file_folder: /src/ORCID + /src/DOI
-## Play with textual data : :file_folder: /src/text
 
