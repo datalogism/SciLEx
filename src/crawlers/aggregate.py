@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Thu Jan 26 17:32:57 2023
+Created on Fri Feb 10 10:57:49 2023
 
 @author: cringwal
+         aollagnier
+
+@version: 1.0.1
 """
+
 import requests
 from ratelimit import limits, RateLimitException, sleep_and_retry
 from csv import writer
@@ -25,74 +29,62 @@ import yaml
 # FUNCTION FOR AGGREGATIONS OF DATA
 ############
 
-
-
-            
 def isNaN(num):
     return num != num
 
-def getquality(df_row,column_names):
-    quality=0
+def getquality(df_row, column_names):
+    quality = 0
     for col in column_names:
-        if(df_row[col]!="NA" and not(isNaN(df_row[col]))):
-            quality+=1
+        if df_row[col] != "NA" and not isNaN(df_row[col]):
+            quality += 1
     return quality
 
-def filter_data(df_input,filter_):
-        return df_input[df_input["abstract"].str.contains('triple', case=False, na=False)]
+def filter_data(df_input, filter_):
+    return df_input[df_input["abstract"].str.contains('triple', case=False, na=False)]
+
 def deduplicate(df_input):
-    df_output=df_input.copy()
-    check_columns=["DOI","title"]
-    
-    column_names=list(df_output.columns.values)
-    duplicates=df = pd.DataFrame(columns=column_names)
+    df_output = df_input.copy()
+    check_columns = ["DOI", "title"]
+    column_names = list(df_output.columns.values)
     
     for col in check_columns:
-        df2=df_output[df_output[col]!="NA"]
+        df2 = df_output[df_output[col] != "NA"]
         df2 = df2.groupby([col])[col].count()
-        #df2[df2>1]["title"]
-        val_duplicate=df2[df2>1 ].index
-        if(len(val_duplicate)>0):
+        val_duplicate = df2[df2 > 1].index
+        
+        if len(val_duplicate) > 0:
             for val in val_duplicate:
                 myDict = {key: [] for key in column_names}
-                duplicates_temp=df_output[df_output[col]==val]
-                quality_list=[]
+                duplicates_temp = df_output[df_output[col] == val]
+                quality_list = []
+                
                 for i in range(len(duplicates_temp)):  
-                    idx=duplicates_temp.index.tolist()[i]
-                    qual=getquality(df_output.iloc[idx],column_names)
-                    
+                    idx = duplicates_temp.index[i]
+                    qual = getquality(df_output.loc[idx], column_names)
                     quality_list.append(qual)
                     
-                    for k in myDict.keys():
-                        if(isNaN(df_output.iloc[idx][k])):
-                            myDict[k].append("NA")
-                        else:    
-                            myDict[k].append(df_output.iloc[idx][k])
+                    for k in column_names:
+                        value = df_output.loc[idx, k]
+                        myDict[k].append("NA" if isNaN(value) else value)
                 
                 max_value = max(quality_list)
-                index_value = [index for index in range(len(quality_list)) if quality_list[index] == max_value]
-                #print("MAX QUALITY >",max_value)
+                index_value = quality_list.index(max_value)
                 
+                toAdd_temp = duplicates_temp.iloc[index_value].copy()
                 
-                toAdd_temp= df_output.iloc[duplicates_temp.index[index_value[0]]]
-              
-                for k in toAdd_temp.keys():
-                    if(isNaN(toAdd_temp[k])):
-                        toAdd_temp[k]="NA"
-                    if(toAdd_temp[k]=="NA"):
-                        for k2 in myDict.keys():
-                            for val in myDict[k2]:
-                                if( not isNaN(val) and val!="NA"):
-                                    toAdd_temp[k2]=val
-                #print("NEW QUALITY >",getquality(toAdd_temp,column_names))
-            
-            df_output.drop(duplicates.index)
-            df_output.append(toAdd_temp)
-
+                for k in column_names:
+                    if isNaN(toAdd_temp[k]):
+                        toAdd_temp[k] = "NA"
+                    if toAdd_temp[k] == "NA":
+                        for val in myDict[k]:
+                            if not isNaN(val) and val != "NA":
+                                toAdd_temp[k] = val
+                                break
+                
+                df_output = df_output.drop(duplicates_temp.index)
+                df_output = pd.concat([df_output, toAdd_temp.to_frame().T], ignore_index=True)
                 
     return df_output
-            
-            
             
 def SemanticScholartoZoteroFormat(row):
     #print(">>SemanticScholartoZoteroFormat")

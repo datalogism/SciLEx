@@ -22,6 +22,7 @@ import os
 import json
 import urllib.parse
 from lxml import etree
+from xml.etree import ElementTree
 
 
 
@@ -30,9 +31,16 @@ import yaml
 # CLASS USED FOR PARAMETRIZE CRAWLERS
 ############
 
+# Get the current working directory
+current_directory = os.getcwd()
 
-with open("/user/cringwal/home/Desktop/Scilex-main/src/scilex.config.yml", "r") as ymlfile:
-    cfg = yaml.load(ymlfile)
+# Construct the full path to the YAML file
+yaml_file_path = os.path.join(current_directory, "src/scilex.config.yml")
+
+# Open and read the YAML file
+with open(yaml_file_path, "r") as ymlfile:
+
+    cfg = yaml.load(ymlfile, Loader=yaml.SafeLoader)
     sem_scholar_api=cfg["sem_scholar"]["api_key"]
     springer_api=cfg["springer"]["api_key"]
     elsevier_api=cfg["elsevier"]["api_key"]
@@ -234,7 +242,7 @@ class API_collector:
                 try: 
                     page_data=self.parsePageResults(response,page)
                     
-                    
+                    print(page_data)
                     self.savePageResults(page_data,page)
                     
                     self.set_lastpage(int(page)+1)
@@ -247,8 +255,8 @@ class API_collector:
                     fewer_than_10k_results = page_data["total"]  <= 10000
                     print(">>>>>",str(offset),"/",page_data["total"])
                     
-                    if(fewer_than_10k_results == False):
-                        print("QUERY TOO LARGE MUST BE REVIEWED")
+                    # if(fewer_than_10k_results == False):
+                    #     print("QUERY TOO LARGE MUST BE REVIEWED")
                 except:
                     print("PB with results")
                     has_more_pages=False
@@ -294,7 +302,7 @@ class SemanticScholar_collector(API_collector):
             if(page_data["total"]>0):
                 results = page_with_results['data']
                 for result in results:
-                    page_data["results"].append(resueedback on the Anthology?
+                    page_data["results"].append(result)
         except:
             print(response.status_code)
         
@@ -311,7 +319,7 @@ class IEEE_collector(API_collector):
     def __init__(self, filter_param, save, data_path):
         super().__init__(filter_param, save, data_path)
         self.api_name="IEEE"
-        self.rate_limit = 100
+        self.rate_limit = 200
         self.max_by_page = 200
         self.api_key=ieee_api
         self.api_url="http://ieeexploreapi.ieee.org/api/v1/search/articles"
@@ -319,6 +327,7 @@ class IEEE_collector(API_collector):
     def get_configurated_url(self):
         # PUB YEAR ?
         keywords=urllib.parse.quote(self.get_keywords())
+        print(keywords, self.get_url())
         return self.get_url()+"?apikey="+self.get_apikey()+"&format=json&max_records="+str(self.get_max_by_page())+"&sort_order=asc&sort_field=article_number&article_title="+keywords+"&publication_year="+str(self.get_year())+"&start_record={}"
    
     # REALLY NEEDED ?
@@ -374,38 +383,51 @@ class Elsevier_collector(API_collector):
         return page_data
     
     def get_configurated_url(self):
-        keywords=urllib.parse.quote(self.get_keywords()+" AND PUBYEAR = "+str(self.get_year()))
-        return self.get_url()+"?query="+keywords+"&count="+str(self.get_max_by_page())+"&apiKey="+str(self.get_apikey())+"&limit="+str(self.get_max_by_page())+"&start={}"
-
-# FILTER BY YEAR ? OK
+        # Construct the search query
+        search_query = urllib.parse.quote(self.get_keywords())
+        years_query = ' OR '.join([f'PUBYEAR = {year}' for year in self.get_year()])
+        query = f'{search_query} AND ({years_query})'
+        keywords="EXACTSRCTITLE = "+ urllib.parse.quote(self.get_keywords()+" AND PUBYEAR = "+str(self.get_year()))
+        return f"{self.api_url}?query={urllib.parse.quote(query)}&count={self.max_by_page}&apiKey={self.api_key}&start={{}}" #&subj=COMP search only in computer sciences
+    
 class DBLP_collector(API_collector):
     """store file metadata"""
     def __init__(self, filter_param, save, data_path):
         super().__init__(filter_param, save, data_path)
         self.rate_limit = 10
         self.max_by_page = 1000
-        self.filter_param.year=""
-        self.api_name="DBLP"
-        self.api_url="https://dblp.org/search/publ/api"
+        self.api_name = "DBLP"
+        self.api_url = "https://dblp.org/search/publ/api"
         
-    def parsePageResults(self,response,page):
-        page_data = {"date_search":str(date.today()), "id_collect": self.get_collectId(), "page": page,"total":0,"results":[]}
+    def parsePageResults(self, response, page):
+        page_data = {
+            "date_search": str(date.today()),
+            "id_collect": self.get_collectId(),
+            "page": page,
+            "total": 0,
+            "results": []
+        }
       
-        page_with_results =response.json()
+        page_with_results = response.json()
          
-        # loop through partial list of results
+        # Loop through partial list of results
         results = page_with_results['result']
-        total=results["hits"]["@total"]
-        page_data["total"]=int(total)
-        print("TOTAL >",page_data["total"])
-        if(page_data["total"]>0):
+        total = results["hits"]["@total"]
+        page_data["total"] = int(total)
+        print("TOTAL >", page_data["total"])
+        
+        if page_data["total"] > 0:
             for result in results["hits"]["hit"]:
                 page_data["results"].append(result)
             
         return page_data
     
     def get_configurated_url(self):
-        return self.get_url()+"?q="+self.get_keywords()+"&format=json&h="+str(self.get_max_by_page())+"&f={}"
+        keywords_query = self.get_keywords()
+        years_query = '|'.join(str(year) for year in self.get_year())
+        query = f"{keywords_query +' '+ years_query}"
+        return f"{self.api_url}?q={query}&format=json&h={self.max_by_page}&f={{}}"
+
 
 class OpenAlex_collector(API_collector):
     """store file metadata"""
@@ -463,86 +485,81 @@ class HAL_collector(API_collector):
         return self.get_url()+"?q="+self.get_keywords()+"&fl=title_s,abstract_s,label_s,arxivId_s,audience_s,authFullNameIdHal_fs,bookTitle_s,classification_s,conferenceTitle_s,docType_s,doiId_id,files_s,halId_s,jel_t,journalDoiRoot_s,journalTitle_t,keyword_s,type_s,submittedDateY_i&fq=submittedDateY_i:"+str(self.get_year())+"&rows="+str(self.get_max_by_page())+"&start={}"
 
 class Arxiv_collector(API_collector):
-    """store file metadata"""
+    """Store file metadata"""
+    # https://info.arxiv.org/help/api/user-manual.html#query_details
     def __init__(self, filter_param, save, data_path):
         super().__init__(filter_param, save, data_path)
-        self.filter_param.year=""
         self.rate_limit = 3
         self.max_by_page = 500
         self.api_name = "Arxiv"
         self.api_url = "http://export.arxiv.org/api/query"
-        
-     
-    def parsePageResults(self,response,page):
-        page_data = {"date_search":str(date.today()), "id_collect": self.get_collectId(), "page": page,"total":0,"results":[]}
-        page_with_results =response.content
+
+    def parsePageResults(self, response, page):
+        page_data = {"date_search": str(date.today()), "id_collect": self.get_collectId(), "page": page, "total": 0, "results": []}
+        page_with_results = response.content
         tree = etree.fromstring(page_with_results)
         entries = tree.xpath('*[local-name()="entry"]')
        
-        # loop through partial list of results
-        for entry in entries :
-            current={}
-            current["id"]=entry.xpath('*[local-name()="id"]')[0].text 
-            current["updated"]=entry.xpath('*[local-name()="updated"]')[0].text 
-            current["published"]=entry.xpath('*[local-name()="published"]')[0].text 
-            current["title"]=entry.xpath('*[local-name()="title"]')[0].text 
-            current["abstract"]=entry.xpath('*[local-name()="summary"]')[0].text 
-            authors=entry.xpath('*[local-name()="author"]')
-            current["doi"]=""
-            current["journal"]=""
-            auth_list=[]
+        for entry in entries:
+            current = {}
+            current["id"] = entry.xpath('*[local-name()="id"]')[0].text
+            current["updated"] = entry.xpath('*[local-name()="updated"]')[0].text
+            current["published"] = entry.xpath('*[local-name()="published"]')[0].text
+            current["title"] = entry.xpath('*[local-name()="title"]')[0].text
+            current["abstract"] = entry.xpath('*[local-name()="summary"]')[0].text
+            authors = entry.xpath('*[local-name()="author"]')
+            current["doi"] = ""
+            current["journal"] = ""
+            auth_list = []
             for auth in authors:
                 auth_list.append(auth.xpath('*[local-name()="name"]')[0].text)
-            current["authors"]=auth_list
+            current["authors"] = auth_list
             
-            try: 
-                current["pdf"]=entry.xpath('*[local-name()="link" and @title="pdf"]')[0].text 
+            try:
+                current["pdf"] = entry.xpath('*[local-name()="link" and @title="pdf"]')[0].text
             except:
                 pass
-                #print("NO pdf")
-            try: 
-                current["doi"]=entry.xpath('*[local-name()="doi"]')[0].text 
+            try:
+                current["doi"] = entry.xpath('*[local-name()="doi"]')[0].text
             except:
-                try: 
-                    current["doi"]=entry.xpath('*[local-name()="link" and @title="doi"]')[0].text 
+                try:
+                    current["doi"] = entry.xpath('*[local-name()="link" and @title="doi"]')[0].text
                 except:
                     pass
-                   # print("NO doi")
                 
-            try: 
-                 current["comment"]=entry.xpath('*[local-name()="comment"]')[0].text 
-            except:
-                pass
-                #print("NO comment")
-            #cuurent["url"]=entry.xpath('*[local-name()=" arxiv:comment"]')[0].text 
-            try: 
-                current["journal"]=entry.xpath('*[local-name()="journal_ref"]')[0].text 
-            except:
-                pass
-                #print("NO journal")
             try:
-                main_cat=entry.xpath('*[local-name()="primary_category"]')[0].attrib['term']
+                current["comment"] = entry.xpath('*[local-name()="comment"]')[0].text
             except:
                 pass
-                #print("NO main categories")
             try:
-                categories=entry.xpath('*[local-name()="category"]')
-                cat_list=[]
+                current["journal"] = entry.xpath('*[local-name()="journal_ref"]')[0].text
+            except:
+                pass
+            try:
+                main_cat = entry.xpath('*[local-name()="primary_category"]')[0].attrib['term']
+            except:
+                pass
+            try:
+                categories = entry.xpath('*[local-name()="category"]')
+                cat_list = []
                 for cat in categories:
                     cat_list.append(cat.attrib['term'])
-                current["categories"]=cat_list
+                current["categories"] = cat_list
             except:
                 pass
-                #print("NO categories")    
             page_data["results"].append(current)
+        
         total_raw = tree.xpath('*[local-name()="totalResults"]')
-        total=int(total_raw[0].text)
-        page_data["total"]=int(total)
+        total = int(total_raw[0].text)
+        page_data["total"] = int(total)
         
         return page_data
-    
+
     def get_configurated_url(self):
-       return self.get_url()+"?search_query="+self.get_keywords()+"&sortBy=lastUpdatedDate&max_results="+str(self.get_max_by_page())+"&start={}"
+        search_query = 'ti:' + self.get_keywords() # + ' OR abs:' + self.get_keywords()
+        years_query = ' OR '.join([f"submittedDate:[{year}01010000 TO {year}12312359]" for year in self.get_year()])
+        search_query += ' AND (' + years_query + ')'
+        return f"{self.api_url}?search_query={search_query}&sortBy=relevance&sortOrder=descending&start={{}}&max_results={self.max_by_page}"
 
 class Istex_collector(API_collector): 
     """store file metadata"""
@@ -603,6 +620,11 @@ class Springer_collector(API_collector):
         return page_data
     
     def get_configurated_url(self):
-        
-        return self.get_url()+"?q=year:"+str(self.get_year())+" AND "+self.get_keywords()+"&p="+str(self.get_max_by_page())+"&api_key="++str(self.get_apikey())+"&s={}"
-    
+        # Construct the search query
+        keywords_query = 'title:' + self.get_keywords()
+        years_query = ' OR '.join([f'year:{year}' for year in self.get_year()])
+        query = f'{keywords_query} ({years_query})'
+        return f"{self.api_url}?q={urllib.parse.quote(query)}&p={self.max_by_page}&api_key={self.api_key}&s={{}}"
+
+        #https://api.springernature.com/meta/v2/json?q=title:%22game%20theory%22year%3A%202018%20OR%20year%3A%202019%29&p=100&api_key=80fca00b435766357327ef2a3fe75616&s=0
+        #return self.get_url()+"?q=year:"+str(self.get_year())+" AND "+self.get_keywords()+"&p="+str(self.get_max_by_page())+"&api_key="+str(self.get_apikey())+"&s={}"

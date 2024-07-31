@@ -1,17 +1,31 @@
-email: "YOURMAIL"
-collect:
-    dir: 'YOURZOTEROEXPORTDIR'
-    base_dir: 'YOURYOURWORKDIR'
+# Email address for notifications or contact
+email: ""
+
+# Directory to output the collected data
+output_dir: ''
+
+# Flag to indicate whether to collect data
+collect: True
+
+# Flag to indicate whether to aggregate data
+aggregate: True
+
+# List of years to filter the data collection  TO DO: handle range
+years: [2018, 2019]
+
+# Keywords to use for filtering data
+keywords: ["hate speech", "abusive language"]
+
 zotero:
-    api_key: "YOURAPIKEY"
+    api_key: ""
 springer:
-    api_key: "YOURAPIKEY"
+    api_key: ""
 sem_scholar:
     api_key: "YOURAPIKEY"
 elsevier:
-    api_key: "YOURAPIKEY"
+    api_key: ""
 ieee:
-    api_key: "YOURAPIKEY"
+    api_key: ""
 orcid:
     dir: 'YOURWORKDIR'
     client_id: "YOURCLIENTID"
