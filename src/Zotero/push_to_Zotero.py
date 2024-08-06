@@ -63,7 +63,6 @@ while current_col_key is None :
                 break
         if current_col_key is None :
             ## CREATE COLLECTION
-            #headers={'Zotero-Write-Token':"19a4f01ad623aa7214f82347e3711f56"}
             headers={'Zotero-API-Key':api_key,'Zotero-Write-Token':getWriteToken(),"Content-Type":"application/json"}
             body=json.dumps([{ "name" : research_coll, "parentCollection" : str(id_lib) }])
             req2 = requests.post(url+"/collections", headers=headers,data=body)
