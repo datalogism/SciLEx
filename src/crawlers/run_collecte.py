@@ -53,18 +53,18 @@ for kwd in keywords:
     
     filter_params=Filter_param(years,kwd,"")
 
-    print("-------dbpl")
-    dbpl=DBLP_collector(filter_params,0,path)
-    dbpl.runCollect()
+    # print("-------dbpl")
+    # dbpl=DBLP_collector(filter_params,0,path)
+    # dbpl.runCollect()
 
-    print("-------arxiv")
-    arxiv=Arxiv_collector(filter_params,0,path)
-    arxiv.runCollect()
+    # print("-------arxiv")
+    # arxiv=Arxiv_collector(filter_params,0,path)
+    # arxiv.runCollect()
 
-    #WAITING STATUS
-    print("-------ieee")
-    ieee=IEEE_collector(filter_params,0,path)
-    ieee.runCollect()
+    #waiting status
+    # print("-------ieee")
+    # ieee=IEEE_collector(filter_params,0,path)
+    # ieee.runCollect()
 
     print("-------elsevier")
     elsevier=Elsevier_collector(filter_params,0,path)
