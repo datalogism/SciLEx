@@ -106,7 +106,8 @@ def SemanticScholartoZoteroFormat(row):
                 case 'Book' :
                     zotero_temp["itemType"]= "book"
                 case default:
-                    print("NEED TO ADD FOLLOWING TYPE >",row["publicationTypes"][0])
+                    pass
+                    #print("NEED TO ADD FOLLOWING TYPE >",row["publicationTypes"][0])
                     
         if(len(row["publicationTypes"])>1):
            if('Book' in row["publicationTypes"]):
@@ -116,7 +117,8 @@ def SemanticScholartoZoteroFormat(row):
            elif('JournalArticle' in row["publicationTypes"]):               
                  zotero_temp["itemType"]='journalArticle'
            else:
-               print("NEED TO ADD FOLLOWING TYPES >",row["publicationTypes"])
+               pass
+               #print("NEED TO ADD FOLLOWING TYPES >",row["publicationTypes"])
                 
     if(row["publicationVenue"]!="" and row["publicationVenue"] is not None ):
         if("type" in row["publicationVenue"].keys() and row["publicationVenue"]["type"]!=""):
@@ -183,7 +185,8 @@ def IstextoZoteroFormat(row):
            case 'article':
                zotero_temp["itemType"]="bookSection"
            case default:
-               print("IStex NEED TO ADD FOLLOWING TYPE >",row["genre"][0])   
+               pass
+               #print("IStex NEED TO ADD FOLLOWING TYPE >",row["genre"][0])   
                 
     if(row["title"]!="" and row["title"] is not None):
         zotero_temp["title"]=row["title"] 
@@ -310,7 +313,8 @@ def DBLPtoZoteroFormat(row):
         case  'Informal Publications':
             zotero_temp["itemType"]="Manuscript"
         case default:
-            print("NEED TO ADD FOLLOWING TYPE >",row["type"][0])
+            pass
+            #print("NEED TO ADD FOLLOWING TYPE >",row["type"][0])
     return zotero_temp
     
 def HALtoZoteroFormat(row):
@@ -349,7 +353,8 @@ def HALtoZoteroFormat(row):
         case  'Informal Publications':
             zotero_temp["itemType"]="Manuscript"
         case default:
-            print("NEED TO ADD FOLLOWING TYPE >",row["docType_s"])    
+            pass
+            #print("NEED TO ADD FOLLOWING TYPE >",row["docType_s"])    
     return zotero_temp
     
 # Abstract must be recomposed...
@@ -393,7 +398,8 @@ def OpenAlextoZoteroFormat(row):
              pass
         
          case default:
-             print("NEED TO ADD FOLLOWING TYPE >",row["type"])
+             pass
+             #print("NEED TO ADD FOLLOWING TYPE >",row["type"])
              
     if("biblio" in row.keys()):
         if(row["biblio"]["volume"] and row["biblio"]["volume"]!=""):
@@ -415,7 +421,8 @@ def OpenAlextoZoteroFormat(row):
             zotero_temp["journalAbbreviation"]=row["host_venue"]["display_name"]
             zotero_temp["itemType"]="journalArticle"
         else:
-            print("NEED TO ADD FOLLOWING TYPE >",row["host_venue"]["type"])
+            pass
+            #print("NEED TO ADD FOLLOWING TYPE >",row["host_venue"]["type"])
     return zotero_temp
 
 def IEEEtoZoteroFormat(row):
@@ -464,7 +471,8 @@ def IEEEtoZoteroFormat(row):
             zotero_temp["itemType"]="conferencePaper"
         
          case default:
-             print("NEED TO ADD FOLLOWING TYPE >",row["content_type"])
+             pass
+             #print("NEED TO ADD FOLLOWING TYPE >",row["content_type"])
      
     return zotero_temp
 
@@ -513,7 +521,8 @@ def SpringertoZoteroFormat(row):
     elif("Chapter" in  row["content_type"]):
         zotero_temp["itemType"]="bookSection"
     else:
-                 print("NEED TO ADD FOLLOWING TYPE >",row["content_type"])
+        pass
+        #print("NEED TO ADD FOLLOWING TYPE >",row["content_type"])
          
     return zotero_temp
 
@@ -566,7 +575,8 @@ def ElseviertoZoteroFormat(row):
         elif("Chapter" in  row["subtypeDescription"]):
             zotero_temp["itemType"]="bookSection"
         else:
-                     print("NEED TO ADD FOLLOWING TYPE >",row["subtypeDescription"])
+            pass
+            #print("NEED TO ADD FOLLOWING TYPE >",row["subtypeDescription"])
              
     return zotero_temp
 
