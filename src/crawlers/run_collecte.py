@@ -4,12 +4,25 @@
 Created on Fri Feb 10 10:57:49 2023
 
 @author: cringwal
+         aollagnier
+
+@version: 1.0.1
 """
-import sys
-sys.path.append("/user/cringwal/home/Desktop/Scilex-main/src/")
+
 from collectors  import *
 from aggregate import *
 import yaml
+import logging
+from datetime import datetime
+import os
+
+# Set up logging configuration
+logging.basicConfig(
+    level=logging.INFO,  # Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    format='%(asctime)s - %(levelname)s - %(message)s',  # Log message format
+    datefmt='%Y-%m-%d %H:%M:%S'  # Date format
+)
+
 
 
 ############ 
@@ -17,122 +30,218 @@ import yaml
 ############
 
 
-with open("/user/cringwal/home/Desktop/Scilex-main/src/scilex.config.yml", "r") as ymlfile:
-    cfg = yaml.load(ymlfile)
-    base_dir=cfg["collect"]["base_dir"]
+# Get the current working directory
+current_directory = os.getcwd()
+print(current_directory)
+root_dir=current_directory.split("/src/")
+root_dir=root_dir[0]+"/src/"
+# Construct the full path to the YAML file
+yaml_file_path = os.path.join(root_dir, "scilex.config.yml")
 
+# Load configuration from YAML file
+with open(yaml_file_path, "r") as ymlfile:
+    config = yaml.safe_load(ymlfile)
 
- 
-collect_name="before_2023"
+# Extract values from the YAML configuration
+output_dir = config['output_dir']
+collect = config['collect']
+aggregate = config['aggregate']
+years = config['years']
+keywords = config['keywords'] 
 
-#collect_name="knowledge_acquisition_surveys"
-#collect_name="structured_data_extraction_surveys"
-#collect_name="complex_network_extraction_surveys"
-#collect_name="close_relation_extraction_surveys"
-collect=False
-aggregate=True
-if(collect==True):
-    years=[2018,2019,2020,2022,2021]
-    keywords=["'relation extraction'"]
+# Use the configuration values
+if collect:
+    if not os.path.isdir(output_dir):
+        os.makedirs(output_dir)
+
+    path = output_dir
+
+# Print to check the loaded values
+print("Output Directory:", output_dir)
+print("Collect:", collect)
+print("Aggregate:", aggregate)
+print("Years:", years)
+print("Keywords:", keywords)
+
+def run_systematic_review_search():
+    """
+    Runs the systematic review search process, collecting data from DBLP, Arxiv, Elsevier, IEEE, Springer, Semantic Scholar, OpenAlex, HAL, and ISTEX APIs.
+    Logs the progress and any errors encountered during the process.
+    """
+    logging.info("================BEGIN Systematic Review Search================")
     
-    if not os.path.isdir(base_dir+collect_name):
-        os.makedirs(base_dir+collect_name)
-        
-    path=base_dir+collect_name
-    for kwd in keywords:
-        print("================BEGIN")
-        print(">>>>>>>>>>kwd :",kwd)
-        
-        filter_params=Filter_param("2010",kwd,"")
-        # no year
-        print("-------dbpl")
-        dbpl=DBLP_collector(filter_params,0,path)
-        dbpl.runCollect()
-        print("-------arxiv")
-        arxiv=Arxiv_collector(filter_params,0,path)
-        arxiv.runCollect()
-        
-        for year in years:
-            
-            filter_params=Filter_param(year,kwd,"")
-            print(">>>>>>>>>>year :",year)
-            
-            print("-------semschol")
-            semschol=SemanticScholar_collector(filter_params,0,path)
-            semschol.runCollect()
-            
-            print("-------ieee")
-            ieee=IEEE_collector(filter_params,0,path)
-            ieee.runCollect()
-            
-            print("-------elsevier")
-            # try:
-            #     elsevier=Elsevier_collector(filter_params,0,path)
-            #     elsevier.runCollect()
-            # except:
-            #     print("API RATE PB")
-                
-            print("-------springer")
-            try:
-                 springer=Springer_collector(filter_params,0,path)
-                 springer.runCollect()
-            except:
-                 print("API RATE PB")
-                 
-            print("-------openalex")
-            # openalex=OpenAlex_collector(filter_params,0,path)
-            # openalex.runCollect()
-            
-            print("-------hal")
-            hal=HAL_collector(filter_params,0,path)
-            hal.runCollect()
-            
-            print("-------istex")
-            istex=Istex_collector(filter_params,0,path)
-            istex.runCollect()
-        
-if(aggregate==True):
-    collect_dir=base_dir+collect_name
-    collect_dict=collect_dir+"/collect_dict.json"
-    filter_=["relation"]
+    # Log starting the configuration of filter parameters
+    logging.info("Initializing Filter Parameters")
+    filter_params = Filter_param(years, keywords, "")
+    
+    # # DBLP collection
+    logging.info("-------DBLP Collection Process Started-------")
+    dbpl = DBLP_collector(filter_params, 0, path)
+    
+    try:
+        dbpl.runCollect()  # Run the DBLP data collection
+        logging.info("DBLP Collection Completed Successfully.")
+    except Exception as e:
+        logging.error(f"DBLP Collection Failed: {str(e)}")
+
+    # # Arxiv collection
+    logging.info("-------Arxiv Collection Process Started-------")
+    arxiv = Arxiv_collector(filter_params, 0, path)
+    
+    try:
+        arxiv.runCollect()  # Run the Arxiv data collection
+        logging.info("Arxiv Collection Completed Successfully.")
+    except Exception as e:
+        logging.error(f"Arxiv Collection Failed: {str(e)}")
+
+    # # Elsevier collection
+    logging.info("-------Elsevier Collection Process Started-------")
+    elsevier = Elsevier_collector(filter_params, 0, path)
+    
+    try:
+        elsevier.runCollect()  # Run the Elsevier data collection
+        logging.info("Elsevier Collection Completed Successfully.")
+    except Exception as e:
+        logging.error(f"Elsevier Collection Failed: {str(e)}")
+
+    # # IEEE collection
+    logging.info("-------IEEE Collection Process Started-------")
+    ieee = IEEE_collector(filter_params, 0, path)
+    
+    try:
+        ieee.runCollect()  # Run the IEEE data collection
+        logging.info("IEEE Collection Completed Successfully.")
+    except Exception as e:
+        logging.error(f"IEEE Collection Failed: {str(e)}")
+
+    # # Springer collection
+    logging.info("-------Springer Collection Process Started-------")
+    springer = Springer_collector(filter_params, 0, path)
+    
+    try:
+        springer.runCollect()  # Run the Springer data collection
+        logging.info("Springer Collection Completed Successfully.")
+    except Exception as e:
+        logging.error(f"Springer Collection Failed: {str(e)}")
+    
+    # # Semantic Scholar collection
+    logging.info("-------Semantic Scholar Collection Process Started-------")
+    try:
+        semschol = SemanticScholar_collector(filter_params, 0, path)  # Initialize Semantic Scholar collector
+        semschol.runCollect()  # Run the Semantic Scholar data collection
+        logging.info("Semantic Scholar Collection Completed Successfully.")
+    except Exception as e:
+        logging.error(f"Semantic Scholar Collection Failed: {str(e)}")
+    
+    # OpenAlex collection
+    logging.info("-------OpenAlex Collection Process Started-------")
+    try:
+        openalex = OpenAlex_collector(filter_params, 0, path)  # Initialize OpenAlex collector
+        openalex.runCollect()  # Run the OpenAlex data collection
+        logging.info("OpenAlex Collection Completed Successfully.")
+    except Exception as e:
+        logging.error(f"OpenAlex Collection Failed: {str(e)}")
+    
+    # HAL collection
+    logging.info("-------HAL Collection Process Started-------")
+    try:
+        hal = HAL_collector(filter_params, 0, path)  # Initialize HAL collector
+        hal.runCollect()  # Run the HAL data collection
+        logging.info("HAL Collection Completed Successfully.")
+    except Exception as e:
+        logging.error(f"HAL Collection Failed: {str(e)}")
+
+    # ISTEX collection
+    logging.info("-------ISTEX Collection Process Started-------")
+    try:
+        istex = Istex_collector(filter_params, 0, path)  # Initialize ISTEX collector
+        istex.runCollect()  # Run the ISTEX data collection
+        logging.info("ISTEX Collection Completed Successfully.")
+    except Exception as e:
+        logging.error(f"ISTEX Collection Failed: {str(e)}")
+
+    # Google Scholar collection
+    logging.info("-------Google Scholar Collection Process Started-------")
+    try:
+        google_scholar = GoogleScholarCollector(filter_params, 0, path)  # Initialize Google Scholar collector
+        google_scholar.runCollect()  # Run the Google Scholar data collection
+        logging.info("Google Scholar Collection Completed Successfully.")
+    except Exception as e:
+        logging.error(f"Google Scholar Collection Failed: {str(e)}")
+
+    logging.info("================END Systematic Review Search================")
+
+def aggregate_results(output_dir):
+    """
+    Aggregates results from various collectors and saves them into a CSV file.
+    Args:
+        output_dir (str): The directory where collected data is stored.
+    """
+    filter_ = ["relation"]
+
+    # Check if collect_dir exists, otherwise create it
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    collect_dict = os.path.join(output_dir, "collect_dict.json")
+
     ############################## BEGIN 
-    with open(collect_dict) as json_file:
-        data_coll = json.load(json_file)
-    
-    all_data=[]
+    if os.path.exists(collect_dict):
+        with open(collect_dict) as json_file:
+            data_coll = json.load(json_file)
+    else:
+        data_coll = {}
+
+    all_data = []
     for k in data_coll.keys():
-        coll=data_coll[k]
-        current_api=coll["API"]
-        print(current_api,"-",k)
-    
-        current_API_dir=collect_dir+"/"+coll["API"]
-        current_collect_dir=current_API_dir+"/"+str(k)
-        
-        if  int(coll["complete"])==1:
+        coll = data_coll[k]
+        current_api = coll["API"]
+        print(current_api, "-", k)
+
+        current_API_dir = os.path.join(output_dir, coll["API"])
+        current_collect_dir = os.path.join(current_API_dir, str(k))
+
+        if int(coll["complete"]) == 1:
+            print("HEY")
             try:
                 for path in os.listdir(current_collect_dir):
-                    # check if current path is a file
+                    # Check if current path is a file
                     if os.path.isfile(os.path.join(current_collect_dir, path)):
-                            with open(os.path.join(current_collect_dir, path)) as json_file:
-                                    current_page_data = json.load(json_file)
-                                    
-                            for row in current_page_data["results"]:
-                                 if(current_api+'toZoteroFormat' in dir()):
-                                # try:
-                                     res=eval(current_api+'toZoteroFormat(row)')
-                                # except:
-                                 #    print("fonction is not existing for > ",current_api)
-                                     all_data.append(res)
-                                 else:
-                                     print("function not yet implemented")
-            except:
-                print("dir not exist")
-                     
-                    
+                        with open(os.path.join(current_collect_dir, path)) as json_file:
+                            current_page_data = json.load(json_file)
+                        for row in current_page_data["results"]:
+                            #print(current_api)
+                        #    if (current_api + 'toZoteroFormat') in dir():
+                                #print("HO")
+                                # Use eval carefully; ideally, avoid it if possible.
+                            res = eval(current_api + 'toZoteroFormat(row)')
+                            all_data.append(res)
+                     #   else:
+                      #          print("Function not yet implemented for >", current_api)
+                       #         print(current_api+ 'toZoteroFormat(row)')
+                        #        pass
+            except FileNotFoundError:
+                print("Directory not found:", current_collect_dir)
+
+    # Create DataFrame and save aggregated results
     df = pd.DataFrame(all_data)
-    df_clean=deduplicate(df)
-    #df_clean=filter_data(df_clean,filter_)
-    df_clean.reset_index()
-    
-    
-    df_clean.to_csv(collect_dir+"/results_aggragated.csv",sep=";", quotechar='"',quoting=csv.QUOTE_NONNUMERIC)
+    # Save to CSV
+    df.to_csv(os.path.join(output_dir, "results_all.csv"), sep=";", quotechar='"', quoting=csv.QUOTE_NONNUMERIC)
+
+    df_clean = deduplicate(df)
+    df_clean.reset_index(drop=True, inplace=True)  # Reset index after deduplication
+
+    # Save to CSV
+    df_clean.to_csv(os.path.join(output_dir, "results_aggregated.csv"), sep=";", quotechar='"', quoting=csv.QUOTE_NONNUMERIC)
+
+if __name__ == "__main__":
+    # Log the overall process with timestamps
+    if collect:
+        logging.info(f"Systematic review search started at {datetime.now()}")
+        run_systematic_review_search()
+        logging.info(f"Systematic review search ended at {datetime.now()}")
+
+    # Aggregation of results after collection
+    if aggregate:
+        logging.info(f"Aggregation started at {datetime.now()}")
+        aggregate_results(output_dir)
+        logging.info(f"Aggregation  ended at {datetime.now()}")
