@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Thu Jan 26 17:32:57 2023
+Created on Fri Feb 10 10:57:49 2023
 
 @author: cringwal
+         aollagnier
+
+@version: 1.0.1
 """
+
 import requests
 from ratelimit import limits, RateLimitException, sleep_and_retry
 from csv import writer
@@ -25,74 +29,63 @@ import yaml
 # FUNCTION FOR AGGREGATIONS OF DATA
 ############
 
-
-
-            
 def isNaN(num):
     return num != num
 
-def getquality(df_row,column_names):
-    quality=0
+def getquality(df_row, column_names):
+    quality = 0
     for col in column_names:
-        if(df_row[col]!="NA" and not(isNaN(df_row[col]))):
-            quality+=1
+        if df_row[col] != "NA" and not isNaN(df_row[col]):
+            quality += 1
     return quality
 
-def filter_data(df_input,filter_):
-        return df_input[df_input["abstract"].str.contains('triple', case=False, na=False)]
+def filter_data(df_input, filter_):
+    return df_input[df_input["abstract"].str.contains('triple', case=False, na=False)]
+
 def deduplicate(df_input):
-    df_output=df_input.copy()
-    check_columns=["DOI","title"]
-    
-    column_names=list(df_output.columns.values)
-    duplicates=df = pd.DataFrame(columns=column_names)
+    df_output = df_input.copy()
+    check_columns = ["DOI", "title"]
+    column_names = list(df_output.columns.values)
     
     for col in check_columns:
-        df2=df_output[df_output[col]!="NA"]
+        
+        df2 = df_output[df_output[col] != "NA"]
         df2 = df2.groupby([col])[col].count()
-        #df2[df2>1]["title"]
-        val_duplicate=df2[df2>1 ].index
-        if(len(val_duplicate)>0):
+        val_duplicate = df2[df2 > 1].index
+        
+        if len(val_duplicate) > 0:
             for val in val_duplicate:
                 myDict = {key: [] for key in column_names}
-                duplicates_temp=df_output[df_output[col]==val]
-                quality_list=[]
+                duplicates_temp = df_output[df_output[col] == val]
+                quality_list = []
+                
                 for i in range(len(duplicates_temp)):  
-                    idx=duplicates_temp.index.tolist()[i]
-                    qual=getquality(df_output.iloc[idx],column_names)
-                    
+                    idx = duplicates_temp.index[i]
+                    qual = getquality(df_output.loc[idx], column_names)
                     quality_list.append(qual)
                     
-                    for k in myDict.keys():
-                        if(isNaN(df_output.iloc[idx][k])):
-                            myDict[k].append("NA")
-                        else:    
-                            myDict[k].append(df_output.iloc[idx][k])
+                    for k in column_names:
+                        value = df_output.loc[idx, k]
+                        myDict[k].append("NA" if isNaN(value) else value)
                 
                 max_value = max(quality_list)
-                index_value = [index for index in range(len(quality_list)) if quality_list[index] == max_value]
-                #print("MAX QUALITY >",max_value)
+                index_value = quality_list.index(max_value)
                 
+                toAdd_temp = duplicates_temp.iloc[index_value].copy()
                 
-                toAdd_temp= df_output.iloc[duplicates_temp.index[index_value[0]]]
-              
-                for k in toAdd_temp.keys():
-                    if(isNaN(toAdd_temp[k])):
-                        toAdd_temp[k]="NA"
-                    if(toAdd_temp[k]=="NA"):
-                        for k2 in myDict.keys():
-                            for val in myDict[k2]:
-                                if( not isNaN(val) and val!="NA"):
-                                    toAdd_temp[k2]=val
-                #print("NEW QUALITY >",getquality(toAdd_temp,column_names))
-            
-            df_output.drop(duplicates.index)
-            df_output.append(toAdd_temp)
-
+                for k in column_names:
+                    if isNaN(toAdd_temp[k]):
+                        toAdd_temp[k] = "NA"
+                    if toAdd_temp[k] == "NA":
+                        for val in myDict[k]:
+                            if not isNaN(val) and val != "NA":
+                                toAdd_temp[k] = val
+                                break
+                
+                df_output = df_output.drop(duplicates_temp.index)
+                df_output = pd.concat([df_output, toAdd_temp.to_frame().T], ignore_index=True)
                 
     return df_output
-            
-            
             
 def SemanticScholartoZoteroFormat(row):
     #print(">>SemanticScholartoZoteroFormat")
@@ -114,7 +107,8 @@ def SemanticScholartoZoteroFormat(row):
                 case 'Book' :
                     zotero_temp["itemType"]= "book"
                 case default:
-                    print("NEED TO ADD FOLLOWING TYPE >",row["publicationTypes"][0])
+                    pass
+                    #print("NEED TO ADD FOLLOWING TYPE >",row["publicationTypes"][0])
                     
         if(len(row["publicationTypes"])>1):
            if('Book' in row["publicationTypes"]):
@@ -124,7 +118,8 @@ def SemanticScholartoZoteroFormat(row):
            elif('JournalArticle' in row["publicationTypes"]):               
                  zotero_temp["itemType"]='journalArticle'
            else:
-               print("NEED TO ADD FOLLOWING TYPES >",row["publicationTypes"])
+               pass
+               #print("NEED TO ADD FOLLOWING TYPES >",row["publicationTypes"])
                 
     if(row["publicationVenue"]!="" and row["publicationVenue"] is not None ):
         if("type" in row["publicationVenue"].keys() and row["publicationVenue"]["type"]!=""):
@@ -191,7 +186,8 @@ def IstextoZoteroFormat(row):
            case 'article':
                zotero_temp["itemType"]="bookSection"
            case default:
-               print("IStex NEED TO ADD FOLLOWING TYPE >",row["genre"][0])   
+               pass
+               #print("IStex NEED TO ADD FOLLOWING TYPE >",row["genre"][0])   
                 
     if(row["title"]!="" and row["title"] is not None):
         zotero_temp["title"]=row["title"] 
@@ -318,7 +314,8 @@ def DBLPtoZoteroFormat(row):
         case  'Informal Publications':
             zotero_temp["itemType"]="Manuscript"
         case default:
-            print("NEED TO ADD FOLLOWING TYPE >",row["type"][0])
+            pass
+            #print("NEED TO ADD FOLLOWING TYPE >",row["type"][0])
     return zotero_temp
     
 def HALtoZoteroFormat(row):
@@ -341,9 +338,6 @@ def HALtoZoteroFormat(row):
     if("journalTitle_t" in row.keys()):
              zotero_temp["journalAbbreviation"]=row["journalTitle_t"]
     
-
-
-
     zotero_temp["date"]=row["submittedDateY_i"]
     match row["docType_s"]:
         case  'ART':
@@ -357,7 +351,8 @@ def HALtoZoteroFormat(row):
         case  'Informal Publications':
             zotero_temp["itemType"]="Manuscript"
         case default:
-            print("NEED TO ADD FOLLOWING TYPE >",row["docType_s"])    
+            pass
+            #print("NEED TO ADD FOLLOWING TYPE >",row["docType_s"])    
     return zotero_temp
     
 # Abstract must be recomposed...
@@ -401,7 +396,8 @@ def OpenAlextoZoteroFormat(row):
              pass
         
          case default:
-             print("NEED TO ADD FOLLOWING TYPE >",row["type"])
+             pass
+             #print("NEED TO ADD FOLLOWING TYPE >",row["type"])
              
     if("biblio" in row.keys()):
         if(row["biblio"]["volume"] and row["biblio"]["volume"]!=""):
@@ -423,7 +419,8 @@ def OpenAlextoZoteroFormat(row):
             zotero_temp["journalAbbreviation"]=row["host_venue"]["display_name"]
             zotero_temp["itemType"]="journalArticle"
         else:
-            print("NEED TO ADD FOLLOWING TYPE >",row["host_venue"]["type"])
+            pass
+            #print("NEED TO ADD FOLLOWING TYPE >",row["host_venue"]["type"])
     return zotero_temp
 
 def IEEEtoZoteroFormat(row):
@@ -472,7 +469,8 @@ def IEEEtoZoteroFormat(row):
             zotero_temp["itemType"]="conferencePaper"
         
          case default:
-             print("NEED TO ADD FOLLOWING TYPE >",row["content_type"])
+             pass
+             #print("NEED TO ADD FOLLOWING TYPE >",row["content_type"])
      
     return zotero_temp
 
@@ -491,8 +489,9 @@ def SpringertoZoteroFormat(row):
         zotero_temp["abstract"]=row["abstract"]
     #if(row["url"][""]!="" and row["html_url"] is not None):
      #   zotero_temp["url"]=row["html_url"]
-    if(row["openaccess"]!="" and row["openaccess"] is not None):
-        zotero_temp["rights"]=row["openaccess"]    
+    if("openaccess" in row.keys()):
+        if(row["openaccess"]!="" and row["openaccess"] is not None):
+            zotero_temp["rights"]=row["openaccess"]    
     if("doi" in row.keys()):
         zotero_temp["DOI"]=row["doi"]    
     if("publisher" in row.keys()):
@@ -512,16 +511,26 @@ def SpringertoZoteroFormat(row):
         if(len(auth_list)>0):
          zotero_temp["authors"]=";".join(auth_list)
     
-    if(row["startingPage"] and row["startingPage"]!="" and row["endingPage"] and row["endingPage"]!=""):
-        zotero_temp["pages"]=row["startingPage"]+"-"+row["endingPage"]
-    if("Conference" in  row["content_type"]):
+    if("startingPage" in row.keys() and "endingPage" in row.keys()):
+        if(row["startingPage"]!="" and row["endingPage"]!=""):
+            zotero_temp["pages"]=row["startingPage"]+"-"+row["endingPage"]
+    
+    if("Conference" in  row["contentType"]):
        zotero_temp["itemType"]="conferencePaper"
-    elif("Article" in  row["content_type"]):
+    elif("Article" in  row["contentType"]):
         zotero_temp["itemType"]="journalArticle"
-    elif("Chapter" in  row["content_type"]):
+    elif("Chapter" in  row["contentType"]):
         zotero_temp["itemType"]="bookSection"
+      # if("Conference" in  row["content_type"]):
+      #    zotero_temp["itemType"]="conferencePaper"
+      # elif("Article" in  row["content_type"]):
+      #     zotero_temp["itemType"]="journalArticle"
+      # elif("Chapter" in  row["content_type"]):
+      #     zotero_temp["itemType"]="bookSection"
+
     else:
-                 print("NEED TO ADD FOLLOWING TYPE >",row["content_type"])
+        pass
+        #print("NEED TO ADD FOLLOWING TYPE >",row["content_type"])
          
     return zotero_temp
 
@@ -574,7 +583,8 @@ def ElseviertoZoteroFormat(row):
         elif("Chapter" in  row["subtypeDescription"]):
             zotero_temp["itemType"]="bookSection"
         else:
-                     print("NEED TO ADD FOLLOWING TYPE >",row["subtypeDescription"])
+            pass
+            #print("NEED TO ADD FOLLOWING TYPE >",row["subtypeDescription"])
              
     return zotero_temp
 
