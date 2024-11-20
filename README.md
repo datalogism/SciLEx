@@ -50,4 +50,10 @@ https://github.com/datalogism/SciLEx/tree/main/src/citations) : extract or push 
 * :wrench:[Textmining scripts]( 
 https://github.com/datalogism/SciLEx/tree/main/src/text) : extract or push papers data in the lib 
 
+## 🤓 How to contribute to SciLEX ? 
 
+- By extending the API integrated to SciLex
+- By Improving the metainformation integration
+- By extending it to analytics and vizualisation tools 
+
+Concretely all of theses questions could be leveraged and organize via issues.
