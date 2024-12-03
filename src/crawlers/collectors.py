@@ -22,9 +22,9 @@ import os
 import json
 import urllib.parse
 from lxml import etree
-from xml.etree import ElementTree
 import logging
 from datetime import date
+import xml.etree.ElementTree as ET
 
 # Set up logging configuration
 logging.basicConfig(
@@ -149,43 +149,72 @@ class API_collector:
         return self.get_url()
     
     def getCollectId(self):
+        """
+        Loads or creates a collection ID based on the API, keywords, and year filter.
+
+        If a matching collection is found in the file, it updates the instance attributes.
+        If no matching collection is found, it creates a new entry in the collection file.
+
+        Returns:
+            None
+        """
+        # Attempt to load the collection file
         try:
             with open(self.get_fileCollect()) as json_file:
-                data_coll = json.load(json_file) 
-            print("LOAD FILE")
-        except:
-            print("EMPTY FILE")
+                data_coll = json.load(json_file)
+                logging.info("Successfully loaded the collection file: %s", self.get_fileCollect())
+        except FileNotFoundError:
+            logging.warning("Collection file not found: %s. Starting with an empty collection.", self.get_fileCollect())
             data_coll = {}
-            
-        
-        id_collect=self.get_collectId()
-        found=False
-        max_id=-1
-        for k in data_coll.keys():
-            if(data_coll[k]["API"]==self.get_api_name() and data_coll[k]["kwd"]==self.get_keywords() and data_coll[k]["year"]==str(self.get_year())):
+        except json.JSONDecodeError:
+            logging.error("Failed to parse JSON from the collection file: %s. Starting with an empty collection.", self.get_fileCollect())
+            data_coll = {}
+        except Exception as e:
+            logging.error("An unexpected error occurred while loading the collection file: %s. Error: %s", self.get_fileCollect(), e)
+            data_coll = {}
+
+        # Define the current collection parameters
+        current_api = self.get_api_name()
+        current_keywords = self.get_keywords()
+        current_year = str(self.get_year())
+
+        # Search for a matching collection
+        found = False
+        max_id = -1
+        for k, v in data_coll.items():
+            # Check if the collection matches current parameters
+            if v["API"] == current_api and v["kwd"] == current_keywords and v["year"] == current_year:
+                # Update instance attributes with existing collection data
                 self.set_collectId(k)
-                self.set_lastpage(data_coll[k]["last_page"])
-                self.set_complete(data_coll[k]["complete"])
-                found=True
-                print("FOUND")
+                self.set_lastpage(v["last_page"])
+                self.set_complete(v["complete"])
+                found = True
+                logging.info("Found matching collection with ID: %s", k)
                 break
-            max_id=max(int(k),max_id)
-        #print("max_id",max_id)
-        if(found==False):
-            
-            print("NOT FOUND")
-            if(max_id!=-1):
-                #print("max_id!=-1")
-                #print("new id ?" ,str(max_id+1))
-                self.set_collectId(str(max_id+1))
-                #print("new id ?" ,self.get_collectId())
-                data_coll[str(self.get_collectId())]={"API":self.get_api_name(),"kwd":self.get_keywords(),"year":str(self.get_year()),"last_page":0,"complete":0}
-            if(max_id==-1):
-                #print("max_id=-1")
-                data_coll["0"]={"API":self.get_api_name(),"kwd":self.get_keywords(),"year":str(self.get_year()),"last_page":0,"complete":0}
-        
-            with open(self.get_fileCollect(), 'w') as json_file:
-                json.dump(data_coll, json_file)
+            # Track the maximum ID encountered
+            max_id = max(int(k), max_id)
+
+        # If no matching collection was found, create a new one
+        if not found:
+            new_id = str(max_id + 1) if max_id != -1 else "0"
+            self.set_collectId(new_id)
+            data_coll[new_id] = {
+                "API": current_api,
+                "kwd": current_keywords,
+                "year": current_year,
+                "last_page": 0,
+                "complete": 0
+            }
+            logging.info("Created a new collection with ID: %s", new_id)
+
+            # Save the updated collection data to the file
+            try:
+                with open(self.get_fileCollect(), 'w') as json_file:
+                    json.dump(data_coll, json_file, indent=4)
+                logging.info("Updated collection file saved successfully: %s", self.get_fileCollect())
+            except Exception as e:
+                logging.error("Failed to save the updated collection file: %s. Error: %s", self.get_fileCollect(), e)
+
         
     def createCollectDir(self):
         if not os.path.isdir(self.get_apiDir()):
@@ -276,8 +305,8 @@ class API_collector:
     
     def runCollect(self):
         """
-        Runs the collection process for DBLP and Springer publications.
-        
+        Runs the collection process for API-based publications.
+
         This method retrieves publication data in pages until all results
         are collected or a specified limit is reached.
         """
@@ -288,69 +317,64 @@ class API_collector:
             logging.info("Collection already completed.")
             return  # Exit if collection is complete
 
+        if isinstance(self, Springer_collector):
+            # Handle Springer_collector separately
+            try:
+                logging.info("Running collection for Springer_collector.")
+                combined_results = self.collect_from_endpoints()  # Springer-specific collection logic
+                
+                # Save all pages of results
+                for page_data in combined_results:
+                    self.savePageResults(page_data, page_data["page"])  # Save results page by page
+
+                logging.info("Springer collection completed successfully.")
+            except Exception as e:
+                logging.error(f"Error during Springer collection: {str(e)}")
+            return  # Exit after Springer-specific collection is complete
+
+        # General collection process for other collectors
         page = int(self.get_lastpage()) + 1  # Start from the next page
         has_more_pages = True
+        fewer_than_10k_results = (self.big_collect == 0)  # Fewer than 10k results
 
-        # Determine if there are fewer than 10,000 results based on collection size
-        fewer_than_10k_results = (self.big_collect == 0)
+        # Loop to fetch and process API pages
+        while has_more_pages and fewer_than_10k_results:
+            offset = self.get_offset(page)  # Calculate the current offset for pagination
+            url = self.get_configurated_url().format(offset)  # Construct the API URL
+            logging.info(f"Fetching data from URL: {url}")
 
-        if isinstance(self, Springer_collector):
-            # If this is a Springer collector, use the 'collect_from_endpoints' method
-            logging.info("Running collection for Springer data.")
-            
             try:
-                combined_results = self.collect_from_endpoints()  # Collect results from Springer endpoints
-                
-                for page_data in combined_results:
-                    # Save each page's results
-                    self.savePageResults(page_data, page)
+                # Fetch the response using the API call decorator
+                response = self.api_call_decorator(url)
+                if not response or response.status_code != 200:
+                    raise ValueError(f"Invalid response received. Status code: {response.status_code}")
 
-                    # Update the last page collected
-                    self.set_lastpage(int(page) + 1)
+                # Parse the API response
+                page_data = self.parsePageResults(response, page)
 
-                    # Check if more pages are available based on results
-                    has_more_pages = len(page_data["results"]) == self.get_max_by_page()
-                    page = self.get_lastpage()  # Update the current page number
-                    
-                    # Check if total results are within the limit
-                    fewer_than_10k_results = page_data["total"] <= 10000
-                    logging.info(f"Processed page {page}: {len(page_data['results'])} results. Total found: {page_data['total']}")
-            
+                # Save the parsed results for the current page
+                self.savePageResults(page_data, page)
+
+                # Update the last page collected
+                self.set_lastpage(page)
+
+                # Check if there are more pages
+                has_more_pages = len(page_data["results"]) == self.get_max_by_page()
+                fewer_than_10k_results = page_data["total"] <= 10000
+
+                # Log progress
+                logging.info(
+                    f"Processed page {page}: {len(page_data['results'])} results. "
+                    f"Total found: {page_data['total']}, Continuing: {has_more_pages}."
+                )
+
+                # Increment page number
+                page += 1
+
             except Exception as e:
-                # Log additional context about the error
-                logging.error(f"Error processing results on page {page} from Springer API: {str(e)}")
+                # Handle and log any errors during the API call or response processing
+                logging.error(f"Error processing results on page {page} from URL '{url}': {str(e)}")
                 has_more_pages = False  # Stop collecting if there's an error
-
-        else:
-            # If this is a DBLP collector, follow the normal process
-            while has_more_pages and fewer_than_10k_results:
-                offset = self.get_offset(page)  # Calculate the current offset
-                url = self.get_configurated_url().format(offset)  # Construct the API URL
-                logging.info(f"Fetching data from URL: {url}")
-
-                response = self.api_call_decorator(url)  # Call the API
-                try:
-                    page_data = self.parsePageResults(response, page)  # Parse the response
-
-                    # Save the page results for future use
-                    self.savePageResults(page_data, page)
-
-                    # Update the last page collected
-                    self.set_lastpage(int(page) + 1)
-
-                    # Determine if more pages are available based on results returned
-                    has_more_pages = len(page_data["results"]) == self.get_max_by_page()
-                    page = self.get_lastpage()  # Update the current page number
-
-                    # Check if the total number of results is within the limit
-                    fewer_than_10k_results = page_data["total"] <= 10000
-                    logging.info(f"Processed page {page}: {len(page_data['results'])} results. Total found: {page_data['total']}")
-                    
-                except Exception as e:
-                    # Log additional context about the error
-                    logging.error(f"Error processing results on page {page} from URL '{url}': {str(e)}. "
-                                f"Response type: {type(response)}.")
-                    has_more_pages = False  # Stop collecting if there's an error
 
         # Final log messages based on the collection status
         if not has_more_pages:
@@ -360,92 +384,229 @@ class API_collector:
             time_needed = page_data["total"] / self.get_max_by_page() / 60 / 60
             logging.info(f"Total extraction will need approximately {time_needed:.2f} hours.")
 
-
-## OK 
 class SemanticScholar_collector(API_collector):
-    
-    """store file metadata"""
+    """
+    Collector for fetching publication metadata from the Semantic Scholar API.
+    """
+
     def __init__(self, filter_param, save, data_path):
+        """
+        Initializes the Semantic Scholar collector with the given parameters.
+
+        Args:
+            filter_param (Filter_param): Parameters for filtering results (years, keywords, etc.).
+            save (int): Flag indicating whether to save the collected data.
+            data_path (str): Path to save the collected data.
+        """
         super().__init__(filter_param, save, data_path)
-  
-        self.rate_limit = 100
-        self.max_by_page = 100
+        self.rate_limit = 100  # API allows 100 requests per minute
+        self.max_by_page = 100  # Maximum number of results per page
         self.api_name = "SemanticScholar"
         self.api_key = sem_scholar_api
         self.api_url = "https://api.semanticscholar.org/graph/v1/paper/search"
-        
-    def api_call_decorator(self,configurated_url):
-        @sleep_and_retry
-        @limits(calls=self.get_ratelimit(), period=1)
-        def access_rate_limited_decorated(configurated_url):
-            resp = requests.get(configurated_url, headers={'x-api-key':  self.get_apikey()})
-            return resp
-        
-        return access_rate_limited_decorated(configurated_url)
-            
-    def parsePageResults(self,response,page):
-        page_data = {"date_search":str(date.today()), "id_collect": self.get_collectId(), "page": page,"total":0,"results":[]}
-        page_with_results =response.json()
-       
-        # loop through partial list of results
-        try:
-            total=page_with_results["total"]
-            page_data["total"]=int(total)
-            if(page_data["total"]>0):
-                results = page_with_results['data']
-                for result in results:
-                    page_data["results"].append(result)
-        except:
-            print(response.status_code)
-        
-        return page_data
-    
-    def get_configurated_url(self):
-        #kw=self.get_keywords().replace("AND ","").replace("'","")
-        keywords=urllib.parse.quote(self.get_keywords())
-        return self.get_url()+"?query="+keywords+"&fieldsOfStudy=Computer Science,Linguistics,Mathematics&fields=title,abstract,url,venue,publicationVenue,citationCount,externalIds,referenceCount,s2FieldsOfStudy,publicationTypes,publicationDate,isOpenAccess,openAccessPdf,authors,journal,fieldsOfStudy&year="+str(self.get_year())+"&limit="+str(self.get_max_by_page())+"&offset={}"
 
-### IS WORKING ?
-class IEEE_collector(API_collector):
-    #https://developer.ieee.org/docs
-    """store file metadata"""
-    def __init__(self, filter_param, save, data_path):
-        super().__init__(filter_param, save, data_path)
-        self.api_name="IEEE"
-        self.rate_limit = 200
-        self.max_by_page = 200
-        self.api_key=ieee_api
-        self.api_url="http://ieeexploreapi.ieee.org/api/v1/search/articles"
-        
+    def parsePageResults(self, response, page):
+        """
+        Parses the results from a response for a specific page.
+
+        Args:
+            response (requests.Response): The API response object containing the results.
+            page (int): The page number of results being processed.
+
+        Returns:
+            dict: A dictionary containing metadata about the collected results, including the total count and the results themselves.
+        """
+        page_data = {
+            "date_search": str(date.today()),
+            "id_collect": self.get_collectId(),
+            "page": page,
+            "total": 0,
+            "results": []
+        }
+
+        try:
+            page_with_results = response.json()
+            page_data["total"] = int(page_with_results.get("total", 0))
+            if page_data["total"] > 0:
+                for result in page_with_results.get('data', []):
+                    parsed_result = {
+                        "title": result.get("title", ""),
+                        "abstract": result.get("abstract", ""),
+                        "url": result.get("url", ""),
+                        "venue": result.get("venue", ""),
+                        "citation_count": result.get("citationCount", 0),
+                        "reference_count": result.get("referenceCount", 0),
+                        "authors": [
+                            {
+                                "name": author.get("name", ""),
+                                "affiliation": author.get("affiliation", "")
+                            }
+                            for author in result.get("authors", [])
+                        ],
+                        "fields_of_study": result.get("fieldsOfStudy", []),
+                        "publication_date": result.get("publicationDate", ""),
+                        "open_access_pdf": result.get("openAccessPdf", {}).get("url", ""),
+                    }
+                    page_data["results"].append(parsed_result)
+
+            logging.info(f"Page {page} parsed successfully with {len(page_data['results'])} results.")
+        except Exception as e:
+            logging.error(f"Error parsing page {page}: {str(e)}. Response content: {response.text}")
+
+        return page_data
+
     def get_configurated_url(self):
-        # PUB YEAR ?
-        keywords=urllib.parse.quote(self.get_keywords())
-        return self.get_url()+"?apikey="+self.get_apikey()+"&format=json&max_records="+str(self.get_max_by_page())+"&sort_order=asc&sort_field=article_number&article_title="+keywords+"&publication_year="+str(self.get_year())+"&start_record={}"
-   
-    # REALLY NEEDED ?
-    # def api_call_decorator(self,configurated_url):
-    #     @sleep_and_retry
-    #     @limits(calls=self.get_ratelimit(), period=1)
-    #     def access_rate_limited_decorated(configurated_url):
-    #         resp = requests.get(configurated_url, headers={'x-api-key':  self.get_apikey()})
-    #         return resp
-        
-    #     return access_rate_limited_decorated(configurated_url)
-            
+        """
+        Constructs the configured API URL with query parameters for the bulk API.
+
+        Returns:
+            str: The formatted API URL for the bulk API with the constructed query parameters.
+        """
+        # Process keywords: Join multiple keywords with ' AND '
+        keywords_list = self.get_keywords()  # Assuming this returns a list of keyword sets
+        query_keywords = '+'.join(
+            '|'.join(f'"{keyword})"' for keyword in keywords) for keywords in keywords_list
+        )
+        encoded_keywords = urllib.parse.quote(query_keywords)
+
+        # Handle year range: Use min and max to set the range
+        years = self.get_year()
+        start_year = min(years) if years else None
+        end_year = max(years) if years else None
+        year_range = f"{start_year}-{end_year}" if start_year and end_year else ""
+
+        # Define fixed fields and construct the URL
+        fields = "title"
+        base_url = f"{self.api_url}/bulk"
+
+        # Construct the full URL
+        url = (
+            f"{base_url}?query={encoded_keywords}"
+            f"&year={year_range}"
+            f"&fieldsOfStudy=Computer%20Science"
+            f"&fields={fields}"
+        )
+
+        logging.info(f"Constructed API URL: {url}")
+        return url
+
     
-    def parsePageResults(self,response,page):
-        page_data = {"date_search":str(date.today()), "id_collect": self.get_collectId(), "page": page,"total":0,"results":[]}
-      
-        page_with_results =response.json()
-        # loop through partial list of results
-        total=page_with_results["total_records"]
-        page_data["total"]=int(total)
-        if(page_data["total"]>0):
-            results = page_with_results['articles']
-            for result in results:
-                page_data["results"].append(result)
+class IEEE_collector(API_collector):
+    """
+    Collector for fetching publication metadata from the IEEE Xplore API.
+    """
+
+    def __init__(self, filter_param, save, data_path):
+        """
+        Initializes the IEEE collector with the given parameters.
+
+        Args:
+            filter_param (Filter_param): The parameters for filtering results (years, keywords, etc.).
+            save (int): Flag indicating whether to save the collected data.
+            data_path (str): Path to save the collected data.
+        """
+        super().__init__(filter_param, save, data_path)
+        self.api_name = "IEEE"
+        self.rate_limit = 200
+        self.max_by_page = 25  # IEEE API max records per page is 25
+        self.api_key = ieee_api
+        self.api_url = "https://ieeexploreapi.ieee.org/api/v1/search/articles"
+
+    def parsePageResults(self, response, page):
+        """
+        Parses the results from a response for a specific page.
+
+        Args:
+            response (requests.Response): The API response object containing the results.
+            page (int): The page number of results being processed.
+
+        Returns:
+            dict: A dictionary containing metadata about the collected results, including the total count and the results themselves.
+        """
+        page_data = {
+            "date_search": str(date.today()),  # Date of the search
+            "id_collect": self.get_collectId(),  # Unique identifier for this collection
+            "page": page,  # Current page number
+            "total": 0,  # Total number of results found
+            "results": []  # List to hold the collected results
+        }
+        
+        try:
+            # Parse the JSON response
+            page_with_results = response.json()
+
+            # Extract the total number of records
+            total_records = page_with_results.get("total_records", 0)
+            page_data["total"] = int(total_records)
+            logging.info(f"Total results found for page {page}: {page_data['total']}")
+
+            # Extract articles
+            articles = page_with_results.get("articles", [])
+            for article in articles:
+                # Collect relevant details from each article
+                parsed_article = {
+                    "doi": article.get("doi", ""),
+                    "title": article.get("title", ""),
+                    "publisher": article.get("publisher", ""),
+                    "isbn": article.get("isbn", ""),
+                    "issn": article.get("issn", ""),
+                    "rank": article.get("rank", 0),
+                    "authors": [
+                        {
+                            "name": author.get("full_name", ""),
+                            "affiliation": author.get("affiliation", "")
+                        }
+                        for author in article.get("authors", {}).get("authors", [])
+                    ],
+                    "access_type": article.get("access_type", ""),
+                    "content_type": article.get("content_type", ""),
+                    "abstract": article.get("abstract", ""),
+                    "article_number": article.get("article_number", ""),
+                    "pdf_url": article.get("pdf_url", ""),
+                }
+                page_data["results"].append(parsed_article)
+
+        except Exception as e:
+            logging.error(f"Error parsing page {page}: {str(e)}")
         
         return page_data
+    
+    def get_configurated_url(self):
+        """
+        Constructs the configured API URL with query parameters based on filters.
+
+        Returns:
+            str: The formatted API URL with the constructed query parameters.
+        """
+        # Process keywords: Join multiple keywords with ' AND '
+        keywords_list = self.get_keywords()  # Assuming this returns a list of keyword sets
+        query_keywords = ' AND '.join(f"({' OR '.join(keywords)})" for keywords in keywords_list)
+        encoded_keywords = urllib.parse.quote(query_keywords)
+
+        # Handle year range: Use min and max to set start_year and end_year
+        years = self.get_year()
+        start_year = min(years) if years else None
+        end_year = max(years) if years else None
+
+        # Construct URL with parameters
+        offset_placeholder = "{}"  # Placeholder for pagination offset
+        fields = (
+            "title"
+        )
+        url = (
+            f"{self.api_url}?query={encoded_keywords}"
+            f"&fieldsOfStudy=Computer Science"
+            f"&fields={fields}"
+            f"&limit={self.max_by_page}&offset={offset_placeholder}"
+        )
+
+        # Append year range to the query if available
+        if start_year and end_year:
+            url += f"&year={start_year}-{end_year}"
+
+        logging.info(f"Constructed API URL: {url}")
+        return url
+    
 ## OK 
 class Elsevier_collector(API_collector):
     """Store file metadata from Elsevier API."""
@@ -501,8 +662,6 @@ class Elsevier_collector(API_collector):
 
         # Join all formatted keyword groups with ' AND '
         search_query = ' AND '.join(formatted_keyword_groups)
-
-        logging.info(f"Constructed search query: {search_query}")
         return search_query
     
     def get_configurated_url(self):
@@ -899,6 +1058,7 @@ class Arxiv_collector(API_collector):
         AND
         ti:"Pragmatic" OR ti:"Pragmatics" OR abs:"Pragmatic" OR abs:"Pragmatics"
         """
+        # List to hold formatted keyword groups
         formatted_keyword_groups = []
 
         # Iterate through each set of keywords
@@ -906,12 +1066,12 @@ class Arxiv_collector(API_collector):
             # Initialize a list to hold the formatted keywords for the current group
             group_keywords = []
 
-            # Join keywords within the same set with ' OR '
-            group_keywords += [f'ti:"{keyword}"' for keyword in keyword_set]  # Title queries
-            group_keywords += [f'abs:"{keyword}"' for keyword in keyword_set]  # Abstract queries
+            # Add 'ti' (title) and 'abs' (abstract) queries for each keyword
+            group_keywords += [f'ti:"{urllib.parse.quote(keyword)}"' for keyword in keyword_set]
+            group_keywords += [f'abs:"{urllib.parse.quote(keyword)}"' for keyword in keyword_set]
 
-            # Join the current group's keywords with ' OR '
-            formatted_keyword_groups.append('+OR+'.join(group_keywords))
+            # Join the current group's keywords with ' +OR+ '
+            formatted_keyword_groups.append(f"({' +OR+ '.join(group_keywords)})")
 
         # Join all formatted keyword groups with ' +AND+ '
         search_query = '+AND+'.join(formatted_keyword_groups)
@@ -1138,31 +1298,44 @@ class Springer_collector(API_collector):
         
         return [meta_url, openaccess_url]
 
+
     def collect_from_endpoints(self):
         """
         Collects data from both the meta and openaccess endpoints with pagination.
-        
+
         Returns:
             list: Combined results from both endpoints.
         """
-        urls = self.get_configurated_url()
+        urls = self.get_configurated_url()  # Get the list of API URLs
         combined_results = []
 
-        for url in urls:
+        for base_url in urls:  # Iterate through each base URL
             page = 1
             has_more_pages = True
 
             while has_more_pages:
-                logging.info(f"Fetching data from URL: {url}&offset={page}")
-                response = self.api_call_decorator(f"{url}&offset={page}")  # Call the API with pagination
-                page_data = self.parsePageResults(response, page)  # Parse the response
-                
-                combined_results.append(page_data)  # Store results from this endpoint
+                # Append pagination parameter to the base URL
+                paginated_url = f"{base_url}&p={page}"  # Use 'p' for Springer API pagination
+                logging.info(f"Fetching data from URL: {paginated_url}")
 
-                has_more_pages = len(page_data['results']) == self.max_by_page
-                page += 1  # Increment page number for next request
+                # Call the API
+                try:
+                    response = self.api_call_decorator(paginated_url)
+
+                    # Parse the response
+                    page_data = self.parsePageResults(response, page)
+                    combined_results.append(page_data)  # Store results from this endpoint
+
+                    # Determine if more pages are available
+                    has_more_pages = len(page_data['results']) == self.max_by_page
+                    page += 1  # Increment page number for the next request
+
+                except Exception as e:
+                    logging.error(f"Error fetching or parsing data from {paginated_url}: {str(e)}")
+                    has_more_pages = False  # Stop fetching on error
 
         return combined_results
+
 
 
 class GoogleScholarCollector(API_collector):

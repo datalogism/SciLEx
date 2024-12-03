@@ -65,13 +65,13 @@ def run_systematic_review_search():
     Runs the systematic review search process, collecting data from DBLP, Arxiv, Elsevier, IEEE, Springer, Semantic Scholar, OpenAlex, HAL, and ISTEX APIs.
     Logs the progress and any errors encountered during the process.
     """
-    logging.info("================BEGIN Systematic Review Search================")
+    # logging.info("================BEGIN Systematic Review Search================")
     
     # Log starting the configuration of filter parameters
     logging.info("Initializing Filter Parameters")
     filter_params = Filter_param(years, keywords, "")
     
-    # # DBLP collection
+    # # # DBLP collection
     logging.info("-------DBLP Collection Process Started-------")
     dbpl = DBLP_collector(filter_params, 0, path)
     
@@ -81,7 +81,7 @@ def run_systematic_review_search():
     except Exception as e:
         logging.error(f"DBLP Collection Failed: {str(e)}")
 
-    # # Arxiv collection
+    # # # Arxiv collection
     logging.info("-------Arxiv Collection Process Started-------")
     arxiv = Arxiv_collector(filter_params, 0, path)
     
@@ -91,7 +91,7 @@ def run_systematic_review_search():
     except Exception as e:
         logging.error(f"Arxiv Collection Failed: {str(e)}")
 
-    # # Elsevier collection
+    # # # Elsevier collection
     logging.info("-------Elsevier Collection Process Started-------")
     elsevier = Elsevier_collector(filter_params, 0, path)
     
@@ -101,7 +101,7 @@ def run_systematic_review_search():
     except Exception as e:
         logging.error(f"Elsevier Collection Failed: {str(e)}")
 
-    # # IEEE collection
+    # # # IEEE collection
     logging.info("-------IEEE Collection Process Started-------")
     ieee = IEEE_collector(filter_params, 0, path)
     
