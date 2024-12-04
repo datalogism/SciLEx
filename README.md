@@ -57,3 +57,31 @@ https://github.com/datalogism/SciLEx/tree/main/src/text) : extract or push paper
 - By extending it to analytics and vizualisation tools 
 
 Concretely all of theses questions could be leveraged and organize via issues.
+
+## API integrated 
+|                    | SemanticScholar  | OpenAlex                   | Istex | IEEE                       | HAL                                               | Elsevier | DBLP | Arxiv | Springer |
+|--------------------|------------------|----------------------------|-------|----------------------------|---------------------------------------------------|----------|------|-------|----------|
+| requiere API key ? | optional         | NA                         |       | X                          | NA                                                | X        |      |       | X        |
+| Rate limit         | 100 req/sec      | 10/seq - 100000/days       |       | 10/sec –  200/days         |                                                   |          |      | 3/seq | 8/seq    |
+| Year               | X                | X                          | X     | X                          | X                                                 | X        |      |       | X        |
+| Abstract content   | X                |                            | X     | X                          |                                                   |          |      |       |          |
+| Title content      | X                |                            | X     | X                          | X                                                 |          |      |       | X        |
+| Document type      | X                | X                          | ?     | X                          | X                                                 |          |      |       | X        |
+| Classification ?   | fieldOfStudy     | conceptID, Wikidataconcept |       | IEEE thesaurus, indexterms | acm\_classif, HAL classif, keyword, JELclassif... |          |      |       | keywords |
+| title              | X                |                            | X     | X                          | X                                                 | X        | X    | X     | X        |
+| abstract           | X                |                            | X     | X                          | X                                                 |          |      | X     | X        |
+| DOi                | X                | X                          | X     | X                          |                                                   | X        | X    | X     | X        |
+| citations metrics  | X                | X                          |       | X                          |                                                   | X        |      |       |          |
+| publication data   | X                | X                          | X     | X                          |                                                   | X        | X    |       | X        |
+| isOpen             | X                | X                          | X     | X                          |                                                   | X        | X    |       | X        |
+| journal            | X                | X                          | X     | X                          |                                                   |          | X    | X     | X        |
+| conference         | X                | X                          | X     | X                          |                                                   |          | X    | X     | X        |
+| authors            | name,  author id | name, orcid, inst          |       | X                          | X                                                 | X        | X    | X     | X        |
+| publicationType    | X                | X                          | X     | X                          | X                                                 | X        | X    |       | X        |
+| referenced\_works  |                  | X                          | X     |                            |                                                   |          |      |       |          |
+| related\_works     |                  | X                          |       |                            |                                                   |          |      |       |          |
+| keywords           |                  | X                          | X     | X                          | X                                                 |          |      | X     |          |
+| related entities   |                  | X                          | X     |                            |                                                   |          |      |       |          |
+| qualityIndicators  |                  |                            | X     |                            |                                                   |          |      |       |          |
+| enrichments        |                  |                            | X     | X                          |                                                   |          |      |       |          |
+| fieldOfstudy       | X                |                            | X     |                            |                                                   |          |      |       | X        |
