@@ -2,7 +2,7 @@
 email: "ollagnier@i3s.unice.fr"
 
 # Directory to output the collected data
-output_dir: 'pragmatic'
+output_dir: 'KG-CONV'
 
 # Flag to indicate whether to collect data
 collect: True
@@ -15,22 +15,12 @@ years: [2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 
 
 # Keywords to use for filtering data
 keywords:
-  - ["NLP", "Natural Language Processing", "natural language processing"]
-  - ["Dataset", "dataset", 'Benchmark', 'benchmark']
+  - ["Conversation", "conversation", "Conversations", "conversations", "dialog", "Dialog", "Conversational", "conversational", "Dialogue", "dialogue", "chat", "Chat"]
+  - ["Knowledge Graph", "Knowledge Graphs", "knowledge graph", "knowledge graph"]
 
-zotero:
-    api_key: "YOURAPIKEY"
-google_scholar:
-    api_key: "YOURAPIKEY"
-springer:
-    api_key: "YOURAPIKEY"
-sem_scholar:
-    api_key: "YOURAPIKEY"
-elsevier:
-    api_key: "YOURAPIKEY"
-ieee:
-    api_key: "YOURAPIKEY"
-orcid:
-    dir: 'YOURWORKDIR'
-    client_id: "YOURCLIENTID"
-    client_secret: "YOURAPIKEY"
+
+# available APIs: "DBLP", "Arxiv", "Elsevier", "IEEE", "Springer", "Semantic Scholar", "OpenAlex", "HAL", "ISTEX", "Google Scholar"
+apis: [DBLP, Google Scholar]
+
+# available lookup fields: title, abstract, full text, authors
+fields: [title, abstract]

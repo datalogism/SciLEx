@@ -1,31 +1,6 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Jan 25 09:07:19 2023
-
-@author: cringwal
-"""
-
-############## TO DO 
-# https://doaj.org/api/docs
-# https://api.base-search.net/ 
-# https://www.doabooks.org/en/article/api-search-doab
-# https://core.ac.uk/services/api
-# https://graph.openaire.eu/develop/
-# + Springer
-
-import requests
-import traceback
-from ratelimit import limits, RateLimitException, sleep_and_retry
-from csv import writer
-import os
-import json
-import urllib.parse
-from lxml import etree
 import logging
-from datetime import date
-import xml.etree.ElementTree as ET
 from utils import load_all_configs
+from itertools import product
 
 # Set up logging configuration
 logging.basicConfig(
@@ -55,6 +30,36 @@ elsevier_api = api_config["elsevier"].get("api_key")
 google_api = api_config["google_scholar"].get("api_key")
 ieee_api = api_config["ieee"].get("api_key")
 openalex_mail = main_config.get("email")
+
+def queryCompositor(years, keywords, apis, fields):
+    """
+    Generates all potential combinations of keyword groups, years, APIs, and fields.
+
+    Args:
+        years (list): A list of years for filtering.
+        keywords (list): A list of lists containing keyword groups.
+        apis (list): A list of APIs to use for data collection.
+        fields (list): A list of fields to look up (e.g., title, abstract, etc.).
+
+    Returns:
+        list: A list of dictionaries, each representing a unique combination.
+    """
+    # Generate all combinations of keywords from two different groups
+    keyword_combinations = [
+        list(pair) for pair in product(*keywords)
+    ]
+
+    # Generate all combinations using Cartesian product
+    combinations = product(keyword_combinations, years, apis, fields)
+
+    # Create a list of dictionaries with the combinations
+    queries = [
+        {"keyword": keyword_group, "year": year, "api": api, "field": field}
+        for keyword_group, year, api, field in combinations
+    ]
+
+    return queries
+
 
 class Filter_param:
     def __init__(self, year, keywords, focus):
@@ -93,217 +98,7 @@ class API_collector:
         self.max_by_page=100
         self.api_url=""
         self.complete=0
-        
-    def set_collectId(self, collectId):
-        self.collectId = collectId
-    def set_lastpage(self, lastpage):
-        self.lastpage = lastpage
-    def set_complete(self, complete):
-        self.complete = complete
-        
-    def get_collectId(self):
-        return self.collectId   
-    def get_lastpage(self):
-        return self.lastpage
-    def get_api_name(self):
-        return self.api_name
-    def get_keywords(self):
-        return self.filter_param.get_keywords()
-    def get_year(self):
-        return self.filter_param.get_year()
-    def get_dataDir(self):
-        return self.datadir
-    def get_apiDir(self):
-        return self.get_dataDir()+"/"+self.get_api_name()
-    def get_collectDir(self):
-        return self.get_apiDir()+"/"+str(self.get_collectId())
-    def get_fileCollect(self):
-        return self.get_dataDir()+"/collect_dict.json"
-    def get_url(self):
-         return self.api_url
-    def get_apikey(self):
-          return self.api_key
-    def get_configurated_url(self):
-        return self.get_url()
-    def get_max_by_page(self):
-        return self.max_by_page
-    def get_ratelimit(self):
-        return self.rate_limit
-    
-    def api_call_decorator(self,configurated_url):
-        #print("REQUEST")
-        @sleep_and_retry
-        @limits(calls=self.get_ratelimit(), period=1)
-        def access_rate_limited_decorated(configurated_url):
-            #print("REQUEST")
-            try:
-                resp = requests.get(configurated_url)
-            except:
-                print("PB AFTER REQUEST")
-            return resp
-        return access_rate_limited_decorated(configurated_url)
-    
-    def toZotero():
-        pass
-    
-    def get_configurated_url(self):
-        return self.get_url()
-    
-    def getCollectId(self):
-        """
-        Loads or creates a collection ID based on the API, keywords, and year filter.
 
-        If a matching collection is found in the file, it updates the instance attributes.
-        If no matching collection is found, it creates a new entry in the collection file.
-
-        Returns:
-            None
-        """
-        # Attempt to load the collection file
-        try:
-            with open(self.get_fileCollect()) as json_file:
-                data_coll = json.load(json_file)
-                logging.info("Successfully loaded the collection file: %s", self.get_fileCollect())
-        except FileNotFoundError:
-            logging.warning("Collection file not found: %s. Starting with an empty collection.", self.get_fileCollect())
-            data_coll = {}
-        except json.JSONDecodeError:
-            logging.error("Failed to parse JSON from the collection file: %s. Starting with an empty collection.", self.get_fileCollect())
-            data_coll = {}
-        except Exception as e:
-            logging.error("An unexpected error occurred while loading the collection file: %s. Error: %s", self.get_fileCollect(), e)
-            data_coll = {}
-
-        # Define the current collection parameters
-        current_api = self.get_api_name()
-        current_keywords = self.get_keywords()
-        current_year = str(self.get_year())
-
-        # Search for a matching collection
-        found = False
-        max_id = -1
-        for k, v in data_coll.items():
-            # Check if the collection matches current parameters
-            if v["API"] == current_api and v["kwd"] == current_keywords and v["year"] == current_year:
-                # Update instance attributes with existing collection data
-                self.set_collectId(k)
-                self.set_lastpage(v["last_page"])
-                self.set_complete(v["complete"])
-                found = True
-                logging.info("Found matching collection with ID: %s", k)
-                break
-            # Track the maximum ID encountered
-            max_id = max(int(k), max_id)
-
-        # If no matching collection was found, create a new one
-        if not found:
-            new_id = str(max_id + 1) if max_id != -1 else "0"
-            self.set_collectId(new_id)
-            data_coll[new_id] = {
-                "API": current_api,
-                "kwd": current_keywords,
-                "year": current_year,
-                "last_page": 0,
-                "complete": 0
-            }
-            logging.info("Created a new collection with ID: %s", new_id)
-
-            # Save the updated collection data to the file
-            try:
-                with open(self.get_fileCollect(), 'w') as json_file:
-                    json.dump(data_coll, json_file, indent=4)
-                logging.info("Updated collection file saved successfully: %s", self.get_fileCollect())
-            except Exception as e:
-                logging.error("Failed to save the updated collection file: %s. Error: %s", self.get_fileCollect(), e)
-
-        
-    def createCollectDir(self):
-        if not os.path.isdir(self.get_apiDir()):
-            os.makedirs(self.get_apiDir())
-        if not os.path.isdir(self.get_collectDir()):
-            os.makedirs(self.get_collectDir())
-            
-    def savePageResults(self,global_data,page):
-        
-        self.createCollectDir()
-        print(self.get_collectDir()+"/page_"+str(page))
-        with open(self.get_collectDir()+"/page_"+str(page), 'w', encoding='utf8') as json_file:
-            json.dump(global_data, json_file)
-        with open(self.get_fileCollect()) as json_file:
-            data_coll = json.load(json_file)
-        data_coll[str(self.get_collectId())]["last_page"]=page
-        with open(self.get_fileCollect(), 'w') as json_file:
-            json.dump(data_coll, json_file)
-                
-
-    # def parsePageResults(self, response, page):
-    #     """
-    #     Parses the JSON response from the API for a specific page of results.
-        
-    #     Args:
-    #         response (requests.Response): The response object from the API call.
-    #         page (int): The current page number being processed.
-            
-    #     Returns:
-    #         dict: A dictionary containing metadata about the search, including
-    #             the date of search, collection ID, current page, total results,
-    #             and the parsed results.
-    #     """
-    #     try:
-    #         # Parse the JSON response from the API
-    #         page_with_results = response.json()
-    #         # Initialize a dictionary to hold the parsed page data
-    #         page_data = {
-    #             "date_search": str(date.today()),  # Current date of the search
-    #             "id_collect": self.get_collectId(),  # Collection ID for this search
-    #             "page": page,  # Current page number
-    #             "total": 0,    # Placeholder for total results count
-    #             "results": []  # List to hold individual result entries
-    #         }
-    #         # Log the entire response for debugging (can be commented out in production)
-    #         logging.debug(f"API Response for page {page}: {page_with_results}")
-
-    #         # Check if the 'records' key exists, which holds the actual results
-    #         if 'records' in page_with_results:
-    #             results = page_with_results['records']
-    #             total = int(page_with_results["result"][0].get("total", 0))  # Get total results count
-    #             page_data["total"] = total  # Update the total number of results
-                
-    #             logging.info(f"Processing page {page}: Found {total} results.")
-
-    #             # Iterate over each result and process it
-    #             for result in results:
-    #                 page_data["results"].append(result)  # Append result to the results list
-    #                 SemanticScholartoZoteroFormat(result)  # Convert result to Zotero format
-
-    #         else:
-    #             # If the 'records' key is missing, log an error with response details
-    #             logging.error(f"Missing 'records' key in API response for page {page}: {page_with_results}")
-
-    #         # Log the parsed results for debugging
-    #         logging.debug(f"Parsed results for page {page}: {page_data['results']}")
-
-    #     except Exception as e:
-    #         # Capture the traceback and include it in the error log
-    #         logging.error(f"Error processing results on page {page} from URL '{response.url}': {str(e)}. "
-    #                     f"Response type: {type(response)}. Response content: {response.text if hasattr(response, 'text') else 'N/A'}. "
-    #                     f"Traceback: {traceback.format_exc()}")
-
-    #     return page_data
-
-    def flagAsComplete(self):
-        with open(self.get_fileCollect()) as json_file:
-            data_coll = json.load(json_file)
-        data_coll[str(self.get_collectId())]["complete"]=1
-        with open(self.get_fileCollect(), 'w') as json_file:
-            json.dump(data_coll, json_file)
-    
-    def add_offset_param(self,page):
-        return self.get_configurated_url().format((page-1)*self.get_max_by_page())
-        
-    def get_offset(self, page):
-        return (page-1)*self.get_max_by_page()
-    
     def runCollect(self):
         """
         Runs the collection process for API-based publications.
@@ -311,81 +106,8 @@ class API_collector:
         This method retrieves publication data in pages until all results
         are collected or a specified limit is reached.
         """
-        self.getCollectId()  # Retrieve the collection identifier
-
-        # Check if the collection has already been completed
-        if self.complete == 1:
-            logging.info("Collection already completed.")
-            return  # Exit if collection is complete
-
-        if isinstance(self, Springer_collector):
-            # Handle Springer_collector separately
-            try:
-                logging.info("Running collection for Springer_collector.")
-                combined_results = self.collect_from_endpoints()  # Springer-specific collection logic
-                
-                # Save all pages of results
-                for page_data in combined_results:
-                    self.savePageResults(page_data, page_data["page"])  # Save results page by page
-
-                logging.info("Springer collection completed successfully.")
-            except Exception as e:
-                logging.error(f"Error during Springer collection: {str(e)}")
-            return  # Exit after Springer-specific collection is complete
-
-        # General collection process for other collectors
-        page = int(self.get_lastpage()) + 1  # Start from the next page
-        has_more_pages = True
-        fewer_than_10k_results = (self.big_collect == 0)  # Fewer than 10k results
-
-        # Loop to fetch and process API pages
-        while has_more_pages and fewer_than_10k_results:
-            offset = self.get_offset(page)  # Calculate the current offset for pagination
-            url = self.get_configurated_url().format(offset)  # Construct the API URL
-            logging.info(f"Fetching data from URL: {url}")
-
-            try:
-                # Fetch the response using the API call decorator
-                response = self.api_call_decorator(url)
-                if not response or response.status_code != 200:
-                    raise ValueError(f"Invalid response received. Status code: {response.status_code}")
-
-                # Parse the API response
-                page_data = self.parsePageResults(response, page)
-
-                # Save the parsed results for the current page
-                self.savePageResults(page_data, page)
-
-                # Update the last page collected
-                self.set_lastpage(page)
-
-                # Check if there are more pages
-                has_more_pages = len(page_data["results"]) == self.get_max_by_page()
-                fewer_than_10k_results = page_data["total"] <= 10000
-
-                # Log progress
-                logging.info(
-                    f"Processed page {page}: {len(page_data['results'])} results. "
-                    f"Total found: {page_data['total']}, Continuing: {has_more_pages}."
-                )
-
-                # Increment page number
-                page += 1
-
-            except Exception as e:
-                # Handle and log any errors during the API call or response processing
-                logging.error(f"Error processing results on page {page} from URL '{url}': {str(e)}")
-                has_more_pages = False  # Stop collecting if there's an error
-
-        # Final log messages based on the collection status
-        if not has_more_pages:
-            logging.info("No more pages to collect. Marking collection as complete.")
-            self.flagAsComplete()
-        else:
-            time_needed = page_data["total"] / self.get_max_by_page() / 60 / 60
-            logging.info(f"Total extraction will need approximately {time_needed:.2f} hours.")
-            
-        self.getCollectId()  # Retrieve the collection identifier
+        
+        queries = queryCompositor(main_config['years'], main_config['keywords'], main_config['apis'], main_config['fields'])
 
 class SemanticScholar_collector(API_collector):
     """
