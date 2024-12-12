@@ -109,6 +109,8 @@ class API_collector:
         
         queries = queryCompositor(main_config['years'], main_config['keywords'], main_config['apis'], main_config['fields'])
 
+        ### TO DO ###
+
 class SemanticScholar_collector(API_collector):
     """
     Collector for fetching publication metadata from the Semantic Scholar API.
