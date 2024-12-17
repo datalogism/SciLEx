@@ -13,7 +13,11 @@ from collectors_V2  import *
 from aggregate import *
 import logging
 from datetime import datetime
+<<<<<<< HEAD
 from utils import load_all_configs, api_collector_decorator
+=======
+import os
+>>>>>>> 40b0e51 (Corrected SemanticScholar collector and aggregator + slight adjustments)
 
 # Set up logging configuration
 logging.basicConfig(
@@ -47,6 +51,10 @@ apis = main_config['apis']
 if collect:
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
+
+        # saving the config
+        with open(os.path.join(output_dir, "config_used.yml"), "w") as f:
+            yaml.dump(config, f)
 
     path = output_dir
 
@@ -164,5 +172,7 @@ if __name__ == "__main__":
     logging.info(f"Systematic review search ended at {datetime.now()}")
 
     # Aggregation of results after collection
-    # if aggregate:
-    #     aggregate_results(output_dir)
+    if aggregate:
+        logging.info(f"Aggregation started at {datetime.now()}")
+        aggregate_results(output_dir)
+        logging.info(f"Aggregation  ended at {datetime.now()}")

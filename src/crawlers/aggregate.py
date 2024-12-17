@@ -93,83 +93,74 @@ def SemanticScholartoZoteroFormat(row):
     zotero_temp["archive"]="SemanticScholar"
     #### publicationTypes is a list Zotero only take one value
     
-    if(row["publicationTypes"]!="" and row["publicationTypes"] is not None):
-        if(len(row["publicationTypes"])==1):
-            
-            match row["publicationTypes"][0]:
-                case 'JournalArticle':
-                    zotero_temp["itemType"]="journalArticle"                
-                case 'Conference':
-                    zotero_temp["itemType"]='conferencePaper'            
-                case 'Conferences':
-                    zotero_temp["itemType"]='conferencePaper'
-                case 'Book' :
-                    zotero_temp["itemType"]= "book"
-                case default:
-                    pass
-                    #print("NEED TO ADD FOLLOWING TYPE >",row["publicationTypes"][0])
-                    
-        if(len(row["publicationTypes"])>1):
-           if('Book' in row["publicationTypes"]):
-               zotero_temp["itemType"]= "book"
-           elif('Conference' in row["publicationTypes"]):               
-                zotero_temp["itemType"]='conferencePaper'
-           elif('JournalArticle' in row["publicationTypes"]):               
-                 zotero_temp["itemType"]='journalArticle'
-           else:
-               pass
-               #print("NEED TO ADD FOLLOWING TYPES >",row["publicationTypes"])
+    if row["publication_types"]:
+
+        if('Book' in row["publication_types"]):
+            zotero_temp["itemType"]= "book"
+        elif('Conference' in row["publication_types"]):               
+            zotero_temp["itemType"]='conferencePaper'
+        elif('JournalArticle' in row["publication_types"]):               
+            zotero_temp["itemType"]='journalArticle'
+        else:
+            pass
+            #print("NEED TO ADD FOLLOWING TYPES >",row["publicationTypes"])
                 
-    if(row["publicationVenue"]!="" and row["publicationVenue"] is not None ):
-        if("type" in row["publicationVenue"].keys() and row["publicationVenue"]["type"]!=""):
-            if(row["publicationVenue"]["type"]=="journal"):
+    if row["venue"]:
+        if("type" in row["venue"].keys() and row["venue"]["type"]!=""):
+            if(row["venue"]["type"]=="journal"):
                 zotero_temp["itemType"]="journalArticle"                
-                if(row["publicationVenue"]["name"]!=""):
-                    zotero_temp["journalAbbreviation"]=row["publicationVenue"]["name"]
-            if(row["publicationVenue"]["type"]=="conference"):
+                if(row["venue"]["name"]!=""):
+                    zotero_temp["journalAbbreviation"]=row["venue"]["name"]
+            if(row["venue"]["type"]=="conference"):
                 zotero_temp["itemType"]="conferencePaper"                
-                if(row["publicationVenue"]["name"]!=""):
-                    zotero_temp["conferenceName"]=row["publicationVenue"]["name"]
-        
+                if(row["venue"]["name"]!=""):
+                    zotero_temp["conferenceName"]=row["venue"]["name"]
+
             
-            
-    if(row["journal"]!="" and row["journal"] is not None ):
+    if row["journal"]:
         if("pages" in row["journal"].keys() and row["journal"]["pages"]!=""):
             zotero_temp["pages"]=row["journal"]["pages"]
             if(zotero_temp["itemType"]=="book"):
                 zotero_temp["itemType"]="bookSection"
-            
+        if zotero_temp["itemType"] == "NA":
+            # if the journal field is defined but we dont know the itemType yet (for ex Reviews), we assume it's journal article
+            zotero_temp["itemType"] = "journalArticle"
         if("name" in row["journal"].keys() and row["journal"]["name"]!=""):
             zotero_temp["journalAbbreviation"]=row["journal"]["name"]
         if("volume" in row["journal"].keys() and row["journal"]["volume"]!=""):
             zotero_temp["volume"]=row["journal"]["volume"]
-            
-    if(row["title"]!="" and row["title"] is not None):
+    
+    if zotero_temp["itemType"] == "NA":
+        # default to Manuscript type to make sure there is a type, otherwise the push to Zotero doesn't work
+        zotero_temp["itemType"] = "Manuscript"
+
+    if row["title"]:
         zotero_temp["title"]=row["title"] 
     auth_list=[]
     for auth in row["authors"]:
         if(auth["name"]!="" and auth["name"] is not None):
             auth_list.append(auth["name"] )
-    if(len(auth_list)>0):
+    if (len(auth_list)>0):
         zotero_temp["authors"]=";".join(auth_list)
     
-    if(row["abstract"]!="" and row["abstract"] is not None):
+    if row["abstract"]:
         zotero_temp["abstract"]=row["abstract"]
         
-    if(row["paperId"]!="" and row["paperId"] is not None):
-        zotero_temp["archiveID"]=row["paperId"]
+    if row["paper_id"]!="":
+        zotero_temp["archiveID"]=row["paper_id"]
         
-    if(row["publicationDate"]!="" and row["publicationDate"] is not None):
-        zotero_temp["date"]=row["publicationDate"]   
+    if row["publication_date"]:
+        zotero_temp["date"]=row["publication_date"]   
         
-    if("DOI" in row["externalIds"].keys()):
-        zotero_temp["DOI"]=row["externalIds"]["DOI"]
-  
-    if(row["url"]!="" and row["url"] is not None):
-        zotero_temp["url"]=row["url"]   
-    if(row["isOpenAccess"]!="" and row["isOpenAccess"] is not None):
-        zotero_temp["rights"]=row["isOpenAccess"]     
-    
+    if row["DOI"]:
+        zotero_temp["DOI"]=row["DOI"]
+
+    if row["url"]:
+        zotero_temp["url"]=row["url"]
+
+    if row["open_access_pdf"]:
+        zotero_temp["rights"]=row["open_access_pdf"]
+
     return zotero_temp
 
 def IstextoZoteroFormat(row):

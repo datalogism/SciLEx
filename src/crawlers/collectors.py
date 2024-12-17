@@ -338,6 +338,8 @@ class API_collector:
         has_more_pages = True
         fewer_than_10k_results = (self.big_collect == 0)  # Fewer than 10k results
 
+        failed = False
+
         # Loop to fetch and process API pages
         while has_more_pages and fewer_than_10k_results:
             offset = self.get_offset(page)  # Calculate the current offset for pagination
@@ -377,11 +379,13 @@ class API_collector:
                 logging.error(f"Error processing results on page {page} from URL '{url}': {str(e)}")
                 has_more_pages = False  # Stop collecting if there's an error
 
-        # Final log messages based on the collection status
-        if not has_more_pages:
+                failed = True
+
+        # # Final log messages based on the collection status
+        if not has_more_pages and not failed:
             logging.info("No more pages to collect. Marking collection as complete.")
             self.flagAsComplete()
-        else:
+        elif has_more_pages:
             time_needed = page_data["total"] / self.get_max_by_page() / 60 / 60
             logging.info(f"Total extraction will need approximately {time_needed:.2f} hours.")
             
@@ -435,10 +439,12 @@ class SemanticScholar_collector(API_collector):
                     parsed_result = {
                         "title": result.get("title", ""),
                         "abstract": result.get("abstract", ""),
+                        "journal": result.get("journal", ""),
                         "url": result.get("url", ""),
                         "venue": result.get("venue", ""),
                         "citation_count": result.get("citationCount", 0),
                         "reference_count": result.get("referenceCount", 0),
+                        "publication_types": result.get("publicationTypes", []),
                         "authors": [
                             {
                                 "name": author.get("name", ""),
@@ -448,8 +454,26 @@ class SemanticScholar_collector(API_collector):
                         ],
                         "fields_of_study": result.get("fieldsOfStudy", []),
                         "publication_date": result.get("publicationDate", ""),
-                        "open_access_pdf": result.get("openAccessPdf", {}).get("url", ""),
+                        "paper_id": result.get("paperId", "")
                     }
+                    if result.get("openAccessPdf", {}):
+                        parsed_result["open_access_pdf"] = result.get("openAccessPdf", {}).get("url", "")
+                    else:
+                        parsed_result["open_access_pdf"] = ""
+                    
+                    if result.get("publicationVenue", {}):
+                        parsed_result["venue"] = {
+                            "name": result.get("publicationVenue", {}).get("name", ""),
+                            "type": result.get("publicationVenue", {}).get("type", "")
+                        }
+                    else:
+                        parsed_result["venue"] = ""
+
+                    if result.get("externalIds", {}) and result.get("externalIds", {}).get("DOI", ""):
+                        parsed_result["DOI"] = result.get("externalIds", {}).get("DOI", "")
+                    else:
+                        parsed_result["DOI"] = ""
+
                     page_data["results"].append(parsed_result)
 
             logging.info(f"Page {page} parsed successfully with {len(page_data['results'])} results.")
@@ -465,10 +489,11 @@ class SemanticScholar_collector(API_collector):
         Returns:
             str: The formatted API URL for the bulk API with the constructed query parameters.
         """
+
         # Process keywords: Join multiple keywords with ' AND '
         keywords_list = self.get_keywords()  # Assuming this returns a list of keyword sets
         query_keywords = '+'.join(
-            '|'.join(f'"{keyword})"' for keyword in keywords) for keywords in keywords_list
+            '('+'|'.join(f'"{keyword}"' for keyword in keywords) + ')' for keywords in keywords_list
         )
         encoded_keywords = urllib.parse.quote(query_keywords)
 
@@ -479,7 +504,7 @@ class SemanticScholar_collector(API_collector):
         year_range = f"{start_year}-{end_year}" if start_year and end_year else ""
 
         # Define fixed fields and construct the URL
-        fields = "title"
+        fields = "title,url,publicationTypes,publicationDate,openAccessPdf,authors,journal,abstract,publicationVenue,externalIds,paperId"
         base_url = f"{self.api_url}/bulk"
 
         # Construct the full URL

@@ -12,6 +12,7 @@ import random
 import string
 import json
 import pandas as pd
+import os
 
 def getWriteToken():
     
@@ -24,21 +25,23 @@ import yaml
 # SCRIPT FOR PUSHING A COLLECT TO ZOTERO
 ############
 
+local_dir = os.getcwd()
 
-with open("/user/cringwal/home/Desktop/Scilex-main/src/scilex.config.yml", "r") as ymlfile:
-    cfg = yaml.load(ymlfile)
-    collect_dir=cfg["collect"]["dir"]
+with open(local_dir+"/src/scilex.config.yml", "r") as ymlfile:
+    cfg = yaml.safe_load(ymlfile)
+    collect_dir=cfg["collect_dir"]
     api_key=cfg["zotero"]["api_key"]
 
-research_coll="knowledge_extraction_surveys"
-collect_dir="/user/cringwal/home/Desktop/THESE YEAR1/SAT/"+research_coll
-data = pd.read_csv(collect_dir+'/results_filtered.csv')
+research_coll="argument_quality_surveys"
+# collect_dir="/user/cringwal/home/Desktop/THESE YEAR1/SAT/"+research_coll
+data = pd.read_csv(collect_dir+'/results_aggregated.csv', delimiter=";")
 
 
-relevant_data=data[data["relevant"].fillna(-1).astype('int')==1]
+relevant_data=data #[data["relevant"].fillna(-1).astype('int')==1]
+# as such, all entries are considered to be relevant
 templates_dict={}
-collect_dir+"/"+research_coll
-url="https://api.zotero.org/users/5689645"
+
+url="https://api.zotero.org/users/15334656"
 libs="/collections/"
 headers={'Zotero-API-Key':api_key}
 current_col_key=None
