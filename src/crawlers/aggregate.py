@@ -47,6 +47,9 @@ def deduplicate(df_input):
     check_columns = ["DOI", "title"]
     column_names = list(df_output.columns.values)
     
+    if len(df_output) == 0:
+        return df_output
+
     for col in check_columns:
         df2 = df_output[df_output[col] != "NA"]
         df2 = df2.groupby([col])[col].count()
