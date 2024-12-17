@@ -13,11 +13,7 @@ from collectors_V2  import *
 from aggregate import *
 import logging
 from datetime import datetime
-<<<<<<< HEAD
 from utils import load_all_configs, api_collector_decorator
-=======
-import os
->>>>>>> 40b0e51 (Corrected SemanticScholar collector and aggregator + slight adjustments)
 
 # Set up logging configuration
 logging.basicConfig(
