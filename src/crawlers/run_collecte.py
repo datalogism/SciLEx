@@ -9,11 +9,15 @@ Created on Fri Feb 10 10:57:49 2023
 @version: 1.0.1
 """
 
-from collectors  import *
+from collectors_V2  import *
 from aggregate import *
 import logging
 from datetime import datetime
+<<<<<<< HEAD
 from utils import load_all_configs, api_collector_decorator
+=======
+import os
+>>>>>>> 40b0e51 (Corrected SemanticScholar collector and aggregator + slight adjustments)
 
 # Set up logging configuration
 logging.basicConfig(
@@ -49,8 +53,8 @@ if collect:
         os.makedirs(output_dir)
 
         # saving the config
-        with open(os.path.join(output_dir, "main_config_used.yml"), "w") as f:
-            yaml.dump(main_config, f)
+        with open(os.path.join(output_dir, "config_used.yml"), "w") as f:
+            yaml.dump(config, f)
 
     path = output_dir
 
@@ -111,6 +115,7 @@ def aggregate_results(output_dir):
     Args:
         output_dir (str): The directory where collected data is stored.
     """
+    filter_ = ["relation"]
 
     # Check if collect_dir exists, otherwise create it
     if not os.path.exists(output_dir):
@@ -142,13 +147,13 @@ def aggregate_results(output_dir):
                             current_page_data = json.load(json_file)
 
                         for row in current_page_data["results"]:
-                            # if (current_api + 'toZoteroFormat') in dir():
+                            if (current_api + 'toZoteroFormat') in dir():
                                 # Use eval carefully; ideally, avoid it if possible.
                                 res = eval(current_api + 'toZoteroFormat(row)')
                                 all_data.append(res)
-                            # else:
-                            #     pass
-                            #     #print("Function not yet implemented for >", current_api)
+                            else:
+                                pass
+                                #print("Function not yet implemented for >", current_api)
             except FileNotFoundError:
                 print("Directory not found:", current_collect_dir)
 

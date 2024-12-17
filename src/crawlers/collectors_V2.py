@@ -159,12 +159,10 @@ class SemanticScholar_collector(API_collector):
                     parsed_result = {
                         "title": result.get("title", ""),
                         "abstract": result.get("abstract", ""),
-                        "journal": result.get("journal", ""),
                         "url": result.get("url", ""),
                         "venue": result.get("venue", ""),
                         "citation_count": result.get("citationCount", 0),
                         "reference_count": result.get("referenceCount", 0),
-                        "publication_types": result.get("publicationTypes", []),
                         "authors": [
                             {
                                 "name": author.get("name", ""),
@@ -174,26 +172,8 @@ class SemanticScholar_collector(API_collector):
                         ],
                         "fields_of_study": result.get("fieldsOfStudy", []),
                         "publication_date": result.get("publicationDate", ""),
-                        "paper_id": result.get("paperId", "")
+                        "open_access_pdf": result.get("openAccessPdf", {}).get("url", ""),
                     }
-                    if result.get("openAccessPdf", {}):
-                        parsed_result["open_access_pdf"] = result.get("openAccessPdf", {}).get("url", "")
-                    else:
-                        parsed_result["open_access_pdf"] = ""
-                    
-                    if result.get("publicationVenue", {}):
-                        parsed_result["venue"] = {
-                            "name": result.get("publicationVenue", {}).get("name", ""),
-                            "type": result.get("publicationVenue", {}).get("type", "")
-                        }
-                    else:
-                        parsed_result["venue"] = ""
-
-                    if result.get("externalIds", {}) and result.get("externalIds", {}).get("DOI", ""):
-                        parsed_result["DOI"] = result.get("externalIds", {}).get("DOI", "")
-                    else:
-                        parsed_result["DOI"] = ""
-
                     page_data["results"].append(parsed_result)
 
             logging.info(f"Page {page} parsed successfully with {len(page_data['results'])} results.")
@@ -209,11 +189,10 @@ class SemanticScholar_collector(API_collector):
         Returns:
             str: The formatted API URL for the bulk API with the constructed query parameters.
         """
-
         # Process keywords: Join multiple keywords with ' AND '
         keywords_list = self.get_keywords()  # Assuming this returns a list of keyword sets
         query_keywords = '+'.join(
-            '('+'|'.join(f'"{keyword}"' for keyword in keywords) + ')' for keywords in keywords_list
+            '|'.join(f'"{keyword})"' for keyword in keywords) for keywords in keywords_list
         )
         encoded_keywords = urllib.parse.quote(query_keywords)
 
@@ -224,7 +203,7 @@ class SemanticScholar_collector(API_collector):
         year_range = f"{start_year}-{end_year}" if start_year and end_year else ""
 
         # Define fixed fields and construct the URL
-        fields = "title,url,publicationTypes,publicationDate,openAccessPdf,authors,journal,abstract,publicationVenue,externalIds,paperId"
+        fields = "title"
         base_url = f"{self.api_url}/bulk"
 
         # Construct the full URL

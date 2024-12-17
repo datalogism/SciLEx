@@ -1,20 +1,16 @@
 zotero:
-    api_key: "tHCVlWZ7yh4zA4AOMdYFtAhh"
+    api_key: "YOURAPIKEY"
 google_scholar:
     api_key: "YOURAPIKEY"
-# note : API key exists?
 springer:
-    api_key: "6693704d8100af54eb4164d4d056cba7"
+    api_key: "YOURAPIKEY"
 sem_scholar:
     api_key: "YOURAPIKEY"
-# note : seem complex to obtain, not sure if necessary for it to work
 elsevier:
-    api_key: "2b6b2f84e1eac7d1a6f7797840473890"
-halId_s:
     api_key: "YOURAPIKEY"
 ieee:
-    api_key: "as3jj9yzg45xq7z2qaxdwfbk"
+    api_key: "YOURAPIKEY"
 orcid:
     dir: 'YOURWORKDIR'
     client_id: "YOURCLIENTID"
-    client_secret: "YOUR CLIENT SECRET"
+    client_secret: "YOURAPIKEY"
