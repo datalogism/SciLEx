@@ -14,6 +14,7 @@ import logging
 from datetime import datetime
 from utils import load_all_configs
 
+
 # Set up logging configuration
 logging.basicConfig(
     level=logging.INFO,  # Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
@@ -42,6 +43,7 @@ aggregate = main_config['aggregate']
 years = main_config['years']
 keywords = main_config['keywords']
 apis = main_config['apis']
+
 
 # Use the configuration values
 if collect:

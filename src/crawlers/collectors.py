@@ -43,10 +43,21 @@ config_files = {
 # Load configurations
 configs = load_all_configs(config_files)
 
+
 # Access individual configurations
 main_config = configs["main_config"]
 api_config = configs["api_config"]
 
+# Get the current working directory
+current_directory = os.getcwd()
+
+root_dir=current_directory.split("/src/")
+root_dir=root_dir[0]+"/src/"
+# Construct the full path to the YAML file
+yaml_file_path = os.path.join(root_dir, "scilex.config.yml")
+
+# Open and read the YAML file
+with open(yaml_file_path, "r") as ymlfile:
 
 # Extract API keys and email from configuration
 sem_scholar_api = api_config["sem_scholar"].get("api_key")
@@ -55,6 +66,7 @@ elsevier_api = api_config["elsevier"].get("api_key")
 google_api = api_config["google_scholar"].get("api_key")
 ieee_api = api_config["ieee"].get("api_key")
 openalex_mail = main_config.get("email")
+
 
 class Filter_param:
     def __init__(self, year, keywords, focus):
@@ -192,6 +204,7 @@ class API_collector:
                 found = True
                 logging.info("Found matching collection with ID: %s", k)
                 break
+
             # Track the maximum ID encountered
             max_id = max(int(k), max_id)
 
@@ -215,6 +228,7 @@ class API_collector:
                 logging.info("Updated collection file saved successfully: %s", self.get_fileCollect())
             except Exception as e:
                 logging.error("Failed to save the updated collection file: %s. Error: %s", self.get_fileCollect(), e)
+
 
         
     def createCollectDir(self):
@@ -307,7 +321,6 @@ class API_collector:
     def runCollect(self):
         """
         Runs the collection process for API-based publications.
-
         This method retrieves publication data in pages until all results
         are collected or a specified limit is reached.
         """
@@ -390,6 +403,7 @@ class API_collector:
             logging.info(f"Total extraction will need approximately {time_needed:.2f} hours.")
             
         self.getCollectId()  # Retrieve the collection identifier
+
 
 class SemanticScholar_collector(API_collector):
     """
@@ -520,10 +534,13 @@ class SemanticScholar_collector(API_collector):
 
     
 class IEEE_collector(API_collector):
+
     """
     Collector for fetching publication metadata from the IEEE Xplore API.
     """
 
+
+    #https://developer.ieee.org/docs
     def __init__(self, filter_param, save, data_path):
         """
         Initializes the IEEE collector with the given parameters.
@@ -534,6 +551,7 @@ class IEEE_collector(API_collector):
             data_path (str): Path to save the collected data.
         """
         super().__init__(filter_param, save, data_path)
+
         self.api_name = "IEEE"
         self.rate_limit = 200
         self.max_by_page = 25  # IEEE API max records per page is 25
@@ -558,6 +576,7 @@ class IEEE_collector(API_collector):
             "total": 0,  # Total number of results found
             "results": []  # List to hold the collected results
         }
+
         
         try:
             # Parse the JSON response
@@ -690,6 +709,10 @@ class Elsevier_collector(API_collector):
 
         # Join all formatted keyword groups with ' AND '
         search_query = ' AND '.join(formatted_keyword_groups)
+
+
+        logging.info(f"Constructed search query: {search_query}")
+
         return search_query
     
     def get_configurated_url(self):
@@ -875,34 +898,6 @@ class OpenAlex_collector(API_collector):
         """
         return page
 
-    
-# class HAL_collector(API_collector):
-#     """store file metadata"""
-#     def __init__(self, filter_param, save, data_path):
-#         super().__init__(filter_param, save, data_path)
-#         self.rate_limit = 10
-#         self.max_by_page = 500
-#         self.api_name = "HAL"
-#         self.api_url = "http://api.archives-ouvertes.fr/search/"
-        
-#     def parsePageResults(self,response,page):
-#         page_data = {"date_search":str(date.today()), "id_collect": self.get_collectId(), "page": page,"total":0,"results":[]}
-#         page_with_results =response.json()
-       
-#         # loop through partial list of results
-#         results =  page_with_results['response']
-        
-#         for result in results["docs"]:
-#             page_data["results"].append(result)
-            
-#         total=results["numFound"]
-#         page_data["total"]=int(total)
-        
-#         return page_data
-    
-#     def get_configurated_url(self):
-#         return self.get_url()+"?q="+self.get_keywords()+"&fl=title_s,abstract_s,label_s,arxivId_s,audience_s,authFullNameIdHal_fs,bookTitle_s,classification_s,conferenceTitle_s,docType_s,doiId_id,files_s,halId_s,jel_t,journalDoiRoot_s,journalTitle_t,keyword_s,type_s,submittedDateY_i&fq=submittedDateY_i:"+str(self.get_year())+"&rows="+str(self.get_max_by_page())+"&start={}"
-
 class HAL_collector(API_collector):
     """Collector for fetching publication metadata from the HAL API."""
     
@@ -1086,7 +1081,9 @@ class Arxiv_collector(API_collector):
         AND
         ti:"Pragmatic" OR ti:"Pragmatics" OR abs:"Pragmatic" OR abs:"Pragmatics"
         """
+
         # List to hold formatted keyword groups
+
         formatted_keyword_groups = []
 
         # Iterate through each set of keywords
@@ -1101,6 +1098,7 @@ class Arxiv_collector(API_collector):
             # Join the current group's keywords with ' +OR+ '
             formatted_keyword_groups.append(f"({' +OR+ '.join(group_keywords)})")
 
+
         # Join all formatted keyword groups with ' +AND+ '
         search_query = '+AND+'.join(formatted_keyword_groups)
 
@@ -1114,35 +1112,6 @@ class Arxiv_collector(API_collector):
         logging.info(f"Configured URL: {self.api_url}?search_query={search_query}&sortBy=relevance&sortOrder=descending&start={{}}&max_results={self.max_by_page}")
         return f"{self.api_url}?search_query={search_query}&sortBy=relevance&sortOrder=descending&start={{}}&max_results={self.max_by_page}"
 
-# class Istex_collector(API_collector): 
-#     """store file metadata"""
-#     def __init__(self, filter_param, save, data_path):
-#          super().__init__(filter_param, save, data_path)
-#          self.rate_limit = 3
-#          self.max_by_page = 500
-#          self.api_name = "Istex"
-#          self.api_url = "https://api.istex.fr/document/"
-         
-#     def parsePageResults(self,response,page):
-#          page_data = {"date_search":str(date.today()), "id_collect": self.get_collectId(), "page": page,"total":0,"results":[]}
-#          page_with_results =response.json()
-#          #print(page_with_results)
-#          # loop through partial list of results
-#          results =  page_with_results
-         
-#          for result in results["hits"]:
-#              page_data["results"].append(result)
-             
-#          total=results["total"]
-#          page_data["total"]=int(total)
-         
-#          return page_data
-     
-#     def get_configurated_url(self):
-#         #kwd=" AND ".join(self.get_keywords().split(" "))
-#         kwd=self.get_keywords()
-#         kwd2="(publicationDate:"+str(self.get_year())+" AND title:("+kwd+") OR abstract:("+kwd+"))"
-#         return self.get_url()+"?q="+kwd2+"&output=*&size"+str(self.get_max_by_page())+"&from={}"
 
 class Istex_collector(API_collector):
     """Collector for fetching publication metadata from the Istex API."""
@@ -1275,6 +1244,7 @@ class Springer_collector(API_collector):
 
             page_data["total_nb"] = int(total)
 
+       
             # Process the 'records' if they exist and are in the correct format
             if isinstance(records, list) and len(records) > 0:
                 for result in records:
@@ -1323,6 +1293,7 @@ class Springer_collector(API_collector):
 
         logging.info(f"Constructed query for meta: {meta_url}")
         logging.info(f"Constructed query for openaccess: {openaccess_url}")
+
         
         return [meta_url, openaccess_url]
 
@@ -1413,6 +1384,7 @@ class GoogleScholarCollector(API_collector):
         page_data["total"] = int(total)
         logging.info(f"Total results found for page {page}: {page_data['total']}")
         
+
         if page_data["total"] > 0:
             # Loop through the hits and append them to the results list
             for result in page_with_results.get("organic_results", []):
@@ -1447,4 +1419,6 @@ class GoogleScholarCollector(API_collector):
         years = self.get_year()  # Assuming this returns a list of years
         if years:
             return (min(years), max(years))
+
         return (None, None)
+

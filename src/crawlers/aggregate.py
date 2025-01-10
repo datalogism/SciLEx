@@ -48,6 +48,7 @@ def deduplicate(df_input):
     column_names = list(df_output.columns.values)
     
     for col in check_columns:
+
         if(col in df_output.columns):
             df2 = df_output[df_output[col] != "NA"]
             df2 = df2.groupby([col])[col].count()
@@ -102,17 +103,34 @@ def SemanticScholartoZoteroFormat(row):
     zotero_temp["archive"]="SemanticScholar"
     #### publicationTypes is a list Zotero only take one value
     
-    if row["publication_types"]:
 
-        if('Book' in row["publication_types"]):
-            zotero_temp["itemType"]= "book"
-        elif('Conference' in row["publication_types"]):               
-            zotero_temp["itemType"]='conferencePaper'
-        elif('JournalArticle' in row["publication_types"]):               
-            zotero_temp["itemType"]='journalArticle'
-        else:
-            pass
-            #print("NEED TO ADD FOLLOWING TYPES >",row["publicationTypes"])
+    if(row["publicationTypes"]!="" and row["publicationTypes"] is not None):
+        if(len(row["publicationTypes"])==1):
+            
+            match row["publicationTypes"][0]:
+                case 'JournalArticle':
+                    zotero_temp["itemType"]="journalArticle"                
+                case 'Conference':
+                    zotero_temp["itemType"]='conferencePaper'            
+                case 'Conferences':
+                    zotero_temp["itemType"]='conferencePaper'
+                case 'Book' :
+                    zotero_temp["itemType"]= "book"
+                case default:
+                    pass
+                    #print("NEED TO ADD FOLLOWING TYPE >",row["publicationTypes"][0])
+                    
+        if(len(row["publicationTypes"])>1):
+           if('Book' in row["publicationTypes"]):
+               zotero_temp["itemType"]= "book"
+           elif('Conference' in row["publicationTypes"]):               
+                zotero_temp["itemType"]='conferencePaper'
+           elif('JournalArticle' in row["publicationTypes"]):               
+                 zotero_temp["itemType"]='journalArticle'
+           else:
+               pass
+               #print("NEED TO ADD FOLLOWING TYPES >",row["publicationTypes"])
+
                 
     if row["venue"]:
         if("type" in row["venue"].keys() and row["venue"]["type"]!=""):
@@ -342,9 +360,6 @@ def HALtoZoteroFormat(row):
     if("journalTitle_t" in row.keys()):
              zotero_temp["journalAbbreviation"]=row["journalTitle_t"]
     
-
-
-
     zotero_temp["date"]=row["submittedDateY_i"]
     match row["docType_s"]:
         case  'ART':
@@ -416,6 +431,7 @@ def OpenAlextoZoteroFormat(row):
         if(row["biblio"]["first_page"] and row["biblio"]["first_page"]!="" and row["biblio"]["last_page"] and row["biblio"]["last_page"]!=""):
             zotero_temp["pages"]=row["biblio"]["first_page"]+"-"+row["biblio"]["last_page"]
 
+
     if("host_venue" in row.keys()):
         if("publisher" in row["host_venue"].keys()):
             row["publisher"]=row["host_venue"]["publisher"]
@@ -431,6 +447,7 @@ def OpenAlextoZoteroFormat(row):
                 zotero_temp["itemType"]="journalArticle"
             else:
                 pass
+
             #print("NEED TO ADD FOLLOWING TYPE >",row["host_venue"]["type"])
     return zotero_temp
 
@@ -500,8 +517,9 @@ def SpringertoZoteroFormat(row):
         zotero_temp["abstract"]=row["abstract"]
     #if(row["url"][""]!="" and row["html_url"] is not None):
      #   zotero_temp["url"]=row["html_url"]
-    if(row["openaccess"]!="" and row["openaccess"] is not None):
-        zotero_temp["rights"]=row["openaccess"]    
+    if("openaccess" in row.keys()):
+        if(row["openaccess"]!="" and row["openaccess"] is not None):
+            zotero_temp["rights"]=row["openaccess"]    
     if("doi" in row.keys()):
         zotero_temp["DOI"]=row["doi"]    
     if("publisher" in row.keys()):
@@ -521,14 +539,23 @@ def SpringertoZoteroFormat(row):
         if(len(auth_list)>0):
          zotero_temp["authors"]=";".join(auth_list)
     
-    if(row["startingPage"] and row["startingPage"]!="" and row["endingPage"] and row["endingPage"]!=""):
-        zotero_temp["pages"]=row["startingPage"]+"-"+row["endingPage"]
-    if("Conference" in  row["content_type"]):
+    if("startingPage" in row.keys() and "endingPage" in row.keys()):
+        if(row["startingPage"]!="" and row["endingPage"]!=""):
+            zotero_temp["pages"]=row["startingPage"]+"-"+row["endingPage"]
+    
+    if("Conference" in  row["contentType"]):
        zotero_temp["itemType"]="conferencePaper"
-    elif("Article" in  row["content_type"]):
+    elif("Article" in  row["contentType"]):
         zotero_temp["itemType"]="journalArticle"
-    elif("Chapter" in  row["content_type"]):
+    elif("Chapter" in  row["contentType"]):
         zotero_temp["itemType"]="bookSection"
+      # if("Conference" in  row["content_type"]):
+      #    zotero_temp["itemType"]="conferencePaper"
+      # elif("Article" in  row["content_type"]):
+      #     zotero_temp["itemType"]="journalArticle"
+      # elif("Chapter" in  row["content_type"]):
+      #     zotero_temp["itemType"]="bookSection"
+
     else:
         pass
         #print("NEED TO ADD FOLLOWING TYPE >",row["content_type"])
