@@ -1,7 +1,5 @@
 import logging
 
-from fontTools.ttx import process
-from magic import CONTINUE
 
 from utils import load_all_configs
 from itertools import product
@@ -97,30 +95,41 @@ class CollectCollection:
 
         # Generate all combinations of keywords from two different groups
         keyword_combinations = []
+        two_list_k=False
         #### CASE EVERYTHING OK
         if (len(self.main_config['keywords']) == 2 and len(self.main_config['keywords'][0]) != 0 and len(self.main_config['keywords'][1]) != 0):
+            two_list_k=True
             keyword_combinations = [
                 list(pair) for pair in product(self.main_config['keywords'][0],self.main_config['keywords'][1])
             ]
         #### CASE ONLY ONE LIST
         elif (len(self.main_config['keywords']) == 2 and len(self.main_config['keywords'][0]) != 0 and len(self.main_config['keywords'][1]) == 0):
-            keyword_combinations = [self.main_config['keywords'][0]]
+            keyword_combinations = self.main_config['keywords'][0]
 
         #### CASE ONLY ONE LIST
         elif (len(self.main_config['keywords']) == 1 and len(self.main_config['keywords'][0]) != 0):
-            keyword_combinations = [self.main_config['keywords'][0]]
+            keyword_combinations = self.main_config['keywords'][0]
 
-
+        print("==========================")
+        print(keyword_combinations)
+        print("==========================")
         # Generate all combinations using Cartesian product
         ### ADD LETTER FIELDS
         # combinations = product(keyword_combinations, self.years, self.apis, self.fields)
         combinations = product(keyword_combinations, self.main_config['years'], self.main_config['apis'])
 
         # Create a list of dictionaries with the combinations
-        queries = [
-            {"keyword": keyword_group, "year": year, "api": api}
-            for keyword_group, year, api in combinations
-        ]
+        if two_list_k:
+            queries = [
+                {"keyword": keyword_group, "year": year, "api": api}
+                for keyword_group, year, api in combinations
+            ]
+        else:
+            queries = [
+                {"keyword": [keyword_group], "year": year, "api": api}
+                for keyword_group, year, api in combinations
+            ]
+        print(queries)
         queries_by_api = {}
         for query in queries:
             if (query["api"] not in queries_by_api.keys()):

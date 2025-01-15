@@ -676,7 +676,8 @@ class DBLP_collector(API_collector):
         keywords=self.get_keywords()
         keywords_query = ""
         for keyword in keywords:
-            keywords_query = keywords_query+ "+"+"+".join(keyword.split(" "))
+                keywords_query = keywords_query+ "+"+"+".join(keyword.split(" "))
+
 
         #### OR CONFIG
         #keywords_query ='|'.join(self.get_keywords())

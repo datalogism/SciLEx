@@ -107,17 +107,15 @@ def SemanticScholartoZoteroFormat(row):
     if(row["publicationTypes"]!="" and row["publicationTypes"] is not None):
         if(len(row["publicationTypes"])==1):
             
-            match row["publicationTypes"][0]:
-                case 'JournalArticle':
+            if row["publicationTypes"][0]=='JournalArticle':
                     zotero_temp["itemType"]="journalArticle"                
-                case 'Conference':
-                    zotero_temp["itemType"]='conferencePaper'            
-                case 'Conferences':
+            elif row["publicationTypes"][0]=='Conference':
                     zotero_temp["itemType"]='conferencePaper'
-                case 'Book' :
+            elif row["publicationTypes"][0] == 'Conferences':
+                    zotero_temp["itemType"]='conferencePaper'
+            elif row["publicationTypes"][0] == 'Book' :
                     zotero_temp["itemType"]= "book"
-                case default:
-                    pass
+
                     #print("NEED TO ADD FOLLOWING TYPE >",row["publicationTypes"][0])
                     
         if(len(row["publicationTypes"])>1):
@@ -195,17 +193,13 @@ def IstextoZoteroFormat(row):
     #Genre pas clair
     zotero_temp["archive"]="Istex"
     if(row["genre"]!="" and len(row["genre"])==1):
-       match row["genre"][0]:
-           case 'research-article':
+       if row["genre"][0] == 'research-article':
                zotero_temp["itemType"]="journalArticle"
-           case 'conference':
+       if row["genre"][0] == 'conference':
                zotero_temp["itemType"]="conferencePaper"
-           case 'article':
+       if row["genre"][0] == 'article':
                zotero_temp["itemType"]="bookSection"
-           case default:
-               pass
-               #print("IStex NEED TO ADD FOLLOWING TYPE >",row["genre"][0])   
-                
+
     if(row["title"]!="" and row["title"] is not None):
         zotero_temp["title"]=row["title"] 
     auth_list=[]
@@ -318,24 +312,22 @@ def DBLPtoZoteroFormat(row):
     if("access" in row.keys()):
         if(row["access"]!="" and row["access"] is not None):
             zotero_temp["rights"]=row["access"]    
-    zotero_temp["url"]=row["url"]   
-    
-    match row["type"]:
-        case  'Journal Articles':
+    zotero_temp["url"]=row["url"]
+
+    if row["type"] ==  'Journal Articles':
             zotero_temp["itemType"]="journalArticle"
             if("venue" in row.keys()):
                 zotero_temp["journalAbbreviation"]=row["venue"]
-        case 'Conference and Workshop Papers':
+    if row["type"] == 'Conference and Workshop Papers':
             zotero_temp["itemType"]="conferencePaper"
             if("venue" in row.keys()):
                zotero_temp["conferenceName"]=row["venue"]
-        case  'Informal Publications':
+    if row["type"] ==  'Informal Publications':
             zotero_temp["itemType"]="Manuscript"
-        case 'Informal and Other Publications':
+    if row["type"] == 'Informal and Other Publications':
             zotero_temp["itemType"]="Manuscript"
 
-        case default:
-            pass
+
             #print("NEED TO ADD FOLLOWING TYPE >",row["type"][0])
     return zotero_temp
     
@@ -361,20 +353,17 @@ def HALtoZoteroFormat(row):
              zotero_temp["journalAbbreviation"]=row["journalTitle_t"]
     
     zotero_temp["date"]=row["submittedDateY_i"]
-    match row["docType_s"]:
-        case  'ART':
+    if row["docType_s"] ==  'ART':
             zotero_temp["itemType"]="journalArticle"
             if("venue" in row.keys()):
                 zotero_temp["journalAbbreviation"]=row["venue"]
-        case 'COMM':
+    if row["docType_s"] ==  'COMM':
             zotero_temp["itemType"]="conferencePaper"
-        case 'PROCEEDINGS':
+    if row["docType_s"] == 'PROCEEDINGS':
             zotero_temp["itemType"]="conferencePaper"
-        case  'Informal Publications':
+    if row["docType_s"] == 'Informal Publications':
             zotero_temp["itemType"]="Manuscript"
-        case default:
-            pass
-            #print("NEED TO ADD FOLLOWING TYPE >",row["docType_s"])    
+
     return zotero_temp
     
 # Abstract must be recomposed...
@@ -399,29 +388,18 @@ def OpenAlextoZoteroFormat(row):
         if(len(auth_list)>0):
          zotero_temp["authors"]=";".join(auth_list)
     
-    match row["type"]:
-         case  'journal-article':
+    if row["type"] == 'journal-article':
              zotero_temp["itemType"]="journalArticle"
-         case 'article':
+    if row["type"] == 'article':
             zotero_temp["itemType"] = "journalArticle"
-         case  'book':
+    if row["type"] == 'book':
             zotero_temp["itemType"]="book"
-         case  'book-chapter':
+    if row["type"] == 'book-chapter':
              zotero_temp["itemType"]="bookSection"
-         case  'proceedings-article':
+    if row["type"] == 'proceedings-article':
              zotero_temp["itemType"]="conferencePaper"
-         case  'dissertation':
-             pass
-         case  'ebook platform':
-             pass
-         case  'posted-content':
-             pass
-         case  'repository':
-             pass
-        
-         case default:
-             pass
-             #print("NEED TO ADD FOLLOWING TYPE >",row["type"])
+
+    #print("NEED TO ADD FOLLOWING TYPE >",row["type"])
              
     if("biblio" in row.keys()):
         if(row["biblio"]["volume"] and row["biblio"]["volume"]!=""):
@@ -490,14 +468,11 @@ def IEEEtoZoteroFormat(row):
     
     if(row["start_page"] and row["start_page"]!="" and row["end_page"] and row["end_page"]!=""):
         zotero_temp["pages"]=row["start_page"]+"-"+row["end_page"]
-    match row["content_type"]:
-         case  'Journals':
+    if row["content_type"] == 'Journals':
              zotero_temp["itemType"]="journalArticle"
-         case  'Conferences':
+    if row["content_type"] ==  'Conferences':
             zotero_temp["itemType"]="conferencePaper"
-        
-         case default:
-             pass
+
              #print("NEED TO ADD FOLLOWING TYPE >",row["content_type"])
      
     return zotero_temp
