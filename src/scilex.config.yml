@@ -1,9 +1,12 @@
 # Email address for notifications or contact
 email: "YOUR MAIL"
+aggregate_txt_filter: false
+aggregate_get_citations: false
+aggregate_file: '/NewArticles - final_selection.csv'
+collect_name: relationExtraction_new
 
+output_dir: output
 
-# Directory to output the collected data > one by collect
-output_dir: 'OUTPUTDIR_path' 
 
 
 # Flag to indicate whether to collect data : TO DO ADD STATS FINAL
