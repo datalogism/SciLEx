@@ -1,3 +1,5 @@
 /output_dir/*
+/output/*
+/src/output/*
 /src/api.config.yml
 /src/scilex.config.yml

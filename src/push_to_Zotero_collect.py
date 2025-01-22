@@ -5,19 +5,16 @@ Created on Mon Jan 30 16:06:58 2023
 
 @author: cringwal
 """
-#from collector_collection import CollectCollection
-#from aggregate import *
+
 import logging
 from datetime import datetime
 from src.crawlers.utils import load_all_configs
 import requests
-from time import sleep
 import random
 import string
 import json
 import pandas as pd
 import os
-import sys
 # Set up logging configuration
 logging.basicConfig(
     level=logging.INFO,  # Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
@@ -41,7 +38,7 @@ api_config = configs["api_config"]
 
 def getWriteToken():
     return ''.join(random.choices(string.ascii_uppercase + string.ascii_lowercase, k=32))
-import yaml
+
 
 if __name__ == "__main__":
     # Log the overall process with timestamps
@@ -82,9 +79,9 @@ if __name__ == "__main__":
     elif (user_role == "user"):
         url2 = "https://api.zotero.org/users/" + str(user_id) + "/"
     print("BEFORE")
-   # while current_col_key is None :
+
     r_collections = requests.get(url+"?limit=100?start=0", headers=headers)
-    #print(url+"/survey_re_collabstep"+libs)
+
     if (r_collections.status_code == 200):
         data_collections = r_collections.json()
         found_parent = False
@@ -94,7 +91,7 @@ if __name__ == "__main__":
         lib=None
         for d in data_collections:
             print(d["data"])
-            if ( d["data"]["name"] == "new_models"):
+            if ( d["data"]["name"] == main_config['collect_name']):
                 print("FOUND current Collection >", d["data"]["name"])
                 lib=d
                 current_col_key = d["data"]["key"]
@@ -102,13 +99,11 @@ if __name__ == "__main__":
         print(current_col_key)
 
         if current_col_key is None:
-            ## CREATE COLLECTION
-            print("CREATECOLL")
             headers = {'Zotero-API-Key': api_key, 'Zotero-Write-Token': getWriteToken(),
                        "Content-Type": "application/json"}
             body = json.dumps([{"name": research_coll}])
             print(body)
-            #req2 = requests.post(url + "/collections", headers=headers, data=body)
+            req2 = requests.post(url , headers=headers, data=body)
         else:
             print(lib)
             dict_papers = {}
@@ -128,7 +123,6 @@ if __name__ == "__main__":
                             print(row)
                             if ("collections" in row["data"].keys()):
                                 if (current_col_key in row["data"]["collections"]):
-                                    print("JEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE")
                                     exits_url.append(row["data"]["url"])
                         nb_res = int(r_items.headers["Total-Results"])
 
@@ -173,12 +167,7 @@ if __name__ == "__main__":
             for col in common_cols:
                 if(col in current_temp.keys() and col in row.keys()):
                     current_temp[col]=str(row[col])
-           # if("DOI" not in current_temp.keys() and "DOI" in row.keys()):
-            #    if (row["DOI"] != "" and row["DOI"].upper() != "NA" and row["DOI"].upper() != "NAN"):
-           #         current_temp["DOI"]=row["DOI"]
-            #if ("url" not in current_temp.keys() and "url" in row.keys()):
-            #    if (row["url"] != "" and row["url"].upper() != "NA" and row["url"].upper() != "NAN"):
-            #        current_temp["url"] = row["url"]
+
 
 
             current_temp["abstractNote"]=str(row["abstract"])

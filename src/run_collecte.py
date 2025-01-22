@@ -24,8 +24,8 @@ logging.basicConfig(
 
 # Define the configuration files to load
 config_files = {
-    "main_config": "../scilex.config.yml",
-    "api_config": "../api.config.yml",
+    "main_config": "scilex.config.yml",
+    "api_config": "api.config.yml",
 }
 print("HEY")
 # Load configurations

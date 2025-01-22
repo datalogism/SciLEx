@@ -398,6 +398,7 @@ def OpenAlextoZoteroFormat(row):
              zotero_temp["itemType"]="bookSection"
     if row["type"] == 'proceedings-article':
              zotero_temp["itemType"]="conferencePaper"
+    #if row["type"] == "preprint":
 
     #print("NEED TO ADD FOLLOWING TYPE >",row["type"])
              

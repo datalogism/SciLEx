@@ -15,14 +15,14 @@ from ratelimit import limits, RateLimitException, sleep_and_retry
 ############
 
 
-with open("/user/cringwal/home/Desktop/Scilex-main/src/scilex.config.yml", "r") as ymlfile:
-    cfg = yaml.load(ymlfile)
-    collect_dir=cfg["collect"]["dir"]
-    api_key=cfg["zotero"]["api_key"]
+#with open("/user/cringwal/home/Desktop/Scilex-main/src/scilex.config.yml", "r") as ymlfile:
+#    cfg = yaml.load(ymlfile)
+#    collect_dir=cfg["collect"]["dir"]
+#    api_key=cfg["zotero"]["api_key"]
     
-url="https://api.zotero.org/groups/5259782"
-libs="/collections/"
-headers={'Zotero-API-Key':api_key}
+#url="https://api.zotero.org/groups/5259782"
+#libs="/collections/"
+#headers={'Zotero-API-Key':api_key}
 api_citations="https://opencitations.net/index/coci/api/v1/citations/"
 api_references="https://opencitations.net/index/coci/api/v1/references/"
 
