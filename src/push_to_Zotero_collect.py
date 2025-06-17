@@ -43,7 +43,7 @@ def getWriteToken():
 if __name__ == "__main__":
     # Log the overall process with timestamps
     logging.info(f"Systematic review search started at {datetime.now()}")
-    logging.info("================BEGIN Systematic Review Search================")
+    logging.info("================BEGIN ZOTERO PUSH================")
 
     user_id=api_config["Zotero"]["user_id"]
     user_role=api_config["Zotero"]["user_mode"]
@@ -51,13 +51,14 @@ if __name__ == "__main__":
     research_coll=main_config["collect_name"]
 
     dir_collect=os.path.join(main_config['output_dir'], main_config['collect_name'])
+    research_coll="DatasetSurveys"
     aggr_file=main_config["aggregate_file"]
 
     print(dir_collect)
     # collect_dir="/user/cringwal/home/Desktop/THESE YEAR1/SAT/"+research_coll
     # file_to_push=os.path.join(dir_collect,aggr_file)
    # print(file_to_push)
-    data = pd.read_csv(dir_collect+aggr_file, delimiter="\t")
+    data = pd.read_csv(dir_collect+aggr_file, delimiter=";")
     print(data)
     #sys.exit()
     print("DONE")
@@ -91,7 +92,7 @@ if __name__ == "__main__":
         lib=None
         for d in data_collections:
             print(d["data"])
-            if ( d["data"]["name"] == main_config['collect_name']):
+            if ( d["data"]["name"] == research_coll):
                 print("FOUND current Collection >", d["data"]["name"])
                 lib=d
                 current_col_key = d["data"]["key"]
@@ -147,7 +148,7 @@ if __name__ == "__main__":
 
 
     print(">>>>>>>>>>>> ADD NEW PAPERS")
-    print(exits_url)
+    print(relevant_data)
     #sys.exit()
     for index, row in relevant_data.iterrows():
 

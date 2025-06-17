@@ -7,7 +7,7 @@
 # Test script to test only a specific collector (removing one layer of try which makes debuging more difficult)
 #
 
-from collectors  import *
+from collectors_old0  import *
 from aggregate import *
 import yaml
 import logging

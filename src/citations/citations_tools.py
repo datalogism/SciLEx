@@ -11,6 +11,7 @@ api_references = "https://opencitations.net/index/coci/api/v1/references/"
 @limits(calls=10, period=1)
 def getCitations(doi):
     print("REQUEST citations -doi :", doi)
+    resp=None
     try:
         resp = requests.get(api_citations + doi)
     except:
@@ -22,6 +23,7 @@ def getCitations(doi):
 @limits(calls=10, period=1)
 def getReferences(doi):
     print("REQUEST ref -doi :", doi)
+    resp = None
     try:
         resp = requests.get(api_references + doi)
     except:

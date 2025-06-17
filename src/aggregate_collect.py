@@ -1,6 +1,6 @@
-from aggregate import *
+from src.crawlers.aggregate import *
 import logging
-from utils import load_all_configs
+from src.crawlers.utils import load_all_configs
 import src.citations.citations_tools as cit_tools
 # Set up logging configuration
 logging.basicConfig(

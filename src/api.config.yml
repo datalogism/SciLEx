@@ -1,16 +1,20 @@
-zotero:
-    api_key: "YOURAPIKEY"
-google_scholar:
-    api_key: "YOURAPIKEY"
-springer:
-    api_key: "YOURAPIKEY"
-sem_scholar:
-    api_key: "YOURAPIKEY"
-elsevier:
-    api_key: "YOURAPIKEY"
-ieee:
-    api_key: "YOURAPIKEY"
-orcid:
+Zotero:
+    user_mode: "group"
+    user_id: "5259782"
+    api_key: "botX5f1MI9gvfZ6VcfA5Hf8h"
+GoogleScholar:
+    api_key: "5b8bebd09fbe458adfd08a3c5607cbe69eef08174a59fcea1eeb4a0e1b823de9"
+Springer:
+    api_key: "ff5d905f1d3f8bb4a40a622fc25a9c0a"
+SemanticScholar:
+    api_key: "smvrvAxwuSdTr4QvORo41X46NoivK2y3Myenqjoj"
+Elsevier:
+    api_key: "3de57826b2076087bb0048c33879251a"
+IEEE:
+    api_key: "74shwpdveqkqmy6pmanpfrqq"
+OpenAlex:
+    api_key: "celian.ringwald@inria.fr"
+ORCID:
     dir: 'YOURWORKDIR'
     client_id: "YOURCLIENTID"
     client_secret: "YOURAPIKEY"

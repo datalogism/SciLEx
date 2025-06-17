@@ -3,3 +3,14 @@
 /src/output/*
 /src/api.config.yml
 /src/scilex.config.yml
+/src/output/entityLinking/
+/src/output/guigui_test/
+/src/output/relationExtraction2019_2022/
+/src/output/relationExtraction2023_2024/
+/src/output/relationExtraction_new/
+/src/output/relationExtraction_SAT/
+/src/output/relationExtraction_test/
+/src/output/testBeamSearch/
+/src/output/testBeamSearch2/
+/src/output/testRE202d4/
+/src/output/config_used.yml

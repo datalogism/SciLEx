@@ -6,7 +6,10 @@ Created on Thu May  4 10:44:22 2023
 @author: cringwal
 """
 
+from ratelimit import limits, RateLimitException, sleep_and_retry
+import logging
 
+from src.crawlers.utils import load_all_configs
 import pandas as pd
 import csv
 import json
@@ -14,11 +17,25 @@ import yaml
 ############ 
 # SCRIPT FOR AGGREGATING A CITATION NETWORK FROM CSV EXPORT ZOTERO OF EACH LIB
 ############
+logging.basicConfig(
+    level=logging.INFO,  # Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    format='%(asctime)s - %(levelname)s - %(message)s',  # Log message format
+    datefmt='%Y-%m-%d %H:%M:%S'  # Date format
+)
 
+# Define the configuration files to load
+config_files = {
+    "main_config": "../scilex.config.yml",
+    "api_config": "../api.config.yml",
+}
 
-with open("/user/cringwal/home/Desktop/Scilex-main/src/scilex.config.yml", "r") as ymlfile:
-    cfg = yaml.load(ymlfile)
-    collect_dir=cfg["collect"]["dir"]
+print("HEY")
+# Load configurations
+configs = load_all_configs(config_files)
+
+# Access individual configurations
+main_config = configs["main_config"]
+api_config = configs["api_config"]
 
 
 def check_existance(dict_of_values, df):
@@ -27,7 +44,7 @@ def check_existance(dict_of_values, df):
         v &= (df[key] == value)
     return v.any()
 
-
+collect_dir="/home/cringwal/PycharmProjects/SciLEx/src/output/relationExtraction_new/"
 surveys = pd.read_csv(collect_dir+'surveys2025.csv')
 models = pd.read_csv(collect_dir+'models2025.csv')
 dataset = pd.read_csv(collect_dir+'datasets2025.csv')
@@ -112,7 +129,7 @@ for row in all_data2.itertuples():
 deduplicated=all_data.DOI.duplicated().sum()
 DOI_referenced=all_data.DOI.unique()
 count_new=0
-nodes = pd.DataFrame(columns = ['Id', 'Label', 'origin',"Year","code","bench","typeofpaper","source"])
+nodes = pd.DataFrame(columns = ['Id', 'Label', 'origin',"Year","Url","Title","typeofpaper"])
 edges = pd.DataFrame(columns = ['Source', 'Target'])
 added_node=[]
 for i, row in all_data.iterrows():
@@ -127,13 +144,14 @@ for i, row in all_data.iterrows():
                      "Label":"new_"+str(count_new), 
                      "origin":"new paper",
                      "Year":str(row["Publication_Year"]).replace(".0",""),
-                     "code":"none",
-                     "bench":"none",
+                     "Url":"https://doi.org/"+citing,
+                     "Title":"none",
                      "typeofpaper":"none",
                     # "title":"none",
                      "source":"none"}
                 if(citing not in added_node):
-                    nodes=nodes.append(new,ignore_index=True)
+                    #nodes=nodes.append(new,ignore_index=True)
+                    nodes.loc[len(nodes)] = new
                     added_node.append(citing)    
                 count_new+=1
             elif citing  in DOI_referenced and str(row.DOI)!='nan' and str(row.DOI)!='' and str(row.DOI)!='None'  and str(row.DOI)!='not found':
@@ -143,21 +161,24 @@ for i, row in all_data.iterrows():
                       "Label":temp["gephi_label"].values[0], 
                       "origin":str(temp["orig"].values[0]),
                       "Year":str(row["Publication_Year"]).replace(".0",""),
-                      "code":str(temp["code"].values[0]),
-                      "bench":str(temp["bench"].values[0]),
+                      "Url":"https://doi.org/"+citing,
                       "typeofpaper":str(temp["Item_Type"].values[0]),
-                      #"title":temp["Title"].values[0],
+                      "Title":temp["Title"].values[0],
                       "source":str(temp["Archive"].values[0])}
                 
                 if(citing not in added_node):
                     print(new2["Label"])
                     print(new2["origin"])
-                    nodes=nodes.append(new2,ignore_index=True)
+                   # nodes=nodes.append(new2,ignore_index=True)
+
+                    nodes.loc[len(nodes)] = new2
                     added_node.append(citing) 
          
             current={'Source':row.DOI, 'Target':citing}
             if(check_existance(current, edges) == False and citing!=row.DOI and added==True):
-                edges=edges.append(current,ignore_index=True)
+               # edges=edges.append(current,ignore_index=True)
+
+                edges.loc[len(edges)] = current
                 
         for cited in citations["cited"]:
             added=False
@@ -166,15 +187,16 @@ for i, row in all_data.iterrows():
                      "Label":"new_"+str(count_new),
                      "origin":"new paper",
                      "Year":str(row["Publication_Year"]).replace(".0",""),
-                     "code":"none",
-                     "bench":"none",
+                     "Url":"https://doi.org/"+cited,
                      "typeofpaper":"none",
-                     "title":"none",
+                     "Title":"none",
                      "source":"none"}
 
                 added=True
                 if(cited not in added_node):
-                    nodes=nodes.append(new,ignore_index=True)
+                    #nodes=nodes.append(new,ignore_index=True)
+
+                    nodes.loc[len(nodes)] = new
                     added_node.append(cited) 
                 count_new+=1
             elif cited  in DOI_referenced and str(row.DOI)!='nan' and str(row.DOI)!='' and str(row.DOI)!='None'  and str(row.DOI)!='not found':
@@ -186,20 +208,24 @@ for i, row in all_data.iterrows():
                 "Label":temp["gephi_label"].values[0],
                 "origin":str(temp["orig"].values[0]),
                 "Year":str(row["Publication_Year"]).replace(".0",""),
-                "code":str(temp["code"].values[0]),
-                "bench":str(temp["bench"].values[0]),
+                "Url":"https://doi.org/"+cited,
+                "Title":temp["Title"].values[0],
                 "typeofpaper":str(temp["Item_Type"].values[0]),
                 "source":str(temp["Archive"].values[0])}
 
                 if(cited not in added_node):
                     print(new2["Label"])
                     print(new2["origin"])
-                    nodes=nodes.append(new2,ignore_index=True)
+                    #nodes=nodes.append(new2,ignore_index=True)
+
+                    nodes.loc[len(nodes)] = new2
                     added_node.append(cited) 
             
             current={'Source':cited, 'Target':row.DOI}
             if(check_existance(current, edges) == False and row.DOI!=cited  and added==True):
-                edges=edges.append(current,ignore_index=True)
+                #edges=edges.append(current,ignore_index=True)
+
+                edges.loc[len(edges)] = current
      
 for i, row in all_data.iterrows():
     if( str(row.DOI)!='nan' and str(row.DOI)!=''):
@@ -209,17 +235,18 @@ for i, row in all_data.iterrows():
                      "Label":str(row.gephi_label),
                      "origin":str(row["orig"]),
                      "Year":str(row["Publication_Year"]).replace(".0",""),
-                     "code":str(row["code"]),
-                     "bench":str(row["bench"]),
+                     "Url":"https://doi.org/"+str(row.DOI),
                      "typeofpaper":str(row["Item_Type"]),                     
-                     # "title":temp["Title"].values[0],
+                      "Title":temp["Title"].values[0],
                      "source":str(row["Archive"])}
                 if(str(row.DOI) not in added_node):
                     print(new["Label"])
                     print(new["origin"])
-                    nodes=nodes.append(new,ignore_index=True)
+                    #nodes=nodes.append(new,ignore_index=True)
+
+                    nodes.loc[len(nodes)] = new
                     added_node.append(str(row.DOI)) 
                
 nodes["End_Date"]="2023"
-nodes.to_csv(collect_dir+'/nodes230523.csv', index=False, sep='\t', encoding='utf-8')
-edges.to_csv(collect_dir+'/edges230523.csv', index=False)
+nodes.to_csv(collect_dir+'/nodes2025.csv', index=False, sep='\t', encoding='utf-8')
+edges.to_csv(collect_dir+'/edges2025.csv', index=False)

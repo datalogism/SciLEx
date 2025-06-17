@@ -1,0 +1,25 @@
+aggregate_txt_filter: true
+aggregate_get_citations: true
+aggregate_file: '/SATtest.csv'
+apis:
+- DBLP
+- Arxiv
+- OpenAlex
+- SemanticScholar
+collect: true
+collect_name: relationExtraction_test
+email: YOUR MAIL
+fields:
+- title
+- abstract
+keywords:
+- - knowledge graph
+  - analogy
+- - multi-agent
+  - MASS
+output_dir: output
+years:
+- 2023
+- 2024
+- 2025
+

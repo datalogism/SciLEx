@@ -15,11 +15,6 @@ Created on Tue Nov 21 15:15:23 2023
 """
 
 from SPARQLWrapper import SPARQLWrapper, XML
-import requests
-import json
-
-import yaml
-
 import logging
 from datetime import datetime
 from src.crawlers.utils import load_all_configs
@@ -28,6 +23,7 @@ import random
 import string
 import json
 import sys
+
 logging.basicConfig(
     level=logging.INFO,  # Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
     format='%(asctime)s - %(levelname)s - %(message)s',  # Log message format
@@ -104,7 +100,7 @@ if __name__ == "__main__":
                   "DistillBert", "ELectra", "GOpher", "LamDA", "BARD", "Alpaca", "LLAMA", "VICUNA", "LUKE", "CokeBERT",
                   "KGBART", "CLIP", "XLM", "GPT4", "KBERT", "KEPLER", "Flair", "LongFormer", "TranE"]
     model_list = list(set([model.upper() for model in model_list]))
-
+    research_coll = "DatasetSurveys"
     # Log the overall process with timestamps
     logging.info(f"Systematic review search started at {datetime.now()}")
     logging.info("================BEGIN Systematic Review Search================")
@@ -127,7 +123,7 @@ if __name__ == "__main__":
         lib = None
         for d in data_collections:
             print(d["data"])
-            if (d["data"]["name"] == main_config['collect_name']):
+            if (d["data"]["name"] == research_coll):
                 print("FOUND current Collection >", d["data"]["name"])
                 #lib = d
                 current_col_key = d["data"]["key"]

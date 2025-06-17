@@ -7,6 +7,8 @@ Created on Tue Sep 19 15:50:20 2023
 """
 
 import csv
+import sys
+
 import pandas as pd
 
 import yaml
@@ -16,106 +18,66 @@ import yaml
 # SCRIPT FOR COUNTING TAGS 
 ############
 
-
+import sys
 
 task_dict={}
 method_dict={}
 tag_dict={}
 
-file_list=["/user/cringwal/home/dataset271023.csv","/user/cringwal/home/survey271023.csv"]
+file_list=["/user/cringwal/home/datasets2025.csv","/user/cringwal/home/models2025.csv","/user/cringwal/home/surveys2025.csv"]
 tags_list=[]
+list_tags=[]
 for file in file_list:
     print(file)
     #file="/user/cringwal/home/all_models2709.csv"
     df = pd.read_csv(file)
     print(df.columns)
-    test=df['Manual Tags'].str.split(";", expand=True)import yaml
+    print(df['Manual Tags'])
+    test=df['Manual Tags'].to_string().split(";")
+
+    ############
+    # SCRIPT FOR MANAGING TAGS CREATED : DELETION - ADD - TO KEEP
+    ############
+    print(list(df['Manual Tags']))
+    list_tags=list_tags+[tag_list.split(";") for tag_list in list(df['Manual Tags'])]
+item_dict={}
+for tags in list_tags:
+    for item in tags:
+        item_clean=item.strip().upper()
+        if( ":" in item_clean ):
+            if(item_clean not in item_dict.keys()):
+                key=item_clean.split(":")[0]
+                val=item_clean.split(":")[1]
+                item_dict[item_clean]={"key":key,"val":val,"nb":1}
+            else:
+
+                item_dict[item_clean]["nb"]+=1
+print(item_dict)
 
 
-############ 
-# SCRIPT FOR MANAGING TAGS CREATED : DELETION - ADD - TO KEEP
-############
-
-
-with open("/user/cringwal/home/Desktop/Scilex-main/src/scilex.config.yml", "r") as ymlfile:
-    cfg = yaml.load(ymlfile)
-    collect_dir=cfg["collect"]["dir"]
-    api_key=cfg["zotero"]["api_key"]
-    tags_list=tags_list+test.values.tolist()
-    test2=df['Automatic Tags'].str.split(";", expand=True)
-    tags_list=tags_list+test2.values.tolist()
-    
-    
-
-
-##### DEPRECIATED
-# for t in tags:
-#     for val in t :
-#         if(val not in tag_dict.keys()):
-#             tag_dict[val]=1
-#         else:
-#             tag_dict[val]+=1
-#         if("PWC" in str(val).upper() ):
-#             if("task" in val):
-#                 if(val not in task_dict.keys()):
-#                     task_dict[val]=1
-#                     getDataInit=True
-#                     attachTag=False
-#                     file='/user/cringwal/home/tags_count.csv'
-#                     df = pd.read_csv(file)
-#                 else:
-#                     task_dict[val]+=1
-            
-#             elif("method" in val):
-#                 if(val not in method_dict.keys()):
-#                     method_dict[val]=1
-#                 else:
-#                     method_dict[val]+=1
-for tags in tags_list:
-    for val in tags:
-        if(val not in tag_dict.keys()):
-            tag_dict[val]=1
-        else:
-            tag_dict[val]+=1
-        if("PWC" in str(val).upper() ):
-            if("task" in val):
-                if(val not in task_dict.keys()):
-                    task_dict[val]=1
-                else:
-                    task_dict[val]+=1
-            
-            elif("method" in val):
-                if(val not in method_dict.keys()):
-                    method_dict[val]=1
-                else:
-                    method_dict[val]+=1
-
-
-print("NB TAGS >>>>>>>>",len(list(tag_dict.keys())))
+print("NB TAGS >>>>>>>>",len(list(item_dict.keys())))
 
 nb_sup1=0
 nb_sup100=0
 nb_sup1000=0
-for tag in tag_dict.keys():
-    if(tag_dict[tag] >1):
+for tag in item_dict.keys():
+    if(item_dict[tag]["nb"] >1):
         nb_sup1 +=1
-    if(tag_dict[tag] >100):
+    if(item_dict[tag]["nb"] >100):
         nb_sup100 +=1
-    if(tag_dict[tag] >1000):
+    if(item_dict[tag]["nb"] >1000):
         nb_sup1000 +=1
-    
 print("NB >1 >>>>>>>>",nb_sup1)
 print("NB >100 >>>>>>>>",nb_sup100)
 print("NB >1000 >>>>>>>>",nb_sup1000)
 
-
-columns = ['tag', 'nb',"delete","replace_by","keep"]
-dict2=[{"tag":k, "nb":tag_dict[k],"delete":"","replace_by":"","keep":"" } for k in tag_dict.keys()]
+columns = ['key',"value", 'nb']
+dict2=[{"key":item_dict[k]["key"], "value":item_dict[k]["val"],"nb":item_dict[k]["nb"] } for k in item_dict.keys()]
 # Open a file in write mode.
-out_put='/user/cringwal/home/tags_count_ds_and_survey.csv'
+
+out_put='/user/cringwal/home/Desktop/tags_count_all2025.csv'
 
 with open(out_put, 'w') as csvfile:
     writer = csv.DictWriter(csvfile, fieldnames = columns)
     writer.writeheader()
     writer.writerows(dict2)
-    

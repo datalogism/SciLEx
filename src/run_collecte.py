@@ -8,11 +8,11 @@ Created on Fri Feb 10 10:57:49 2023
 
 @version: 1.0.1
 """
-from collector_collection import CollectCollection
-from aggregate import *
+from src.crawlers.collector_collection import CollectCollection
+from src.crawlers.aggregate import *
 import logging
 from datetime import datetime
-from utils import load_all_configs
+from src.crawlers.utils import load_all_configs
 
 
 # Set up logging configuration
@@ -39,7 +39,7 @@ print("HEY")
 # Extract values from the main configuration
 output_dir = main_config['output_dir']
 collect = main_config['collect']
-aggregate = main_config['aggregate']
+#aggregate = main_config['aggregate']
 years = main_config['years']
 keywords = main_config['keywords']
 apis = main_config['apis']
@@ -60,7 +60,7 @@ if collect:
 # Print to check the loaded values
 print(f"Output Directory: {output_dir}")
 print(f"Collect: {collect}")
-print(f"Aggregate: {aggregate}")
+#print(f"Aggregate: {aggregate}")
 print(f"Years: {years}")
 print(f"Keywords: {keywords}")
 print(f"APIS: {apis}")

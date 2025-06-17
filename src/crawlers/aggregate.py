@@ -8,8 +8,10 @@ Created on Fri Feb 10 10:57:49 2023
 
 @version: 1.0.1
 """
+from lib2to3.fixer_util import is_list
 
 import requests
+from pandas.core.dtypes.inference import is_dict_like
 from ratelimit import limits, RateLimitException, sleep_and_retry
 from csv import writer
 from datetime import date
@@ -444,8 +446,9 @@ def IEEEtoZoteroFormat(row):
         zotero_temp["title"]=row["title"]
     if(row["abstract"]!="" and row["abstract"] is not None):
         zotero_temp["abstract"]=row["abstract"]
-    if(row["html_url"]!="" and row["html_url"] is not None):
-        zotero_temp["url"]=row["html_url"]
+    if("html_url" in row.keys()):
+        if(row["html_url"]!="" and row["html_url"] is not None):
+            zotero_temp["url"]=row["html_url"]
     if(row["access_type"]!="" and row["access_type"] is not None):
         zotero_temp["rights"]=row["access_type"]    
     if("doi" in row.keys()):
@@ -457,18 +460,26 @@ def IEEEtoZoteroFormat(row):
             zotero_temp["volume"]=row["volume"]
     if("issue" in row.keys() and row["issue"]!="" and row["issue"] is not None):
         zotero_temp["issue"]=row["issue"]
-        
-    if(row["publication_title"]!="" and row["publication_title"] is not None):
-        zotero_temp["journalAbbreviation"]=row["publication_title"]
+
+    if("publication_title" in row.keys()):
+        if(row["publication_title"]!="" and row["publication_title"] is not None):
+            zotero_temp["journalAbbreviation"]=row["publication_title"]
     auth_list=[]
-    for auth in row["authors"]["authors"]:
-        if(auth["full_name"]!="" and auth["full_name"] is not None):
-             auth_list.append( auth["full_name"])
-        if(len(auth_list)>0):
-         zotero_temp["authors"]=";".join(auth_list)
-    
-    if(row["start_page"] and row["start_page"]!="" and row["end_page"] and row["end_page"]!=""):
-        zotero_temp["pages"]=row["start_page"]+"-"+row["end_page"]
+    if(is_list(row["authors"])):
+        for auth in row["authors"]:
+            if(auth["full_name"]!="" and auth["full_name"] is not None):
+                 auth_list.append( auth["full_name"])
+            if(len(auth_list)>0):
+             zotero_temp["authors"]=";".join(auth_list)
+    elif(is_dict_like(row["authors"])):
+        for auth in row["authors"]["authors"]:
+            if(auth["full_name"]!="" and auth["full_name"] is not None):
+                 auth_list.append( auth["full_name"])
+            if(len(auth_list)>0):
+             zotero_temp["authors"]=";".join(auth_list)
+    if("start_page" in row.keys()):
+        if(row["start_page"] and row["start_page"]!="" and row["end_page"] and row["end_page"]!=""):
+            zotero_temp["pages"]=row["start_page"]+"-"+row["end_page"]
     if row["content_type"] == 'Journals':
              zotero_temp["itemType"]="journalArticle"
     if row["content_type"] ==  'Conferences':

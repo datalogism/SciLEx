@@ -12,12 +12,13 @@ import json
 ############
 
 
-file='/user/cringwal/home/all_models301023_2.csv'
+file='/user/cringwal/home/Desktop/all_surveys.csv'
 df = pd.read_csv(file)
 
 nb_citations=[]
 nb_cited=[]
 for index, row in df.iterrows():
+    doi=row["DOI"]
     citations=row["Extra"]
     if(citations!="" and citations is not None and str(citations)!="nan"):
         try:
@@ -38,4 +39,4 @@ for index, row in df.iterrows():
 df["NbCitations"]= nb_citations
 df["NbRef"]=nb_cited
 
-df.to_csv('/user/cringwal/home/all_models301023_citations_2.csv')
+df.to_csv('/user/cringwal/home/Desktop/all_surveys_citations.csv')

@@ -1,9 +1,9 @@
 import logging
 
 
-from utils import load_all_configs
+from .utils import load_all_configs
 from itertools import product
-from collectors_V3 import *
+from .collectors import *
 import os
 import yaml
 import json
@@ -223,7 +223,7 @@ class CollectCollection:
             os.makedirs(repo)
             with open(os.path.join(repo, "config_used.yml"), "w") as f:
                 yaml.dump(self.main_config, f)
-
+            print("ICI")
             queries_by_api = self.queryCompositor()
 
             self.init_state_details(queries_by_api)
@@ -251,7 +251,7 @@ class CollectCollection:
                             n_coll+=1
                     if(len(current_api_job)>0):
                         jobs_list.append(current_api_job)
-
+        print("JOB LIST")
         print(jobs_list)
         logging.info("Number of collect to conduct:" + str(n_coll))
         num_cores = multiprocessing.cpu_count()
