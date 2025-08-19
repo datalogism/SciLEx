@@ -1,7 +1,14 @@
-from src.crawlers.aggregate import *
+import os
+import sys
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import logging
-from src.crawlers.utils import load_all_configs
+
 import src.citations.citations_tools as cit_tools
+from src.crawlers.aggregate import *
+from src.crawlers.utils import load_all_configs
+
 # Set up logging configuration
 logging.basicConfig(
     level=logging.INFO,  # Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
@@ -38,6 +45,8 @@ if __name__ == "__main__":
                 for index in api_data["by_query"].keys():
                     KW=api_data["by_query"][index]["keyword"]
                     current_collect_dir=os.path.join(dir_collect,api_,index)
+                    if not os.path.exists(current_collect_dir):
+                        continue
                     for path in os.listdir(current_collect_dir):
                         # Check if current path is a file
                         if os.path.isfile(os.path.join(current_collect_dir, path)):
@@ -87,7 +96,7 @@ if __name__ == "__main__":
                         df_clean.loc[index,["nb_citation"]]=nb_["nb_citations"]
 
             # Save to CSV
-            df_clean.to_csv(os.path.join(dir_collect, "results_aggregated_withcitations.csv"), sep=";", quotechar='"',
+            df_clean.to_csv(os.path.join(dir_collect, "FileAggreg.csv"), sep=";", quotechar='"',
                             quoting=csv.QUOTE_NONNUMERIC)
 
 

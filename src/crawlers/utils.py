@@ -12,6 +12,9 @@ def load_yaml_config(file_path):
     Returns:
         dict: Parsed YAML content as a dictionary.
     """
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"Configuration file not found: {file_path}")
+    
     with open(file_path, "r") as ymlfile:
         return yaml.safe_load(ymlfile)
 
@@ -34,9 +37,25 @@ def load_all_configs(config_files):
     Returns:
         dict: A dictionary containing loaded configurations keyed by their names.
     """
+    # Find the src directory - look for it relative to current working directory or script location
     current_directory = get_current_directory()
+    src_directory = None
+    
+    # Check if we're in project root and src/ exists
+    if os.path.exists(os.path.join(current_directory, "src")):
+        src_directory = os.path.join(current_directory, "src")
+    # Check if we're already in src/
+    elif os.path.basename(current_directory) == "src":
+        src_directory = current_directory
+    # Check if src/ is one level up
+    elif os.path.exists(os.path.join(os.path.dirname(current_directory), "src")):
+        src_directory = os.path.join(os.path.dirname(current_directory), "src")
+    else:
+        # Default to current directory
+        src_directory = current_directory
+    
     return {
-        key: load_yaml_config(os.path.join(current_directory, path))
+        key: load_yaml_config(os.path.join(src_directory, path))
         for key, path in config_files.items()
     }
 

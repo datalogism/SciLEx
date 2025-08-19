@@ -8,6 +8,10 @@ Created on Fri Feb 10 10:57:49 2023
 
 @version: 1.0.1
 """
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from src.crawlers.collector_collection import CollectCollection
 from src.crawlers.aggregate import *
 import logging

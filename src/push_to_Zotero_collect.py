@@ -6,15 +6,22 @@ Created on Mon Jan 30 16:06:58 2023
 @author: cringwal
 """
 
+import os
+import sys
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import json
 import logging
-from datetime import datetime
-from src.crawlers.utils import load_all_configs
-import requests
+import os
 import random
 import string
-import json
+from datetime import datetime
+
 import pandas as pd
-import os
+import requests
+
+from src.crawlers.utils import load_all_configs
+
 # Set up logging configuration
 logging.basicConfig(
     level=logging.INFO,  # Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
@@ -40,14 +47,33 @@ def getWriteToken():
     return ''.join(random.choices(string.ascii_uppercase + string.ascii_lowercase, k=32))
 
 
+def get_zotero_user_id(api_key):
+    """Get Zotero user ID from the API using the provided API key."""
+    try:
+        headers = {
+            'Authorization': f'Bearer {api_key}',
+            'User-Agent': 'SciLEx/1.0'
+        }
+        response = requests.get('https://api.zotero.org/keys/current', headers=headers)
+        response.raise_for_status()
+        
+        key_info = response.json()
+        user_id = str(key_info['userID'])
+        logging.info(f"Retrieved Zotero user ID: {user_id}")
+        return user_id
+    except Exception as e:
+        logging.error(f"Failed to get Zotero user ID: {e}")
+        raise
+
+
 if __name__ == "__main__":
     # Log the overall process with timestamps
     logging.info(f"Systematic review search started at {datetime.now()}")
     logging.info("================BEGIN ZOTERO PUSH================")
 
-    user_id=api_config["Zotero"]["user_id"]
-    user_role=api_config["Zotero"]["user_mode"]
-    api_key=api_config["Zotero"]["api_key"]
+    api_key=api_config["zotero"]["api_key"]
+    user_role=api_config["zotero"]["user_mode"]
+    user_id=get_zotero_user_id(api_key)
     research_coll=main_config["collect_name"]
 
     dir_collect=os.path.join(main_config['output_dir'], main_config['collect_name'])
@@ -58,7 +84,7 @@ if __name__ == "__main__":
     # collect_dir="/user/cringwal/home/Desktop/THESE YEAR1/SAT/"+research_coll
     # file_to_push=os.path.join(dir_collect,aggr_file)
    # print(file_to_push)
-    data = pd.read_csv(dir_collect+aggr_file, delimiter=";")
+    data = pd.read_csv(dir_collect+aggr_file, delimiter=";", index_col=0)
     print(data)
     #sys.exit()
     print("DONE")
@@ -188,16 +214,15 @@ if __name__ == "__main__":
 
             if (current_temp["url"] == "" or current_temp["url"].upper() == "NA" or current_temp[
                 "url"].upper() == "NAN"):
-                if (current_temp["DOI"] != "" and current_temp["DOI"].upper() != "NA" and current_temp[
-                    "DOI"].upper() != "NAN"):
+                if (pd.notna(row["DOI"]) and str(row["DOI"]) != "" and str(row["DOI"]).upper() != "NA" and str(row["DOI"]).upper() != "NAN"):
 
-                    current_temp["url"] = current_temp["DOI"]
+                    current_temp["url"] = row["DOI"]
                 else:
                     current_temp["url"]=None
                  #if("http" not in current_temp["DOI"]):
 
 
-            if(current_temp["url"]!= None ):
+            if(current_temp["url"] is not None ):
                 if current_temp["url"] not in exits_url:
 
                     print(">>>>"+current_temp["url"])

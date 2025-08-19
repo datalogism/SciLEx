@@ -8,10 +8,19 @@ Created on Fri Feb 10 10:57:49 2023
 
 @version: 1.0.1
 """
-from lib2to3.fixer_util import is_list
 
 import requests
 from pandas.core.dtypes.inference import is_dict_like
+
+def safe_get(obj, key, default=None):
+    """Safely get a value from a dictionary-like object, filtering out empty strings."""
+    if isinstance(obj, dict) and key in obj and obj[key] != "":
+        return obj[key]
+    return default
+
+def safe_has_key(obj, key):
+    """Safely check if an object has a key."""
+    return isinstance(obj, dict) and key in obj
 from ratelimit import limits, RateLimitException, sleep_and_retry
 from csv import writer
 from datetime import date
@@ -106,7 +115,7 @@ def SemanticScholartoZoteroFormat(row):
     #### publicationTypes is a list Zotero only take one value
     
 
-    if(row["publicationTypes"]!="" and row["publicationTypes"] is not None):
+    if("publicationTypes" in row and row["publicationTypes"]!="" and row["publicationTypes"] is not None):
         if(len(row["publicationTypes"])==1):
             
             if row["publicationTypes"][0]=='JournalArticle':
@@ -132,30 +141,36 @@ def SemanticScholartoZoteroFormat(row):
                #print("NEED TO ADD FOLLOWING TYPES >",row["publicationTypes"])
 
                 
-    if row["venue"]:
-        if("type" in row["venue"].keys() and row["venue"]["type"]!=""):
-            if(row["venue"]["type"]=="journal"):
-                zotero_temp["itemType"]="journalArticle"                
-                if(row["venue"]["name"]!=""):
-                    zotero_temp["journalAbbreviation"]=row["venue"]["name"]
-            if(row["venue"]["type"]=="conference"):
-                zotero_temp["itemType"]="conferencePaper"                
-                if(row["venue"]["name"]!=""):
-                    zotero_temp["conferenceName"]=row["venue"]["name"]
+    if safe_get(row, "venue"):
+        venue_type = safe_get(row["venue"], "type")
+        venue_name = safe_get(row["venue"], "name")
+        if venue_type:
+            if venue_type == "journal":
+                zotero_temp["itemType"] = "journalArticle"                
+                if venue_name:
+                    zotero_temp["journalAbbreviation"] = venue_name
+            if venue_type == "conference":
+                zotero_temp["itemType"] = "conferencePaper"                
+                if venue_name:
+                    zotero_temp["conferenceName"] = venue_name
 
             
-    if row["journal"]:
-        if("pages" in row["journal"].keys() and row["journal"]["pages"]!=""):
-            zotero_temp["pages"]=row["journal"]["pages"]
-            if(zotero_temp["itemType"]=="book"):
-                zotero_temp["itemType"]="bookSection"
+    if safe_get(row, "journal"):
+        journal_pages = safe_get(row["journal"], "pages")
+        journal_name = safe_get(row["journal"], "name")
+        journal_volume = safe_get(row["journal"], "volume")
+        
+        if journal_pages:
+            zotero_temp["pages"] = journal_pages
+            if zotero_temp["itemType"] == "book":
+                zotero_temp["itemType"] = "bookSection"
         if zotero_temp["itemType"] == "NA":
             # if the journal field is defined but we dont know the itemType yet (for ex Reviews), we assume it's journal article
             zotero_temp["itemType"] = "journalArticle"
-        if("name" in row["journal"].keys() and row["journal"]["name"]!=""):
-            zotero_temp["journalAbbreviation"]=row["journal"]["name"]
-        if("volume" in row["journal"].keys() and row["journal"]["volume"]!=""):
-            zotero_temp["volume"]=row["journal"]["volume"]
+        if journal_name:
+            zotero_temp["journalAbbreviation"] = journal_name
+        if journal_volume:
+            zotero_temp["volume"] = journal_volume
     
     if zotero_temp["itemType"] == "NA":
         # default to Manuscript type to make sure there is a type, otherwise the push to Zotero doesn't work
@@ -170,23 +185,24 @@ def SemanticScholartoZoteroFormat(row):
     if (len(auth_list)>0):
         zotero_temp["authors"]=";".join(auth_list)
     
-    if row["abstract"]:
-        zotero_temp["abstract"]=row["abstract"]
+    if safe_get(row, "abstract"):
+        zotero_temp["abstract"] = row["abstract"]
         
-    if row["paper_id"]!="":
-        zotero_temp["archiveID"]=row["paper_id"]
+    paper_id = safe_get(row, "paper_id")
+    if paper_id:
+        zotero_temp["archiveID"] = paper_id
         
-    if row["publication_date"]:
-        zotero_temp["date"]=row["publication_date"]   
+    if safe_get(row, "publication_date"):
+        zotero_temp["date"] = row["publication_date"]   
         
-    if row["DOI"]:
-        zotero_temp["DOI"]=row["DOI"]
+    if safe_get(row, "DOI"):
+        zotero_temp["DOI"] = row["DOI"]
 
-    if row["url"]:
-        zotero_temp["url"]=row["url"]
+    if safe_get(row, "url"):
+        zotero_temp["url"] = row["url"]
 
-    if row["open_access_pdf"]:
-        zotero_temp["rights"]=row["open_access_pdf"]
+    if safe_get(row, "open_access_pdf"):
+        zotero_temp["rights"] = row["open_access_pdf"]
 
     return zotero_temp
 
@@ -465,7 +481,7 @@ def IEEEtoZoteroFormat(row):
         if(row["publication_title"]!="" and row["publication_title"] is not None):
             zotero_temp["journalAbbreviation"]=row["publication_title"]
     auth_list=[]
-    if(is_list(row["authors"])):
+    if(isinstance(row["authors"], list)):
         for auth in row["authors"]:
             if(auth["full_name"]!="" and auth["full_name"] is not None):
                  auth_list.append( auth["full_name"])
