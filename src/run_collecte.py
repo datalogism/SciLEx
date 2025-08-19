@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Created on Fri Feb 10 10:57:49 2023
 
@@ -8,22 +7,24 @@ Created on Fri Feb 10 10:57:49 2023
 
 @version: 1.0.1
 """
-import sys
+
 import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.crawlers.collector_collection import CollectCollection
-from src.crawlers.aggregate import *
 import logging
 from datetime import datetime
-from src.crawlers.utils import load_all_configs
 
+from src.crawlers.aggregate import *
+from src.crawlers.collector_collection import CollectCollection
+from src.crawlers.utils import load_all_configs
 
 # Set up logging configuration
 logging.basicConfig(
     level=logging.INFO,  # Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-    format='%(asctime)s - %(levelname)s - %(message)s',  # Log message format
-    datefmt='%Y-%m-%d %H:%M:%S'  # Date format
+    format="%(asctime)s - %(levelname)s - %(message)s",  # Log message format
+    datefmt="%Y-%m-%d %H:%M:%S",  # Date format
 )
 
 # Define the configuration files to load
@@ -41,12 +42,12 @@ api_config = configs["api_config"]
 
 print("HEY")
 # Extract values from the main configuration
-output_dir = main_config['output_dir']
-collect = main_config['collect']
-#aggregate = main_config['aggregate']
-years = main_config['years']
-keywords = main_config['keywords']
-apis = main_config['apis']
+output_dir = main_config["output_dir"]
+collect = main_config["collect"]
+# aggregate = main_config['aggregate']
+years = main_config["years"]
+keywords = main_config["keywords"]
+apis = main_config["apis"]
 
 
 # Use the configuration values
@@ -64,7 +65,7 @@ if collect:
 # Print to check the loaded values
 print(f"Output Directory: {output_dir}")
 print(f"Collect: {collect}")
-#print(f"Aggregate: {aggregate}")
+# print(f"Aggregate: {aggregate}")
 print(f"Years: {years}")
 print(f"Keywords: {keywords}")
 print(f"APIS: {apis}")
