@@ -25,10 +25,10 @@ I developed ScilEx scripts in the context of a systematic review conducted durin
 :heavy_plus_sign: [Create a Zotero API key](https://www.zotero.org/support/dev/web_api/v3/start)
 
 :heavy_plus_sign: Create an account for following APIs:
-* [SemanticScholar](https://www.semanticscholar.org/product/api/tutorial)
-* [Springer](https://dev.springernature.com/)
-* [IEEE](https://developer.ieee.org/)
-* [Elsevier](https://dev.elsevier.com/)
+* [SemanticScholar](https://www.semanticscholar.org/product/api/tutorial) (optional-but allows higher rate limit, really long to obtain)
+* [Springer](https://dev.springernature.com/) (mandatory if selected as source)
+* [IEEE](https://developer.ieee.org/) (mandatory if selected as source)
+* [Elsevier](https://dev.elsevier.com/) (mandatory if selected as source)
 
  
  :heavy_plus_sign: :bangbang: **Configure API Credentials** :clipboard:
