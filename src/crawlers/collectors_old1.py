@@ -1,7 +1,5 @@
 import logging
-from utils import load_all_configs
 from itertools import product
-
 
 # # Set up logging configuration
 # logging.basicConfig(
@@ -32,15 +30,16 @@ from itertools import product
 # ieee_api = api_config["ieee"].get("api_key")
 # openalex_mail = main_config.get("email")
 
+
 class CollectCollection:
     def __init__(self, main_config):
-        self.coll_name = main_config['collect_name']
-        self.output_dir = main_config['output_dir']
-        self.collect = main_config['collect']
-        self.aggregate = main_config['aggregate']
-        self.years = main_config['years']
-        self.keywords = main_config['keywords']
-        self.apis = main_config['apis']
+        self.coll_name = main_config["collect_name"]
+        self.output_dir = main_config["output_dir"]
+        self.collect = main_config["collect"]
+        self.aggregate = main_config["aggregate"]
+        self.years = main_config["years"]
+        self.keywords = main_config["keywords"]
+        self.apis = main_config["apis"]
         self.global_state = 0
         self.global_state = 0
 
@@ -56,9 +55,7 @@ class CollectCollection:
             with open(os.path.join(repo, "config_used.yml"), "w") as f:
                 yaml.dump(main_config, f)
 
-            to_do_queries = self.queryCompositor()
-
-        path = output_dir
+            self.queryCompositor()
 
     def queryCompositor(self):
         """
@@ -66,9 +63,7 @@ class CollectCollection:
             list: A list of dictionaries, each representing a unique combination.
         """
         # Generate all combinations of keywords from two different groups
-        keyword_combinations = [
-            list(pair) for pair in product(self.keywords)
-        ]
+        keyword_combinations = [list(pair) for pair in product(self.keywords)]
 
         # Generate all combinations using Cartesian product
         combinations = product(keyword_combinations, self.years, self.apis, self.fields)
@@ -126,8 +121,13 @@ class API_collector:
         are collected or a specified limit is reached.
         """
 
-        queries = queryCompositor(main_config['years'], main_config['keywords'], main_config['apis'],  main_config['fields'])
-        print('---------')
+        queries = queryCompositor(
+            main_config["years"],
+            main_config["keywords"],
+            main_config["apis"],
+            main_config["fields"],
+        )
+        print("---------")
         print(len(queries))
         ### TO DO ###
 
@@ -169,14 +169,14 @@ class SemanticScholar_collector(API_collector):
             "id_collect": self.get_collectId(),
             "page": page,
             "total": 0,
-            "results": []
+            "results": [],
         }
 
         try:
             page_with_results = response.json()
             page_data["total"] = int(page_with_results.get("total", 0))
             if page_data["total"] > 0:
-                for result in page_with_results.get('data', []):
+                for result in page_with_results.get("data", []):
                     parsed_result = {
                         "title": result.get("title", ""),
                         "abstract": result.get("abstract", ""),
@@ -187,19 +187,25 @@ class SemanticScholar_collector(API_collector):
                         "authors": [
                             {
                                 "name": author.get("name", ""),
-                                "affiliation": author.get("affiliation", "")
+                                "affiliation": author.get("affiliation", ""),
                             }
                             for author in result.get("authors", [])
                         ],
                         "fields_of_study": result.get("fieldsOfStudy", []),
                         "publication_date": result.get("publicationDate", ""),
-                        "open_access_pdf": result.get("openAccessPdf", {}).get("url", ""),
+                        "open_access_pdf": result.get("openAccessPdf", {}).get(
+                            "url", ""
+                        ),
                     }
                     page_data["results"].append(parsed_result)
 
-            logging.info(f"Page {page} parsed successfully with {len(page_data['results'])} results.")
+            logging.info(
+                f"Page {page} parsed successfully with {len(page_data['results'])} results."
+            )
         except Exception as e:
-            logging.error(f"Error parsing page {page}: {str(e)}. Response content: {response.text}")
+            logging.error(
+                f"Error parsing page {page}: {str(e)}. Response content: {response.text}"
+            )
 
         return page_data
 
@@ -211,9 +217,12 @@ class SemanticScholar_collector(API_collector):
             str: The formatted API URL for the bulk API with the constructed query parameters.
         """
         # Process keywords: Join multiple keywords with ' AND '
-        keywords_list = self.get_keywords()  # Assuming this returns a list of keyword sets
-        query_keywords = '+'.join(
-            '|'.join(f'"{keyword})"' for keyword in keywords) for keywords in keywords_list
+        keywords_list = (
+            self.get_keywords()
+        )  # Assuming this returns a list of keyword sets
+        query_keywords = "+".join(
+            "|".join(f'"{keyword})"' for keyword in keywords)
+            for keywords in keywords_list
         )
         encoded_keywords = urllib.parse.quote(query_keywords)
 
@@ -276,7 +285,7 @@ class IEEE_collector(API_collector):
             "id_collect": self.get_collectId(),  # Unique identifier for this collection
             "page": page,  # Current page number
             "total": 0,  # Total number of results found
-            "results": []  # List to hold the collected results
+            "results": [],  # List to hold the collected results
         }
 
         try:
@@ -302,7 +311,7 @@ class IEEE_collector(API_collector):
                     "authors": [
                         {
                             "name": author.get("full_name", ""),
-                            "affiliation": author.get("affiliation", "")
+                            "affiliation": author.get("affiliation", ""),
                         }
                         for author in article.get("authors", {}).get("authors", [])
                     ],
@@ -327,8 +336,12 @@ class IEEE_collector(API_collector):
             str: The formatted API URL with the constructed query parameters.
         """
         # Process keywords: Join multiple keywords with ' AND '
-        keywords_list = self.get_keywords()  # Assuming this returns a list of keyword sets
-        query_keywords = ' AND '.join(f"({' OR '.join(keywords)})" for keywords in keywords_list)
+        keywords_list = (
+            self.get_keywords()
+        )  # Assuming this returns a list of keyword sets
+        query_keywords = " AND ".join(
+            f"({' OR '.join(keywords)})" for keywords in keywords_list
+        )
         encoded_keywords = urllib.parse.quote(query_keywords)
 
         # Handle year range: Use min and max to set start_year and end_year
@@ -338,9 +351,7 @@ class IEEE_collector(API_collector):
 
         # Construct URL with parameters
         offset_placeholder = "{}"  # Placeholder for pagination offset
-        fields = (
-            "title"
-        )
+        fields = "title"
         url = (
             f"{self.api_url}?query={encoded_keywords}"
             f"&fieldsOfStudy=Computer Science"
@@ -375,13 +386,13 @@ class Elsevier_collector(API_collector):
             "id_collect": self.get_collectId(),
             "page": page,
             "total": 0,
-            "results": []
+            "results": [],
         }
 
         page_with_results = response.json()
 
         # Loop through partial list of results
-        results = page_with_results['search-results']
+        results = page_with_results["search-results"]
         total = results["opensearch:totalResults"]
         page_data["total_nb"] = int(total)
         if page_data["total_nb"] > 0:
@@ -404,22 +415,26 @@ class Elsevier_collector(API_collector):
             group_keywords = []
 
             # Join keywords within the same set with ' OR '
-            group_keywords += [f'"{keyword}"' for keyword in keyword_set]  # Use quotes for exact matching
+            group_keywords += [
+                f'"{keyword}"' for keyword in keyword_set
+            ]  # Use quotes for exact matching
 
             # Join the current group's keywords with ' OR ' and wrap in TITLE()
-            formatted_keyword_groups.append(f'TITLE({" OR ".join(group_keywords)})')
+            formatted_keyword_groups.append(f"TITLE({' OR '.join(group_keywords)})")
 
         # Join all formatted keyword groups with ' AND '
-        search_query = ' AND '.join(formatted_keyword_groups)
+        search_query = " AND ".join(formatted_keyword_groups)
         return search_query
 
     def get_configurated_url(self):
         """Constructs the API URL with the search query and publication year filters."""
         # Construct the search query
-        keywords_query = self.construct_search_query()  # Get the formatted keyword query
+        keywords_query = (
+            self.construct_search_query()
+        )  # Get the formatted keyword query
 
         # Create the years query
-        years_query = ' OR '.join(str(year) for year in self.get_year())
+        years_query = " OR ".join(str(year) for year in self.get_year())
 
         # Combine the queries
         query = f"{keywords_query} AND PUBYEAR > {years_query}"
@@ -462,14 +477,14 @@ class DBLP_collector(API_collector):
             "id_collect": self.get_collectId(),  # Unique identifier for this collection
             "page": page,  # Current page number
             "total": 0,  # Total number of results found
-            "results": []  # List to hold the collected results
+            "results": [],  # List to hold the collected results
         }
 
         # Parse the JSON response
         page_with_results = response.json()
 
         # Extract the total number of hits from the results
-        results = page_with_results['result']
+        results = page_with_results["result"]
         total = results["hits"]["@total"]
         page_data["total"] = int(total)
         logging.info(f"Total results found for page {page}: {page_data['total']}")
@@ -489,10 +504,12 @@ class DBLP_collector(API_collector):
             str: The formatted API URL with the constructed query parameters.
         """
         # Process keywords: Join items in each list with '|', then join the lists with ' '
-        keywords_query = ' '.join(['|'.join(keyword_set) for keyword_set in self.get_keywords()])
+        keywords_query = " ".join(
+            ["|".join(keyword_set) for keyword_set in self.get_keywords()]
+        )
 
         # Process year: Join years with '|'
-        years_query = '|'.join(str(year) for year in self.get_year())
+        years_query = "|".join(str(year) for year in self.get_year())
 
         # Combine keywords and years into the query string
         query = f"{keywords_query} {years_query}"
@@ -519,7 +536,9 @@ class OpenAlex_collector(API_collector):
         self.max_by_page = 200  # Maximum number of results to retrieve per page
         self.api_name = "OpenAlex"
         self.api_url = "https://api.openalex.org/works"
-        self.openalex_mail = openalex_mail  # Add your email for the OpenAlex API requests
+        self.openalex_mail = (
+            openalex_mail  # Add your email for the OpenAlex API requests
+        )
 
     def parsePageResults(self, response, page):
         """
@@ -537,7 +556,7 @@ class OpenAlex_collector(API_collector):
             "id_collect": self.get_collectId(),  # Unique identifier for this collection
             "page": page,  # Current page number
             "total": 0,  # Total number of results found
-            "results": []  # List to hold the collected results
+            "results": [],  # List to hold the collected results
         }
 
         # Parse the JSON response
@@ -570,7 +589,7 @@ class OpenAlex_collector(API_collector):
             keyword_filters += [f"title.search:{keyword}" for keyword in keyword_set]
 
         # Join all keyword filters with commas (as per OpenAlex API format)
-        formatted_keyword_filters = ','.join(keyword_filters)
+        formatted_keyword_filters = ",".join(keyword_filters)
 
         # Extract the min and max year from self.get_year() and create the range
         years = self.get_year()  # Assuming this returns a list of years
@@ -579,8 +598,10 @@ class OpenAlex_collector(API_collector):
         year_filter = f"publication_year:{min_year}-{max_year}"
 
         # Combine all filters into the final URL
-        api_url = (f"{self.api_url}?filter={formatted_keyword_filters},{year_filter}"
-                   f"&per-page={self.max_by_page}&mailto={self.openalex_mail}&page={{}}")
+        api_url = (
+            f"{self.api_url}?filter={formatted_keyword_filters},{year_filter}"
+            f"&per-page={self.max_by_page}&mailto={self.openalex_mail}&page={{}}"
+        )
 
         logging.info(f"Configured URL: {api_url}")
         return api_url
@@ -625,6 +646,7 @@ class OpenAlex_collector(API_collector):
 #     def get_configurated_url(self):
 #         return self.get_url()+"?q="+self.get_keywords()+"&fl=title_s,abstract_s,label_s,arxivId_s,audience_s,authFullNameIdHal_fs,bookTitle_s,classification_s,conferenceTitle_s,docType_s,doiId_id,files_s,halId_s,jel_t,journalDoiRoot_s,journalTitle_t,keyword_s,type_s,submittedDateY_i&fq=submittedDateY_i:"+str(self.get_year())+"&rows="+str(self.get_max_by_page())+"&start={}"
 
+
 class HAL_collector(API_collector):
     """Collector for fetching publication metadata from the HAL API."""
 
@@ -659,14 +681,14 @@ class HAL_collector(API_collector):
             "id_collect": self.get_collectId(),  # Unique identifier for this collection
             "page": page,  # Current page number
             "total": 0,  # Total number of results found
-            "results": []  # List to hold the collected results
+            "results": [],  # List to hold the collected results
         }
 
         # Parse the JSON response
         page_with_results = response.json()
 
         # Extract the total number of hits from the results
-        results = page_with_results['response']
+        results = page_with_results["response"]
         total = results["numFound"]
         page_data["total"] = int(total)
         logging.info(f"Total results found for page {page}: {page_data['total']}")
@@ -697,11 +719,14 @@ class HAL_collector(API_collector):
         keywords = self.get_keywords()  # Get keywords from filter parameters
 
         # Flatten the keyword list if it contains lists of keywords
-        flat_keywords = [keyword for sublist in keywords for keyword in
-                         (sublist if isinstance(sublist, list) else [sublist])]
+        flat_keywords = [
+            keyword
+            for sublist in keywords
+            for keyword in (sublist if isinstance(sublist, list) else [sublist])
+        ]
 
         # Construct keyword query by joining all keywords into a single string
-        keyword_query = '%20OR%20'.join(flat_keywords)  # Join keywords with ' OR '
+        keyword_query = "%20OR%20".join(flat_keywords)  # Join keywords with ' OR '
 
         # Wrap the keyword query in parentheses
         keyword_query = f"({keyword_query})"
@@ -737,7 +762,7 @@ class Arxiv_collector(API_collector):
             "id_collect": self.get_collectId(),
             "page": page,
             "total": 0,
-            "results": []
+            "results": [],
         }
 
         # Parse the XML response content
@@ -759,7 +784,7 @@ class Arxiv_collector(API_collector):
                 "doi": self.extract_doi(entry),  # Extract DOI separately
                 "pdf": self.extract_pdf(entry),  # Extract PDF link
                 "journal": self.extract_journal(entry),  # Extract journal reference
-                "categories": self.extract_categories(entry)  # Extract categories
+                "categories": self.extract_categories(entry),  # Extract categories
             }
             page_data["results"].append(current)
 
@@ -799,7 +824,7 @@ class Arxiv_collector(API_collector):
     def extract_categories(self, entry):
         """Extracts categories from the entry."""
         categories = entry.xpath('*[local-name()="category"]')
-        return [cat.attrib['term'] for cat in categories]
+        return [cat.attrib["term"] for cat in categories]
 
     def construct_search_query(self):
         """
@@ -818,14 +843,18 @@ class Arxiv_collector(API_collector):
             group_keywords = []
 
             # Add 'ti' (title) and 'abs' (abstract) queries for each keyword
-            group_keywords += [f'ti:"{urllib.parse.quote(keyword)}"' for keyword in keyword_set]
-            group_keywords += [f'abs:"{urllib.parse.quote(keyword)}"' for keyword in keyword_set]
+            group_keywords += [
+                f'ti:"{urllib.parse.quote(keyword)}"' for keyword in keyword_set
+            ]
+            group_keywords += [
+                f'abs:"{urllib.parse.quote(keyword)}"' for keyword in keyword_set
+            ]
 
             # Join the current group's keywords with ' +OR+ '
             formatted_keyword_groups.append(f"({' +OR+ '.join(group_keywords)})")
 
         # Join all formatted keyword groups with ' +AND+ '
-        search_query = '+AND+'.join(formatted_keyword_groups)
+        search_query = "+AND+".join(formatted_keyword_groups)
 
         logging.info(f"Constructed search query: {search_query}")
         return search_query
@@ -835,7 +864,8 @@ class Arxiv_collector(API_collector):
         search_query = self.construct_search_query()  # Use the constructed search query
 
         logging.info(
-            f"Configured URL: {self.api_url}?search_query={search_query}&sortBy=relevance&sortOrder=descending&start={{}}&max_results={self.max_by_page}")
+            f"Configured URL: {self.api_url}?search_query={search_query}&sortBy=relevance&sortOrder=descending&start={{}}&max_results={self.max_by_page}"
+        )
         return f"{self.api_url}?search_query={search_query}&sortBy=relevance&sortOrder=descending&start={{}}&max_results={self.max_by_page}"
 
 
@@ -869,6 +899,7 @@ class Arxiv_collector(API_collector):
 #         kwd2="(publicationDate:"+str(self.get_year())+" AND title:("+kwd+") OR abstract:("+kwd+"))"
 #         return self.get_url()+"?q="+kwd2+"&output=*&size"+str(self.get_max_by_page())+"&from={}"
 
+
 class Istex_collector(API_collector):
     """Collector for fetching publication metadata from the Istex API."""
 
@@ -895,7 +926,7 @@ class Istex_collector(API_collector):
             "id_collect": self.get_collectId(),  # Unique identifier for this collection
             "page": page,  # Current page number
             "total": 0,  # Total number of results found
-            "results": []  # List to hold the collected results
+            "results": [],  # List to hold the collected results
         }
 
         # Parse the JSON response
@@ -927,15 +958,20 @@ class Istex_collector(API_collector):
         keywords = self.get_keywords()  # Get keywords from filter parameters
 
         # Flatten the keywords if necessary
-        flat_keywords = [keyword for sublist in keywords for keyword in
-                         (sublist if isinstance(sublist, list) else [sublist])]
-        keyword_query = '%20OR%20'.join(flat_keywords)  # Join keywords with ' OR '
+        flat_keywords = [
+            keyword
+            for sublist in keywords
+            for keyword in (sublist if isinstance(sublist, list) else [sublist])
+        ]
+        keyword_query = "%20OR%20".join(flat_keywords)  # Join keywords with ' OR '
 
         # Construct the final query string
         query = f"(publicationDate:[{year_min} TO {year_max}] AND (title:({keyword_query}) OR abstract:({keyword_query})))"
 
         # Construct the URL
-        configured_url = f"{self.api_url}?q={query}&output=*&size={self.max_by_page}&from={{}}"
+        configured_url = (
+            f"{self.api_url}?q={query}&output=*&size={self.max_by_page}&from={{}}"
+        )
 
         logging.info(f"Configured URL: {configured_url}")
         return configured_url
@@ -982,7 +1018,7 @@ class Springer_collector(API_collector):
             "id_collect": self.get_collectId(),
             "page": page,
             "total": 0,
-            "results": []
+            "results": [],
         }
 
         try:
@@ -990,12 +1026,12 @@ class Springer_collector(API_collector):
             page_with_results = response.json()
 
             # Extract the 'records' list and the 'result' which contains metadata
-            records = page_with_results.get('records', [])
-            result_info = page_with_results.get('result', [])
+            records = page_with_results.get("records", [])
+            result_info = page_with_results.get("result", [])
 
             # Handle 'result' being a list and extract the first entry's 'total' if available
             if isinstance(result_info, list) and len(result_info) > 0:
-                total = result_info[0].get('total', 0)
+                total = result_info[0].get("total", 0)
             else:
                 total = 0
 
@@ -1007,11 +1043,14 @@ class Springer_collector(API_collector):
                     page_data["results"].append(result)
             else:
                 logging.warning(
-                    f"No valid records found on page {page}. Records type: {type(records)}. Response: {page_with_results}")
+                    f"No valid records found on page {page}. Records type: {type(records)}. Response: {page_with_results}"
+                )
 
         except Exception as e:
             # Log detailed error information
-            logging.error(f"Error parsing page {page}. Response content: {response.text}. Error: {str(e)}")
+            logging.error(
+                f"Error parsing page {page}. Response content: {response.text}. Error: {str(e)}"
+            )
             raise
 
         return page_data
@@ -1027,11 +1066,11 @@ class Springer_collector(API_collector):
         # Iterate through each set of keywords
         for keyword_set in self.get_keywords():
             # Join keywords within the same set with ' OR ' and format for title
-            group_keywords = ' OR '.join([f'"{keyword}"' for keyword in keyword_set])
+            group_keywords = " OR ".join([f'"{keyword}"' for keyword in keyword_set])
             formatted_keyword_groups.append(f"({group_keywords})")
 
         # Join all formatted keyword groups with ' AND '
-        search_query = ' AND '.join(formatted_keyword_groups)
+        search_query = " AND ".join(formatted_keyword_groups)
         return search_query
 
     def get_configurated_url(self):
@@ -1046,7 +1085,9 @@ class Springer_collector(API_collector):
 
         # Construct the URLs for both endpoints
         meta_url = f"{self.meta_url}?q={keywords_query}&api_key={self.api_key}"
-        openaccess_url = f"{self.openaccess_url}?q={keywords_query}&api_key={self.api_key}"
+        openaccess_url = (
+            f"{self.openaccess_url}?q={keywords_query}&api_key={self.api_key}"
+        )
 
         logging.info(f"Constructed query for meta: {meta_url}")
         logging.info(f"Constructed query for openaccess: {openaccess_url}")
@@ -1069,7 +1110,9 @@ class Springer_collector(API_collector):
 
             while has_more_pages:
                 # Append pagination parameter to the base URL
-                paginated_url = f"{base_url}&p={page}"  # Use 'p' for Springer API pagination
+                paginated_url = (
+                    f"{base_url}&p={page}"  # Use 'p' for Springer API pagination
+                )
                 logging.info(f"Fetching data from URL: {paginated_url}")
 
                 # Call the API
@@ -1078,14 +1121,18 @@ class Springer_collector(API_collector):
 
                     # Parse the response
                     page_data = self.parsePageResults(response, page)
-                    combined_results.append(page_data)  # Store results from this endpoint
+                    combined_results.append(
+                        page_data
+                    )  # Store results from this endpoint
 
                     # Determine if more pages are available
-                    has_more_pages = len(page_data['results']) == self.max_by_page
+                    has_more_pages = len(page_data["results"]) == self.max_by_page
                     page += 1  # Increment page number for the next request
 
                 except Exception as e:
-                    logging.error(f"Error fetching or parsing data from {paginated_url}: {str(e)}")
+                    logging.error(
+                        f"Error fetching or parsing data from {paginated_url}: {str(e)}"
+                    )
                     has_more_pages = False  # Stop fetching on error
 
         return combined_results
@@ -1126,7 +1173,7 @@ class GoogleScholarCollector(API_collector):
             "id_collect": self.get_collectId(),  # Unique identifier for this collection
             "page": page,  # Current page number
             "total": 0,  # Total number of results found
-            "results": []  # List to hold the collected results
+            "results": [],  # List to hold the collected results
         }
 
         # Parse the JSON response
@@ -1152,13 +1199,19 @@ class GoogleScholarCollector(API_collector):
             str: The formatted API URL for the request.
         """
         # Ensure keywords are flattened into a single space-separated string
-        keywords_list = self.get_keywords()  # Assuming this returns a list of keyword sets
+        keywords_list = (
+            self.get_keywords()
+        )  # Assuming this returns a list of keyword sets
         # Flatten the list of keywords into a single string for the query
         keywords = "+".join(" + ".join(keyword_set) for keyword_set in keywords_list)
 
-        year_start, year_end = self.get_year_range()  # Assuming get_year_range() returns a tuple (min_year, max_year)
+        year_start, year_end = (
+            self.get_year_range()
+        )  # Assuming get_year_range() returns a tuple (min_year, max_year)
 
-        logging.info(f"Constructed Google Scholar URL with keywords: {keywords} and years: {year_start} - {year_end}")
+        logging.info(
+            f"Constructed Google Scholar URL with keywords: {keywords} and years: {year_start} - {year_end}"
+        )
         return f"{self.api_url}?engine=google_scholar&api_key={self.api_key}&q={keywords}&as_ylo={year_start}&as_yhi={year_end}&hl=en"
 
     def get_year_range(self):

@@ -31,7 +31,25 @@ I developed ScilEx scripts in the context of a systematic review conducted durin
 * [Elsevier](https://dev.elsevier.com/)
 
  
- :heavy_plus_sign: :bangbang: **ADD ALL OF YOUR CREDITS** IN [scilex.config.yml](https://github.com/datalogism/SciLEx/blob/main/src/scilex.config.yml)  :clipboard:
+ :heavy_plus_sign: :bangbang: **Configure API Credentials** :clipboard:
+
+## API Configuration Setup
+
+1. **Copy the API configuration template:**
+   ```bash
+   cp src/api.config.yml.example src/api.config.yml
+   ```
+
+2. **Edit `src/api.config.yml` with your API credentials:**
+   - **Zotero API Key**: [Create a Zotero API key](https://www.zotero.org/settings/keys)
+   - **IEEE API Key**: [Register at IEEE Developer Portal](https://developer.ieee.org/)
+   - **Elsevier API Key**: [Register at Elsevier Developer Portal](https://dev.elsevier.com/)
+   - **Springer API Key**: [Register at Springer Nature Developer Portal](https://dev.springernature.com/)
+   - **Semantic Scholar API Key**: Optional, [register here](https://www.semanticscholar.org/product/api/tutorial)
+
+3. **Update your main configuration in [scilex.config.yml](src/scilex.config.yml)**
+
+⚠️ **Security Note**: The `api.config.yml` file containing your credentials is excluded from version control to protect your API keys.
 
 -----
 ##  :open_file_folder: ScriptBox Content:

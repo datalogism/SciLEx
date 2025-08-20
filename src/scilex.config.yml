@@ -7,13 +7,13 @@ apis:
 - OpenAlex
 - SemanticScholar
 collect: true
-collect_name: $COLLECT_NAME$
+collect_name: graphrag
 email: YOUR MAIL
 fields:
 - title
 - abstract
 keywords:
-  - ["Conversation", "conversation", "Conversations", "conversations", "dialog", "Dialog", "Conversational", "conversational", "Dialogue", "dialogue", "chat", "Chat"]
+  - ["RAG", "Graphrag", "LLM", "sparql", "Multi-agent", "agent", "agentic", "Langchain", "RAG", "RAGs", "rag", "rag"]
   - ["Knowledge Graph", "Knowledge Graphs", "knowledge graph", "knowledge graph"]
 output_dir: output
 years:
