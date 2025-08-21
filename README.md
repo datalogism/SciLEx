@@ -19,40 +19,14 @@ I developed ScilEx scripts in the context of a systematic review conducted durin
 ![Framework](img/Framework.png)
 ---
 
-## :electric_plug: First steps
-:heavy_plus_sign: [Install Zotero and Zotero Connector](https://www.zotero.org/download/)
+## :electric_plug: Deploy and use Scilex for the first time
 
-:heavy_plus_sign: [Create a Zotero API key](https://www.zotero.org/support/dev/web_api/v3/start)
-
-:heavy_plus_sign: Create an account for following APIs:
-* [SemanticScholar](https://www.semanticscholar.org/product/api/tutorial) (optional-but allows higher rate limit, really long to obtain)
-* [Springer](https://dev.springernature.com/) (mandatory if selected as source)
-* [IEEE](https://developer.ieee.org/) (mandatory if selected as source)
-* [Elsevier](https://dev.elsevier.com/) (mandatory if selected as source)
-
- 
- :heavy_plus_sign: :bangbang: **Configure API Credentials** :clipboard:
-
-## API Configuration Setup
-
-1. **Copy the API configuration template:**
-   ```bash
-   cp src/api.config.yml.example src/api.config.yml
-   ```
-
-2. **Edit `src/api.config.yml` with your API credentials:**
-   - **Zotero API Key**: [Create a Zotero API key](https://www.zotero.org/settings/keys)
-   - **IEEE API Key**: [Register at IEEE Developer Portal](https://developer.ieee.org/)
-   - **Elsevier API Key**: [Register at Elsevier Developer Portal](https://dev.elsevier.com/)
-   - **Springer API Key**: [Register at Springer Nature Developer Portal](https://dev.springernature.com/)
-   - **Semantic Scholar API Key**: Optional, [register here](https://www.semanticscholar.org/product/api/tutorial)
-
-3. **Update your main configuration in [scilex.config.yml](src/scilex.config.yml)**
-
-⚠️ **Security Note**: The `api.config.yml` file containing your credentials is excluded from version control to protect your API keys.
+Please read our quick tutorial [here](https://github.com/datalogism/SciLEx/blob/main/Tuto_firstContact.md)
 
 -----
 ##  :open_file_folder: ScriptBox Content:
+
+Many scripts where developed and not yet integrated, if you are intested please take a look in the following directories:
 
 *  :clipboard: [Testing APIs scripts](https://github.com/datalogism/SciLEx/blob/main/src/API_tests/) : test and check API services
 *  :clipboard: [Collect scripts]( 
