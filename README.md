@@ -21,7 +21,7 @@ I developed ScilEx scripts in the context of a systematic review conducted durin
 
 ## :electric_plug: Deploy and use Scilex for the first time
 
-Please read our quick tutorial [here](https://github.com/datalogism/SciLEx/blob/main/Tuto_firstContact.md)
+ 👉 Please read our quick tutorial [here](https://github.com/datalogism/SciLEx/blob/main/Tuto_firstContact.md) 🏃‍♂️🏃
 
 -----
 ##  :open_file_folder: ScriptBox Content:
