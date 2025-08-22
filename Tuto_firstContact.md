@@ -74,7 +74,7 @@ years:
 Once the previous steps are complete, run the collection from the library source:
 
 ```bash
-python run_collect.py
+python src/run_collect.py
 ```
 
 ---
@@ -84,7 +84,7 @@ python run_collect.py
 After collecting all papers, create the final aggregated file:
 
 ```bash
-python aggregate_collect.py
+python src/aggregate_collect.py
 ```
 
 ---
