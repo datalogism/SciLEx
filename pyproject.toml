@@ -24,9 +24,6 @@ dependencies = [
     "tenacity>=9.0",
     "tqdm>=4.66",
     "python-dateutil>=2.9",
-    "fastapi>=0.135.1",
-    "uvicorn>=0.41.0",
-    "streamlit>=1.55.0",
     "matplotlib>=3.7",
     "rdflib>=7.0",
     "networkx>=3.0",
@@ -44,6 +41,7 @@ graph = [
 ]
 gui = [
     "scilex[graph]",  # the app runs the Graph analysis
+    "scilex[kg]",  # ⑦ Export builds the knowledge graph (scilex-lpwc-ap)
     "nicegui>=3.18.0",
     "platformdirs>=4.12.4",
     "pywebview>=6.2.1",
@@ -52,6 +50,14 @@ gui = [
 ]
 build = [
     "pyinstaller>=6.22.3",
+]
+kg = [
+    # Knowledge graph with the scilex-lpwc-ap profile (scilex-build-kg).
+    # morph-kgc 2.10 caps rdflib below 7.3 and pyoxigraph below 0.4.
+    "morph-kgc==2.10.0",
+    "pyoxigraph>=0.3.22",
+    "pyshacl>=0.26",
+    "pylatexenc>=2.10",
 ]
 
 [project.scripts]
@@ -64,6 +70,7 @@ scilex-export-bibtex = "scilex.export_to_bibtex:main"
 scilex-report = "scilex.report_charts:main"
 scilex-enrich-citations = "scilex.enrich_with_citations:main"
 scilex-export-turtle = "scilex.export_to_turtle:main"
+scilex-build-kg = "scilex.build_kg:main"
 scilex-analyze = "scilex.analyze:main"
 scilex-snowball = "scilex.snowball_sampling:main"
 scilex-seed = "scilex.seed_papers:main"
@@ -112,6 +119,7 @@ exclude = [
     "dist",
     "build",
     ".deprecated",
+    "scilex/kg/ap",  # pinned copy of the scilex-lpwc-ap profile (third-party code)
 ]
 
 [tool.ruff.lint]

@@ -24,6 +24,13 @@ REQUIRED_DATA = {
     "data/venue_rankings": "*.csv",
     "tagging": "*.csv",
     "gui/assets": "*.png",
+    # Pinned scilex-lpwc-ap profile, mapped by ⑦ Export (knowledge graph).
+    "kg/ap": "VERSION.json",
+    "kg/ap/ontology": "*.ttl",
+    "kg/ap/shapes": "*.ttl",
+    "kg/ap/mappings/rml": "*.ttl",
+    "kg/ap/mappings/functions": "*.py",
+    "kg/ap/mappings/sparql": "*.ru",
 }
 
 REQUIRED_MODULES = (
@@ -32,6 +39,9 @@ REQUIRED_MODULES = (
     "platformdirs",
     "rdflib",
     "pandas",
+    "morph_kgc",
+    "pyoxigraph",
+    "pyshacl",
     "scilex.pipeline.orchestrator",
     "scilex.crawlers.aggregate_parallel",
     "scilex.crawlers.collector_collection",

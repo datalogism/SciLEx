@@ -1,0 +1,338 @@
+# scilex-lpwc-ap -- iteration 3 -- RML mapping TEMPLATE: SciLEx BibLaTeX (as generic JSON) -> RDF
+#
+# iter3: one template for every collection. scripts/build_iteration.py expands
+#   {{BASE}} -> https://w3id.org/scilex/data/<slug>/   (collection namespace)
+#   {{JSON}} -> raw_data/<source>.json
+# from mappings/collections/<slug>.json, and runs morph-kgc once per collection.
+#
+# Pipeline:  raw_data/*.bib --scripts/bib2json.py--> raw_data/*.json
+#            --this mapping + functions/scilex_udfs.py (morph-kgc)--> raw graph
+#            --sparql/*.ru (in order)--> rdf_data/*.ttl
+#
+# Entity IRIs follow the OpenCitations Data Model layout:
+#   br/  bibliographic resources   ar/ agent roles      ra/ responsible agents
+#   id/  identifiers               re/ embodiments (br/<key>/re/1)
+#   coding/<DIMENSION>/<value>     review coding-scheme concepts (SKOS)
+#
+# Spec: RML-Core + RML-FNML (http://w3id.org/rml/), executed with morph-kgc 2.10.0.
+# NB: morph-kgc 2.10.0 crashes on FnO functions returning *literals* (KeyError
+# 'reference_results'), so FnO is only used for IRI-valued term maps here; the few
+# literal derivations (DOI normalisation, page split, coding labels) are in sparql/.
+
+@prefix rml:      <http://w3id.org/rml/> .
+@prefix rdf:      <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:     <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:      <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms:  <http://purl.org/dc/terms/> .
+@prefix foaf:     <http://xmlns.com/foaf/0.1/> .
+@prefix skos:     <http://www.w3.org/2004/02/skos/core#> .
+@prefix fabio:    <http://purl.org/spar/fabio/> .
+@prefix frbr:     <http://purl.org/vocab/frbr/core#> .
+@prefix cito:     <http://purl.org/spar/cito/> .
+@prefix pro:      <http://purl.org/spar/pro/> .
+@prefix datacite: <http://purl.org/spar/datacite/> .
+@prefix literal:  <http://www.essepuntato.it/2010/06/literalreification/> .
+@prefix prism:    <http://prismstandard.org/namespaces/basic/2.0/> .
+@prefix lpwc:     <https://linkedpaperswithcode.com/class/> .
+@prefix lpwcp:    <https://linkedpaperswithcode.com/property/> .
+@prefix sxv:      <https://w3id.org/scilex/vocab#> .
+@prefix sxfn:     <https://w3id.org/scilex/fn#> .
+@prefix void:     <http://rdfs.org/ns/void#> .
+@prefix :         <https://w3id.org/scilex/mapping/bib#> .
+
+# ---------------------------------------------------------------------------
+# Logical sources (tables of the generic JSON)
+# ---------------------------------------------------------------------------
+
+:entries  rml:source "{{JSON}}" ;
+          rml:referenceFormulation rml:JSONPath ; rml:iterator "$.entries[*]" .
+:creators rml:source "{{JSON}}" ;
+          rml:referenceFormulation rml:JSONPath ; rml:iterator "$.creators[*]" .
+:keywords rml:source "{{JSON}}" ;
+          rml:referenceFormulation rml:JSONPath ; rml:iterator "$.lists[*]" .  # only keywords are split today (morph-kgc ignores JSONPath filters)
+# iter2: multi-valued identifier fields (issn, isbn), one row per value
+:identifiers rml:source "{{JSON}}" ;
+          rml:referenceFormulation rml:JSONPath ; rml:iterator "$.identifiers[*]" .
+
+# ---------------------------------------------------------------------------
+# br -- the bibliographic resource (one per BibLaTeX entry)
+# ---------------------------------------------------------------------------
+
+:BibliographicResource a rml:TriplesMap ;
+    rml:logicalSource :entries ;
+    # iter2: every collection item is an lpwc:paper (ORSD NFR2), not only the ones with LPWC links
+    rml:subjectMap [ rml:template "{{BASE}}br/{ID}" ; rml:class lpwc:paper ] ;
+
+    # FaBiO class from the entry type (OCDM type table) -- FnO
+    rml:predicateObjectMap [
+        rml:predicate rdf:type ;
+        rml:objectMap [ rml:termType rml:IRI ;
+            rml:functionExecution [ rml:function sxfn:fabioType ;
+                rml:input [ rml:parameter sxfn:value ; rml:inputValueMap [ rml:reference "ENTRYTYPE" ] ] ] ] ] ;
+
+    rml:predicateObjectMap [ rml:predicate dcterms:identifier ;   rml:objectMap [ rml:reference "ID" ] ] ;
+    rml:predicateObjectMap [ rml:predicate dcterms:title ;        rml:objectMap [ rml:reference "title" ] ] ;
+    rml:predicateObjectMap [ rml:predicate fabio:hasShortTitle ;  rml:objectMap [ rml:reference "shorttitle" ] ] ;
+    rml:predicateObjectMap [ rml:predicate dcterms:abstract ;     rml:objectMap [ rml:reference "abstract" ] ] ;
+    rml:predicateObjectMap [ rml:predicate prism:publicationDate ; rml:objectMap [ rml:reference "date" ] ] ;  # typed in sparql/01
+    rml:predicateObjectMap [ rml:predicate dcterms:language ;     rml:objectMap [ rml:reference "langid" ] ] ;
+    rml:predicateObjectMap [ rml:predicate dcterms:rights ;       rml:objectMap [ rml:reference "rights" ] ] ;
+    rml:predicateObjectMap [ rml:predicate rdfs:comment ;         rml:objectMap [ rml:reference "annotation" ] ] ;
+    rml:predicateObjectMap [ rml:predicate prism:volume ;         rml:objectMap [ rml:reference "volume" ] ] ;
+    rml:predicateObjectMap [ rml:predicate prism:number ;         rml:objectMap [ rml:reference "number" ] ] ;
+    rml:predicateObjectMap [ rml:predicate prism:issueIdentifier ; rml:objectMap [ rml:reference "issue" ] ] ;
+    rml:predicateObjectMap [ rml:predicate prism:versionIdentifier ; rml:objectMap [ rml:reference "version" ] ] ;  # iter3: software (UCC)
+
+    # iter3: membership in the collection (one dataset per collection)
+    rml:predicateObjectMap [ rml:predicate void:inDataset ; rml:object <{{BASE}}> ] ;
+
+    # iter3: raw SciLEx exports put ISSNs in `series` (UCA); completed into identifiers in sparql/01
+    rml:predicateObjectMap [ rml:predicate datacite:hasIdentifier ;
+        rml:objectMap [ rml:termType rml:IRI ;
+            rml:functionExecution [ rml:function sxfn:seriesIssnIris ;
+                rml:input [ rml:parameter sxfn:value ; rml:inputValueMap [ rml:reference "series" ] ] ] ] ] ;
+
+    # iter3: staging copy of the note; sparql/03 reads citation counts from it, then deletes it
+    rml:predicateObjectMap [ rml:predicate <urn:scilex:staging#note> ; rml:objectMap [ rml:reference "note" ] ] ;
+
+    # identifiers
+    rml:predicateObjectMap [
+        rml:predicate datacite:hasIdentifier ;
+        rml:objectMap [ rml:termType rml:IRI ;
+            rml:functionExecution [ rml:function sxfn:doiIdentifierIri ;
+                rml:input [ rml:parameter sxfn:value ; rml:inputValueMap [ rml:reference "doi" ] ] ] ] ] ;
+    rml:predicateObjectMap [ rml:predicate datacite:hasIdentifier ;
+        rml:objectMap [ rml:template "{{BASE}}id/arxiv/{eprint}" ] ] ;
+
+    # embodiment (url, pages, access date)
+    rml:predicateObjectMap [ rml:predicate frbr:embodiment ;
+        rml:objectMap [ rml:template "{{BASE}}br/{ID}/re/1" ] ] ;
+
+    # containers: journal / proceedings / book
+    rml:predicateObjectMap [
+        rml:predicate frbr:partOf ;
+        rml:objectMap [ rml:termType rml:IRI ;
+            rml:functionExecution [ rml:function sxfn:entityIri ;
+                rml:input [ rml:parameter sxfn:value ;  rml:inputValueMap [ rml:constant "br/venue/journal" ] ] ;
+                rml:input [ rml:parameter sxfn:value2 ; rml:inputValueMap [ rml:reference "journaltitle" ] ] ] ] ] ;
+    rml:predicateObjectMap [
+        rml:predicate frbr:partOf ;
+        rml:objectMap [ rml:termType rml:IRI ;
+            rml:functionExecution [ rml:function sxfn:entityIri ;
+                rml:input [ rml:parameter sxfn:value ;  rml:inputValueMap [ rml:constant "br/venue/book" ] ] ;
+                rml:input [ rml:parameter sxfn:value2 ; rml:inputValueMap [ rml:reference "booktitle" ] ] ] ] ] ;
+
+    # event (LPWC conference)
+    rml:predicateObjectMap [ rml:predicate lpwcp:hasConference ;
+        rml:objectMap [ rml:termType rml:IRI ;
+            rml:functionExecution [ rml:function sxfn:entityIri ;
+                rml:input [ rml:parameter sxfn:value ;  rml:inputValueMap [ rml:constant "conference" ] ] ;
+                rml:input [ rml:parameter sxfn:value2 ; rml:inputValueMap [ rml:reference "eventtitle" ] ] ] ] ] ;
+
+    # publisher role (OCDM: agent role with pro:publisher)
+    rml:predicateObjectMap [ rml:predicate pro:isDocumentContextFor ;
+        rml:objectMap [ rml:template "{{BASE}}ar/{ID}/publisher/1" ] ] ;
+
+    # outgoing citations from the SciLEx note ('cited' = works this entry cites) -- FnO, exploded
+    rml:predicateObjectMap [
+        rml:predicate cito:cites ;
+        rml:objectMap [ rml:termType rml:IRI ;
+            rml:functionExecution [ rml:function sxfn:noteCitationTargets ;
+                rml:input [ rml:parameter sxfn:value ;  rml:inputValueMap [ rml:reference "note" ] ] ;
+                rml:input [ rml:parameter sxfn:value2 ; rml:inputValueMap [ rml:constant "cited" ] ] ] ] ] .
+
+# incoming citations ('citing' = works that cite this entry): the exploded list is the subject
+:IncomingCitation a rml:TriplesMap ;
+    rml:logicalSource :entries ;
+    rml:subjectMap [ rml:termType rml:IRI ;
+        rml:functionExecution [ rml:function sxfn:noteCitationTargets ;
+            rml:input [ rml:parameter sxfn:value ;  rml:inputValueMap [ rml:reference "note" ] ] ;
+            rml:input [ rml:parameter sxfn:value2 ; rml:inputValueMap [ rml:constant "citing" ] ] ] ] ;
+    rml:predicateObjectMap [ rml:predicate cito:cites ;
+        rml:objectMap [ rml:template "{{BASE}}br/{ID}" ] ] .
+
+# ---------------------------------------------------------------------------
+# re -- resource embodiment
+# ---------------------------------------------------------------------------
+
+:Embodiment a rml:TriplesMap ;
+    rml:logicalSource :entries ;
+    rml:subjectMap [ rml:template "{{BASE}}br/{ID}/re/1" ; rml:class fabio:Manifestation ] ;
+    # only well-formed http(s) URLs become IRIs (one source entry has a corrupted url field)
+    rml:predicateObjectMap [
+        rml:predicate frbr:exemplar ;
+        rml:objectMap [ rml:termType rml:IRI ;
+            rml:functionExecution [ rml:function sxfn:urlIri ;
+                rml:input [ rml:parameter sxfn:value ; rml:inputValueMap [ rml:reference "url" ] ] ] ] ] ;
+    rml:predicateObjectMap [ rml:predicate fabio:hasAccessDate ;
+        rml:objectMap [ rml:reference "urldate" ; rml:datatype xsd:date ] ] ;
+    # start/end pages derived in sparql/01 (morph-kgc 2.10 cannot emit literal FnO results)
+    rml:predicateObjectMap [ rml:predicate prism:pageRange ; rml:objectMap [ rml:reference "pages" ] ] .
+
+# ---------------------------------------------------------------------------
+# id -- identifiers (OCDM: datacite:Identifier + literal reification)
+# ---------------------------------------------------------------------------
+
+:DoiIdentifier a rml:TriplesMap ;
+    rml:logicalSource :entries ;
+    rml:subjectMap [ rml:class datacite:Identifier ;
+        rml:functionExecution [ rml:function sxfn:doiIdentifierIri ;
+            rml:input [ rml:parameter sxfn:value ; rml:inputValueMap [ rml:reference "doi" ] ] ] ] ;
+    rml:predicateObjectMap [ rml:predicate datacite:usesIdentifierScheme ; rml:object datacite:doi ] ;
+    # raw DOI; lower-cased / prefix-stripped in sparql/01
+    rml:predicateObjectMap [ rml:predicate literal:hasLiteralValue ; rml:objectMap [ rml:reference "doi" ] ] .
+
+:ArxivIdentifier a rml:TriplesMap ;
+    rml:logicalSource :entries ;
+    rml:subjectMap [ rml:template "{{BASE}}id/arxiv/{eprint}" ; rml:class datacite:Identifier ] ;
+    rml:predicateObjectMap [ rml:predicate datacite:usesIdentifierScheme ; rml:object datacite:arxiv ] ;
+    rml:predicateObjectMap [ rml:predicate literal:hasLiteralValue ; rml:objectMap [ rml:reference "eprint" ] ] .
+
+# iter2: ISSN / ISBN from the identifiers table (one row per value; iter1 minted one
+# identifier for "print, online" ISSN pairs). field = issn | isbn = the DataCite scheme
+# individual name. Attached to the item here; sparql/01 moves them to the container
+# (journal, proceedings, book) the item is part of, which is what they identify.
+:ListedIdentifier a rml:TriplesMap ;
+    rml:logicalSource :identifiers ;
+    rml:subjectMap [ rml:template "{{BASE}}id/{field}/{value}" ; rml:class datacite:Identifier ] ;
+    rml:predicateObjectMap [ rml:predicate datacite:usesIdentifierScheme ;
+        rml:objectMap [ rml:template "http://purl.org/spar/datacite/{field}" ] ] ;
+    rml:predicateObjectMap [ rml:predicate literal:hasLiteralValue ; rml:objectMap [ rml:reference "value" ] ] .
+
+:ListedIdentifierLink a rml:TriplesMap ;
+    rml:logicalSource :identifiers ;
+    rml:subjectMap [ rml:template "{{BASE}}br/{entry}" ] ;
+    rml:predicateObjectMap [ rml:predicate datacite:hasIdentifier ;
+        rml:objectMap [ rml:template "{{BASE}}id/{field}/{value}" ] ] .
+
+# ---------------------------------------------------------------------------
+# containers (journals, proceedings, books) and events
+# ---------------------------------------------------------------------------
+
+:Journal a rml:TriplesMap ;
+    rml:logicalSource :entries ;
+    rml:subjectMap [ rml:class fabio:Journal ;
+        rml:functionExecution [ rml:function sxfn:entityIri ;
+            rml:input [ rml:parameter sxfn:value ;  rml:inputValueMap [ rml:constant "br/venue/journal" ] ] ;
+            rml:input [ rml:parameter sxfn:value2 ; rml:inputValueMap [ rml:reference "journaltitle" ] ] ] ] ;
+    rml:predicateObjectMap [ rml:predicate dcterms:title ; rml:objectMap [ rml:reference "journaltitle" ] ] .
+
+:BookContainer a rml:TriplesMap ;
+    rml:logicalSource :entries ;
+    rml:subjectMap [
+        rml:functionExecution [ rml:function sxfn:entityIri ;
+            rml:input [ rml:parameter sxfn:value ;  rml:inputValueMap [ rml:constant "br/venue/book" ] ] ;
+            rml:input [ rml:parameter sxfn:value2 ; rml:inputValueMap [ rml:reference "booktitle" ] ] ] ] ;
+    rml:predicateObjectMap [
+        rml:predicate rdf:type ;
+        rml:objectMap [ rml:termType rml:IRI ;
+            rml:functionExecution [ rml:function sxfn:booktitleContainerType ;
+                rml:input [ rml:parameter sxfn:value ; rml:inputValueMap [ rml:reference "ENTRYTYPE" ] ] ] ] ] ;
+    rml:predicateObjectMap [ rml:predicate dcterms:title ; rml:objectMap [ rml:reference "booktitle" ] ] ;
+    # iter3: the proceedings / book belongs to a book series (CEUR-WS, LNCS, ...; ORSD VR9)
+    rml:predicateObjectMap [ rml:predicate frbr:partOf ;
+        rml:objectMap [ rml:termType rml:IRI ;
+            rml:functionExecution [ rml:function sxfn:seriesIri ;
+                rml:input [ rml:parameter sxfn:value ; rml:inputValueMap [ rml:reference "series" ] ] ] ] ] .
+
+:BookSeries a rml:TriplesMap ;
+    rml:logicalSource :entries ;
+    rml:subjectMap [ rml:class fabio:BookSeries ;
+        rml:functionExecution [ rml:function sxfn:seriesIri ;
+            rml:input [ rml:parameter sxfn:value ; rml:inputValueMap [ rml:reference "series" ] ] ] ] ;
+    rml:predicateObjectMap [ rml:predicate dcterms:title ; rml:objectMap [ rml:reference "series" ] ] .
+
+:Conference a rml:TriplesMap ;
+    rml:logicalSource :entries ;
+    rml:subjectMap [ rml:class lpwc:conference ;
+        rml:functionExecution [ rml:function sxfn:entityIri ;
+            rml:input [ rml:parameter sxfn:value ;  rml:inputValueMap [ rml:constant "conference" ] ] ;
+            rml:input [ rml:parameter sxfn:value2 ; rml:inputValueMap [ rml:reference "eventtitle" ] ] ] ] ;
+    rml:predicateObjectMap [ rml:predicate foaf:name ; rml:objectMap [ rml:reference "eventtitle" ] ] ;
+    rml:predicateObjectMap [ rml:predicate sxv:eventPlace ; rml:objectMap [ rml:reference "location" ] ] .
+
+# ---------------------------------------------------------------------------
+# ar / ra -- publisher
+# ---------------------------------------------------------------------------
+
+:PublisherRole a rml:TriplesMap ;
+    rml:logicalSource :entries ;
+    rml:subjectMap [ rml:template "{{BASE}}ar/{ID}/publisher/1" ; rml:class pro:RoleInTime ] ;
+    rml:predicateObjectMap [ rml:predicate pro:withRole ; rml:object pro:publisher ] ;
+    rml:predicateObjectMap [ rml:predicate pro:isHeldBy ;
+        rml:objectMap [ rml:termType rml:IRI ;
+            rml:functionExecution [ rml:function sxfn:entityIri ;
+                rml:input [ rml:parameter sxfn:value ;  rml:inputValueMap [ rml:constant "ra/org" ] ] ;
+                rml:input [ rml:parameter sxfn:value2 ; rml:inputValueMap [ rml:reference "publisher" ] ] ] ] ] .
+
+:PublisherAgent a rml:TriplesMap ;
+    rml:logicalSource :entries ;
+    rml:subjectMap [ rml:class foaf:Organization ;
+        rml:functionExecution [ rml:function sxfn:entityIri ;
+            rml:input [ rml:parameter sxfn:value ;  rml:inputValueMap [ rml:constant "ra/org" ] ] ;
+            rml:input [ rml:parameter sxfn:value2 ; rml:inputValueMap [ rml:reference "publisher" ] ] ] ] ;
+    rml:predicateObjectMap [ rml:predicate foaf:name ; rml:objectMap [ rml:reference "publisher" ] ] .
+
+# ---------------------------------------------------------------------------
+# ar / ra -- authors, editors, book authors (ordered; oco:hasNext added in sparql/02)
+# ---------------------------------------------------------------------------
+
+:CreatorRole a rml:TriplesMap ;
+    rml:logicalSource :creators ;
+    rml:subjectMap [ rml:template "{{BASE}}ar/{entry}/{role}/{position}" ; rml:class pro:RoleInTime ] ;
+    rml:predicateObjectMap [
+        rml:predicate pro:withRole ;
+        rml:objectMap [ rml:termType rml:IRI ;
+            rml:functionExecution [ rml:function sxfn:proRole ;
+                rml:input [ rml:parameter sxfn:value ; rml:inputValueMap [ rml:reference "role" ] ] ] ] ] ;
+    # person IRI from the full name (a template would drop rows with an empty given name)
+    rml:predicateObjectMap [ rml:predicate pro:isHeldBy ;
+        rml:objectMap [ rml:termType rml:IRI ;
+            rml:functionExecution [ rml:function sxfn:entityIri ;
+                rml:input [ rml:parameter sxfn:value ;  rml:inputValueMap [ rml:constant "ra/person" ] ] ;
+                rml:input [ rml:parameter sxfn:value2 ; rml:inputValueMap [ rml:reference "full" ] ] ] ] ] ;
+    rml:predicateObjectMap [ rml:predicate sxv:position ;
+        rml:objectMap [ rml:reference "position" ; rml:datatype xsd:integer ] ] .
+
+:CreatorContext a rml:TriplesMap ;
+    rml:logicalSource :creators ;
+    rml:subjectMap [ rml:template "{{BASE}}br/{entry}" ] ;
+    rml:predicateObjectMap [ rml:predicate pro:isDocumentContextFor ;
+        rml:objectMap [ rml:template "{{BASE}}ar/{entry}/{role}/{position}" ] ] .
+
+:Person a rml:TriplesMap ;
+    rml:logicalSource :creators ;
+    rml:subjectMap [ rml:class foaf:Person ;
+        rml:functionExecution [ rml:function sxfn:entityIri ;
+            rml:input [ rml:parameter sxfn:value ;  rml:inputValueMap [ rml:constant "ra/person" ] ] ;
+            rml:input [ rml:parameter sxfn:value2 ; rml:inputValueMap [ rml:reference "full" ] ] ] ] ;
+    rml:predicateObjectMap [ rml:predicate foaf:name ;       rml:objectMap [ rml:reference "full" ] ] ;
+    rml:predicateObjectMap [ rml:predicate foaf:familyName ; rml:objectMap [ rml:reference "family" ] ] ;
+    rml:predicateObjectMap [ rml:predicate foaf:givenName ;  rml:objectMap [ rml:reference "given" ] ] .
+
+# ---------------------------------------------------------------------------
+# Review coding scheme (keywords "DIMENSION:value") -> SKOS concepts -- FnO
+# LPWC lifting (hasTask, usesDataset, hasModel, hasMethod) happens in sparql/04.
+# ---------------------------------------------------------------------------
+
+:CodingAnnotation a rml:TriplesMap ;
+    rml:logicalSource :keywords ;
+    rml:subjectMap [ rml:template "{{BASE}}br/{entry}" ] ;
+    rml:predicateObjectMap [
+        rml:predicate dcterms:subject ;
+        rml:objectMap [ rml:termType rml:IRI ;
+            rml:functionExecution [ rml:function sxfn:codingConcept ;
+                rml:input [ rml:parameter sxfn:value ; rml:inputValueMap [ rml:reference "value" ] ] ] ] ] .
+
+:CodingConcept a rml:TriplesMap ;
+    rml:logicalSource :keywords ;
+    rml:subjectMap [ rml:class skos:Concept ;
+        rml:functionExecution [ rml:function sxfn:codingConcept ;
+            rml:input [ rml:parameter sxfn:value ; rml:inputValueMap [ rml:reference "value" ] ] ] ] ;
+    rml:predicateObjectMap [
+        rml:predicate skos:inScheme ;
+        rml:objectMap [ rml:termType rml:IRI ;
+            rml:functionExecution [ rml:function sxfn:codingScheme ;
+                rml:input [ rml:parameter sxfn:value ; rml:inputValueMap [ rml:reference "value" ] ] ] ] ] ;
+    # raw tag; skos:altLabel / skos:prefLabel derived in sparql/04
+    rml:predicateObjectMap [ rml:predicate skos:notation ; rml:objectMap [ rml:reference "value" ] ] .

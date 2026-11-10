@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 import nicegui
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 ROOT = Path(SPECPATH).parent  # noqa: F821 (SPECPATH is defined by PyInstaller)
 SCILEX = ROOT / "scilex"
@@ -19,6 +19,13 @@ SCILEX_DATA = [
     ("data/venue_rankings", "*.csv"),
     ("tagging", "*.csv"),
     ("gui/assets", "*.png"),
+    # Pinned scilex-lpwc-ap profile, mapped by Export (knowledge graph).
+    ("kg/ap", "VERSION.json"),
+    ("kg/ap/ontology", "*.ttl"),
+    ("kg/ap/shapes", "*.ttl"),
+    ("kg/ap/mappings/rml", "*.ttl"),
+    ("kg/ap/mappings/functions", "*.py"),
+    ("kg/ap/mappings/sparql", "*.ru"),
 ]
 ASSETS = SCILEX / "gui" / "assets"
 
@@ -28,15 +35,18 @@ datas = [
 ]
 # NiceGUI serves its static files (JS, CSS, fonts) from its package directory.
 datas.append((str(Path(nicegui.__file__).parent), "nicegui"))
+# pyshacl reads its SHACL/DASH vocabularies from package files.
+datas += collect_data_files("pyshacl")
 
 # Every SciLEx module, since the app exposes all pipeline commands, even those
-# no GUI page imports yet. scilex.webapi is left out: its Streamlit page runs
-# the whole web UI at import time.
-hiddenimports = collect_submodules(
-    "scilex", filter=lambda name: not name.startswith("scilex.webapi")
-)
+# no GUI page imports yet.
+hiddenimports = collect_submodules("scilex")
 # rdflib loads its parsers and serializers as plugins, by name.
 hiddenimports += collect_submodules("rdflib.plugins")
+# Knowledge graph: morph-kgc (RML engine, imports its readers by name), SHACL.
+hiddenimports += collect_submodules("morph_kgc")
+hiddenimports += collect_submodules("pyshacl")
+hiddenimports += collect_submodules("owlrl")
 if sys.platform.startswith("linux"):
     # pywebview imports its Qt backend lazily; Linux ships Qt WebEngine
     # (see scilex/gui/native_window.py).
@@ -53,7 +63,7 @@ a = Analysis(  # noqa: F821
     pathex=[str(ROOT)],
     datas=datas,
     hiddenimports=hiddenimports,
-    excludes=["streamlit", "tkinter", "pytest", "IPython", "jupyter"],
+    excludes=["tkinter", "pytest", "IPython", "jupyter"],
     noarchive=False,
 )
 pyz = PYZ(a.pure)  # noqa: F821
