@@ -10,6 +10,7 @@ from nicegui import events, run, ui
 
 from scilex.gui.components.errors import show_error
 from scilex.gui.components.job_panel import JobPanel
+from scilex.gui.components.run_status import RunStatus
 from scilex.gui.services import annotations as service
 from scilex.gui.services import zotero_library
 from scilex.gui.services.jobs import Job, JobConflictError
@@ -418,7 +419,14 @@ def _apply_card(
                 "Apply in Zotero", icon="sell", on_click=apply
             ).mark("annotate-apply-button")
             apply_button.set_enabled(False)
-        JobPanel(ctx, review, JOB_KIND, show_logs=False)
+        run_status = RunStatus(review, JOB_KIND, "Applied in Zotero")
+        JobPanel(
+            ctx,
+            review,
+            JOB_KIND,
+            show_logs=False,
+            on_finished=lambda job: run_status.update(),
+        )
 
 
 def _table(frame: pd.DataFrame, columns: list[tuple[str, str]], mark: str) -> None:

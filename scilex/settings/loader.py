@@ -491,6 +491,8 @@ def to_legacy(
         main_config["collect"] = False
     if settings.collect.vpn is not None:
         main_config["vpn"] = copy.deepcopy(settings.collect.vpn)
+    if settings.subcorpora.required:
+        main_config["required_subcorpora"] = list(settings.subcorpora.required)
     _add_non_default_keys(main_config, quality_filters, settings)
 
     return main_config, keys_to_legacy(keys)

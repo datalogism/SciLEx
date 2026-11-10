@@ -11,8 +11,10 @@ from nicegui import ui
 from scilex.gui.components.errors import show_error
 from scilex.gui.components.graph_view import render_graph_results
 from scilex.gui.components.job_panel import JobPanel
+from scilex.gui.components.run_status import RunStatus, set_tab_dot, state_of
 from scilex.gui.components.tag_tools import render_tag_tools
 from scilex.gui.services import analyses as service
+from scilex.gui.services import run_history
 from scilex.gui.services import screening
 from scilex.gui.services.jobs import Job, JobConflictError
 from scilex.gui.services.workspace import Review, Workspace
@@ -49,7 +51,7 @@ def kept_papers_filter(review: Review) -> Callable:
     }
     if not kept:
         raise service.AnalysisError(
-            "No paper is kept in ④ Screen yet: untick \"Only the papers kept\" "
+            "No paper is kept in ③ Screen yet: untick \"Only the papers kept\" "
             "or screen first."
         )
 
@@ -79,7 +81,7 @@ def render(ctx: AppContext, review: Review) -> None:
     ui.label("Analyses").classes("text-2xl font-bold")
     ui.label(
         "Explore the corpus: charts, citation graph and communities. "
-        "Citation data comes from ③ Enrich."
+        "Citation data comes from ⑥ Enrich."
     ).classes("text-gray-500")
     render_tabs(ctx, review, service.in_group("analyse"))
 
@@ -87,10 +89,19 @@ def render(ctx: AppContext, review: Review) -> None:
 def render_tabs(
     ctx: AppContext, review: Review, analyses: tuple[service.AnalysisInfo, ...]
 ) -> None:
-    """Draw one tab per analysis of ``analyses`` (shared by Enrich, Extend and Analyses)."""
+    """Draw one tab per analysis of ``analyses`` (shared by Enrich, Extend and Analyses).
+
+    Each tab carries a dot coloured by its last run (see
+    :mod:`scilex.gui.components.run_status`), so a costly action already done
+    is visible without opening its tab.
+    """
+    history = run_history.load(review.folder)
+    tab_items: dict[str, ui.tab] = {}
     with ui.tabs().classes("w-full").props("mobile-arrows outside-arrows") as tabs:
         for info in analyses:
-            ui.tab(info.name, label=info.title).mark(f"analysis-tab-{info.name}")
+            tab = ui.tab(info.name, label=info.title).mark(f"analysis-tab-{info.name}")
+            set_tab_dot(tab, state_of(review, kind_of(info.name), history)[1])
+            tab_items[info.name] = tab
     # Finishing one analysis (e.g. Citations) can lift another tab's warning.
     problem_refreshers: list[Callable[[], None]] = []
     infos = {info.name: info for info in analyses}
@@ -107,7 +118,13 @@ def render_tabs(
         if name not in panels:
             with tab_containers[name]:
                 panels[name] = _render_analysis(
-                    ctx, review, infos[name], problem_refreshers
+                    ctx,
+                    review,
+                    infos[name],
+                    problem_refreshers,
+                    on_run_recorded=lambda fresh, tab=tab_items[name]: set_tab_dot(
+                        tab, fresh
+                    ),
                 )
         for other, panel in panels.items():
             panel.timer.active = other == name
@@ -123,6 +140,7 @@ def _render_analysis(
     review: Review,
     info: service.AnalysisInfo,
     problem_refreshers: list[Callable[[], None]],
+    on_run_recorded: Callable[[str], None] | None = None,
 ) -> JobPanel:
     name = info.name
     ui.label(info.description).classes("text-gray-500")
@@ -156,6 +174,7 @@ def _render_analysis(
         )
         with cancel_button:
             ui.tooltip(info.cancel_note)
+        run_status = RunStatus(review, kind_of(name))
 
     result_area = ui.column().classes("w-full")
 
@@ -216,6 +235,9 @@ def _render_analysis(
     def on_finished(job: Job) -> None:
         for refresh_problem in problem_refreshers:
             refresh_problem()
+        fresh = run_status.update()
+        if on_run_recorded is not None:
+            on_run_recorded(fresh)
 
     panel = JobPanel(
         ctx,
@@ -259,7 +281,11 @@ def _render_analysis(
                 job.result = result
                 return result.message
 
-            ctx.runner.start_task(review, kind_of(name), body)
+            # A dry run writes nothing: it must not look like a finished run.
+            dry_run = "dry_run" in options and options["dry_run"].value
+            ctx.runner.start_task(
+                review, kind_of(name), body, history_key="" if dry_run else None
+            )
             # Disable at once: the panel timer would leave a double-click window.
             run_button.set_enabled(False)
         except (
@@ -296,7 +322,7 @@ def _render_options(name: str) -> dict:
         )
 
     if name in service.SCOPED:
-        checkbox(ONLY_KEPT, "Only the papers kept in ④ Screen (included or maybe)")
+        checkbox(ONLY_KEPT, "Only the papers kept in ③ Screen (included or maybe)")
     with ui.row().classes("items-center gap-4"):
         if name in ("keywords", "summaries"):
             select("clusters", "Clusters", service.CLUSTER_CHOICES, "auto")

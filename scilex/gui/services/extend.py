@@ -1,6 +1,6 @@
-"""Extend collect: run new queries on a review that already has papers.
+"""⑤ Extend: run new queries on a review that already has papers.
 
-Two modes, chosen in ② Extend collect:
+Two modes, chosen in ⑤ Extend:
 
 - ``add``: collect, aggregate, then keep the review's papers as they are and
   append only the papers they do not have yet (same DOI, or same title + year:

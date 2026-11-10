@@ -97,7 +97,7 @@ def _zotero_api(review_folder: Path):
     if source is None:
         raise TagReviewError(
             "This review has no Zotero collection to read the tags from: create it "
-            "from a Zotero collection, or choose one in ⑦ Export."
+            "from a Zotero collection, or choose one in ⑧ Export."
         )
     try:
         api = zotero_library.client(effective_keys(review_folder), library=source)
@@ -166,7 +166,7 @@ def run(
     if not any(d.answered or d.pending for d in analysis.dimensions.values()):
         raise TagReviewError(
             "No DIMENSION:value annotation tag in these papers. Annotate them in "
-            "Zotero (see ⑥ Annotate)"
+            "Zotero (see ④ Annotate)"
             + (", then tick \"Read the tags from Zotero now\"." if not from_zotero else ".")
         )
     paths.out_dir.mkdir(parents=True, exist_ok=True)

@@ -16,7 +16,7 @@ def render(ctx: AppContext, review: Review) -> None:
     """Draw the Enrich screen of ``review``."""
     ui.label("Enrich").classes("text-2xl font-bold")
     ui.label(
-        "Add data from external sources to the papers. Run it before ④ Screen on "
+        "Add data from external sources to the papers. Run it before ③ Screen on "
         "every paper, or after it on the papers you kept."
     ).classes("text-gray-500")
     render_tabs(ctx, review, service.in_group("enrich"))

@@ -60,7 +60,7 @@ class AnalysisResult:
 
 NO_EDGES_WARNING = (
     "Warning: no links found in the {graphs} graph: fetch citations for more "
-    "papers in ③ Enrich (Citations tab), then run the graph again."
+    "papers in ⑥ Enrich (Citations tab), then run the graph again."
 )
 SNOWBALL_NO_METADATA = (
     "No metadata could be fetched for the {count} candidates: Semantic Scholar "
@@ -131,7 +131,7 @@ ANALYSES = (
     AnalysisInfo(
         "keywords",
         "Keywords",
-        "Suggest new search keywords from frequent terms in the paper clusters (run Graph in ⑤ Analyses first).",
+        "Suggest new search keywords from frequent terms in the paper clusters (run Graph in ⑦ Analyses first).",
         "clusters",
         group="extend",
     ),
@@ -170,6 +170,18 @@ ANALYSES = (
         group="enrich",
     ),
     AnalysisInfo(
+        "search_keywords",
+        "Search keywords",
+        "Tag each paper with the search keywords of scilex.yml found in its title or "
+        "abstract (Collect_KW<n>:keyword, and BK:keyword for bonus keywords), as the "
+        "collection does. Gives keywords to papers imported from Zotero, a knowledge "
+        "graph or BibTeX, or added by snowballing. Existing tags are kept. "
+        "No network needed.",
+        "results",
+        "Runs in a few seconds; nothing is written when cancelled.",
+        group="enrich",
+    ),
+    AnalysisInfo(
         "orkg",
         "ORKG",
         "Add the Open Research Knowledge Graph paper, research fields and research "
@@ -187,7 +199,7 @@ def in_group(group: str) -> tuple[AnalysisInfo, ...]:
 
 
 # Analyses that can be limited to the papers kept in screening.
-SCOPED = ("citations", "enrich", "crossref", "lpwc", "orkg", "tags")
+SCOPED = ("citations", "enrich", "crossref", "lpwc", "orkg", "tags", "search_keywords")
 
 
 def collect_dir_of(config: SciLExConfig) -> Path:
@@ -215,7 +227,10 @@ def existing_outputs(collect_dir: Path, name: str) -> list[Path]:
         ),
         "graph": (graph_dir, ["clusters_*.csv", "*_graph.gexf", "*_graph.graphml"]),
         "summaries": (graph_dir, ["summary_report.md"]),
-        "tags": (collect_dir / "annotation_analysis", ["annotation_report.md", "*.png"]),
+        "tags": (
+            collect_dir / "annotation_analysis",
+            ["annotation_report.md", "*.png"],
+        ),
     }
     if name not in patterns:
         return []
@@ -270,12 +285,12 @@ def missing_prerequisite(collect_dir: Path, needs: str) -> str | None:
             (collect_dir / name).is_file()
             for name in ("citations_cache.json", "citers_cache.json")
         ):
-            return "No citation data yet. Fetch the citations in ③ Enrich (Citations)."
+            return "No citation data yet. Fetch the citations in ⑥ Enrich (Citations)."
     elif needs == "clusters":
         try:
             find_clusters_csv(str(graph_dir_of(collect_dir)))
         except FileNotFoundError:
-            return "No clusters yet. Run Graph in ⑤ Analyses first."
+            return "No clusters yet. Run Graph in ⑦ Analyses first."
     return None
 
 
@@ -763,8 +778,46 @@ def run_linked(
     path = Path(resolve_aggregate_path(config.main))
     write_results(data, path)
     if report.looked_up == 0 and report.failed:
-        raise AnalysisError(f"{report.source} could not be reached: check your connection.")
+        raise AnalysisError(
+            f"{report.source} could not be reached: check your connection."
+        )
     return AnalysisResult(report.message(), [path])
+
+
+def run_search_keywords(
+    config: SciLExConfig,
+    progress: ProgressFn,
+    *,
+    row_filter: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
+    cancel_event: CancelEvent = None,
+) -> AnalysisResult:
+    """Tag the papers with the configured search keywords found in their text.
+
+    See :mod:`scilex.keyword_annotation`.
+    """
+    from scilex import keyword_annotation
+    from scilex.gui.services.extend import write_results
+    from scilex.io_utils import load_aggregated_data, resolve_aggregate_path
+
+    groups = keyword_annotation.keyword_groups(config.main)
+    bonus = config.main.get("bonus_keywords") or []
+    if not groups and not bonus:
+        raise AnalysisError("No search keyword in scilex.yml: set them in ① Configure.")
+    try:
+        data = load_aggregated_data(config.main, preserve_missing_marker=True)
+    except (FileNotFoundError, ValueError) as exc:
+        raise AnalysisError(str(exc)) from exc
+    progress(10, "Looking for the search keywords in titles and abstracts…")
+    report = keyword_annotation.annotate_keywords(
+        data, groups, bonus, row_filter=row_filter
+    )
+    if _cancelled(cancel_event):
+        return AnalysisResult("Cancelled; nothing was written.")
+    path = Path(resolve_aggregate_path(config.main))
+    if report.updated:
+        write_results(data, path)
+    progress(100, report.message())
+    return AnalysisResult(report.message(), [path] if report.updated else [])
 
 
 def run_graph(
@@ -858,7 +911,7 @@ def run_summaries(
         # A graph without edges leaves every paper alone in its own community.
         return AnalysisResult(
             f"No links found in the {graph_label} graph: fetch citations for more papers in the "
-            "Citations tab of ③ Enrich. A summary of one-paper communities would be meaningless."
+            "Citations tab of ⑥ Enrich. A summary of one-paper communities would be meaningless."
         )
     report_path = analysis_dir / "summary_report.md"
     generate_report(stats, str(report_path), collect_name=config.main["collect_name"])
@@ -877,7 +930,12 @@ OPTION_CASTS: dict[str, dict[str, Callable]] = {
     "report": {},
     "keywords": {"top_k": int, "min_freq": int, "clusters": str},
     "enrich": {"dry_run": bool, "limit": int, "threshold": int},
-    "citations": {"limit": int, "skip_citers": bool, "no_fallback": bool, "source": str},
+    "citations": {
+        "limit": int,
+        "skip_citers": bool,
+        "no_fallback": bool,
+        "source": str,
+    },
     "snowball": {
         "direction": str,
         "top_k": int,
@@ -891,6 +949,7 @@ OPTION_CASTS: dict[str, dict[str, Callable]] = {
     "crossref": {"limit": int},
     "lpwc": {"limit": int},
     "orkg": {"limit": int},
+    "search_keywords": {},
 }
 
 
@@ -916,7 +975,10 @@ RUNNERS: dict[str, Callable[..., AnalysisResult]] = {
     "graph": run_graph,
     "summaries": run_summaries,
     "tags": run_tags,
-    "crossref": lambda config, progress, **kw: run_linked(config, progress, "crossref", **kw),
+    "crossref": lambda config, progress, **kw: run_linked(
+        config, progress, "crossref", **kw
+    ),
     "lpwc": lambda config, progress, **kw: run_linked(config, progress, "lpwc", **kw),
     "orkg": lambda config, progress, **kw: run_linked(config, progress, "orkg", **kw),
+    "search_keywords": run_search_keywords,
 }

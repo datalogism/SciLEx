@@ -29,6 +29,7 @@ from pathlib import Path
 from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import DCTERMS, PROV, RDF, RDFS
 
+from scilex.crawlers.utils import sanitize_secrets
 from scilex.kg import bib2json
 from scilex.kg.profile import (
     PROFILE_DIR,
@@ -134,6 +135,13 @@ def clean_tables(data: dict, drop_automation_tags: bool = True) -> tuple[dict, i
     Returns:
         ``(data, dropped tag count, cleaned note count)``.
     """
+    # No API key or token may reach the graph (URLs of API records can carry one).
+    for table in (data["entries"], data["lists"]):
+        for row in table:
+            for name, value in row.items():
+                if isinstance(value, str):
+                    row[name] = sanitize_secrets(value)
+
     kept, dropped = [], 0
     for row in data["lists"]:
         if (
@@ -158,6 +166,17 @@ def clean_tables(data: dict, drop_automation_tags: bool = True) -> tuple[dict, i
             cleaned += 1
         entry["note"] = line
     return data, dropped, cleaned
+
+
+def scrub_file(path: Path) -> bool:
+    """Mask any credential left in a written file; True if one was found."""
+    text = Path(path).read_text(encoding="utf-8")
+    clean = sanitize_secrets(text)
+    if clean == text:
+        return False
+    logger.warning("Credentials masked in %s", Path(path).name)
+    Path(path).write_text(clean, encoding="utf-8")
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -404,6 +423,7 @@ def build_knowledge_graph(
     for folder in OCDM_FOLDERS:
         graph.bind(folder, f"{base_iri}{folder}/", override=True)
     graph.serialize(output, format="turtle", encoding="utf-8")
+    scrub_file(output)
     report.triples = len(graph)
 
     if run_validation:

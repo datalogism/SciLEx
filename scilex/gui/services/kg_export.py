@@ -1,9 +1,9 @@
 """Knowledge graph of a review: Zotero export -> scilex-lpwc-ap mapping -> Turtle.
 
-Shared by ⑦ Export and the ``scilex-build-kg`` command. The papers are read
+Shared by ⑧ Export and the ``scilex-build-kg`` command. The papers are read
 from the review's own Zotero library / collection (``zotero_source.yml``); a
 review without one uses the collection named after it in the library of the
-keys file (where ⑦ Export pushes by default).
+keys file (where ⑧ Export pushes by default).
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ import importlib.util
 from dataclasses import dataclass
 from pathlib import Path
 
+from scilex.crawlers.utils import sanitize_secrets
 from scilex.gui.services import zotero_library
 from scilex.gui.services.zotero_library import ZoteroSource
 from scilex.kg.profile import default_base_iri, read_version, slugify
@@ -58,7 +59,7 @@ def resolve_source(keys: dict, folder: Path, review_name: str) -> ZoteroSource:
     if not collection:
         raise LookupError(
             f"No Zotero collection named '{review_name}': choose the review's Zotero "
-            "library and collection first (⑦ Export), or push the papers to Zotero."
+            "library and collection first (⑧ Export), or push the papers to Zotero."
         )
     return ZoteroSource(
         library_id=str(api.user_id),
@@ -135,7 +136,8 @@ def export_knowledge_graph(
         if not text.strip():
             raise LookupError(f"{source.describe()} has no paper.")
         bib = output_dir / f"{slug}.bib"
-        bib.write_text(text, encoding="utf-8")
+        # Written next to the graph: no API key or token in it either.
+        bib.write_text(sanitize_secrets(text), encoding="utf-8")
     progress(40, "Mapping with the scilex-lpwc-ap profile…")
     report = build_knowledge_graph(
         bib,

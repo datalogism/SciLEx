@@ -1,4 +1,4 @@
-"""ORCID gate, step layout and Extend collect (add new papers / re-aggregate)."""
+"""ORCID gate, step layout and ⑤ Extend (add new papers / re-aggregate)."""
 
 import pandas as pd
 import pytest
@@ -68,8 +68,8 @@ async def test_app_is_locked_without_orcid(ctx, tmp_path):
 
 def test_step_order():
     assert [step.key for step in PIPELINE_STEPS] == [
-        "overview", "configure", "collect", "enrich", "screen", "analyses", "annotate",
-        "export",
+        "overview", "explore", "configure", "collect", "screen", "annotate", "extend",
+        "consolidate", "enrich", "analyses", "export",
     ]
 
 
@@ -78,7 +78,7 @@ def test_collect_becomes_extend_collect_once_there_are_papers(ctx, tmp_path):
     assert STEPS["collect"].label_for(review) == "② Collect"
     review.collection_dir.mkdir(parents=True)
     review.results_path.write_text("title\nA\n")
-    assert STEPS["collect"].label_for(review) == "② Extend collect"
+    assert STEPS["collect"].label_for(review) == "⑤ Extend"
 
 
 async def test_extend_collect_page(ctx, tmp_path):

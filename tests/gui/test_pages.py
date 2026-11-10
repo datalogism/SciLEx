@@ -65,7 +65,7 @@ async def test_run_pipeline_enables_screening(ctx, tmp_path):
         await user.should_see("Completed", retries=50)
         assert ctx.workspace.get(review.id).has_results
 
-        # The sidebar unlocks ④ Screen by itself, without reloading the page.
+        # The sidebar unlocks ③ Screen by itself, without reloading the page.
         screen_button = user.find(marker="step-screen").elements.pop()
         for _ in range(30):
             if screen_button.enabled:

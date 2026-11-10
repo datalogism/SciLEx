@@ -14,6 +14,7 @@ from scilex.gui.components.stepper import (
     is_enabled,
     render_sidebar,
 )
+from scilex.gui.components.sync_badge import render_sync_badge
 from scilex.gui.state import AppContext
 
 # Each step is drawn by ``scilex.gui.pages.<step>.render(ctx, review)``;
@@ -65,7 +66,10 @@ def render(ctx: AppContext, review_id: str, step: str = DEFAULT_STEP) -> None:
 
     with ui.row().classes("w-full p-4 gap-6 no-wrap items-start"):
         with ui.column().classes("gap-0"):
-            ui.label(review.name).classes("text-lg font-bold px-2")
+            with ui.row().classes("items-center gap-1 no-wrap px-1"):
+                if review.has_results and not review.error:
+                    render_sync_badge(ctx, review)
+                ui.label(review.name).classes("text-lg font-bold")
             ui.label(str(review.folder)).classes(
                 "text-xs text-gray-500 px-2 pb-2 break-all w-52"
             )

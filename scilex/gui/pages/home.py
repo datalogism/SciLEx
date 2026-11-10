@@ -12,7 +12,7 @@ from scilex.gui.components.dialogs import one_shot_dialog
 from scilex.gui.components.errors import show_error
 from scilex.gui.components.folder_picker import pick_folder_in_page
 from scilex.gui.components.zotero_picker import ZoteroPicker
-from scilex.gui.services import keys_editor, zotero_library
+from scilex.gui.services import keys_editor, kg_import, zotero_library
 from scilex.gui.services.workspace import Review, reviews_home
 from scilex.gui.services.zotero_library import ZoteroSource
 from scilex.gui.state import AppContext
@@ -22,7 +22,7 @@ from scilex.settings.schema import SettingsError
 # Errors caused by the user's input or files, shown without a diagnostic report.
 EXPECTED_ERRORS = (OSError, SettingsError)  # missing, existing, unwritable files
 NO_TEMPLATE = "(blank)"
-SCRATCH, ZOTERO = "scratch", "zotero"  # starting points of a new review
+SCRATCH, ZOTERO, KG = "scratch", "zotero", "kg"  # starting points of a new review
 CARDS_POLL_SECONDS = 2.0
 
 
@@ -208,6 +208,19 @@ def _folder_input(ctx: AppContext, label: str) -> ui.input:
     return folder
 
 
+async def pick_kg_file(ctx: AppContext) -> str | None:
+    """Ask for a knowledge graph file (native dialog only); None if cancelled."""
+    if not ctx.native:
+        return None
+    import webview
+
+    patterns = ";".join(f"*{suffix}" for suffix in kg_import.KG_SUFFIXES)
+    selection = await app.native.main_window.create_file_dialog(
+        webview.FileDialog.OPEN, file_types=(f"Knowledge graph ({patterns})",)
+    )
+    return selection[0] if selection else None
+
+
 async def pick_config_file(ctx: AppContext) -> str | None:
     """Ask for a scilex.yml / scilex.config.yml (native dialog only); None if cancelled."""
     if not ctx.native:
@@ -230,7 +243,7 @@ def new_review_dialog(ctx: AppContext) -> None:
     with one_shot_dialog() as dialog, ui.card().classes("w-[36rem]"):
         ui.label("New review").classes("text-lg font-bold")
         start = ui.toggle(
-            {SCRATCH: "From scratch", ZOTERO: "From Zotero"},
+            {SCRATCH: "From scratch", ZOTERO: "From Zotero", KG: "From a knowledge graph"},
             value=SCRATCH,
         ).mark("new-review-start")
         folder = _folder_input(ctx, "Folder (optional, created if needed)")
@@ -250,6 +263,8 @@ def new_review_dialog(ctx: AppContext) -> None:
         template.bind_visibility_from(start, "value", value=SCRATCH)
         zotero = _ZoteroImportFields(ctx, name)
         zotero.column.bind_visibility_from(start, "value", value=ZOTERO)
+        knowledge_graph = _KgImportFields(ctx, name)
+        knowledge_graph.column.bind_visibility_from(start, "value", value=KG)
 
         def target_folder() -> Path:
             # A relative folder (or the name) lands in ~/SciLEx.
@@ -279,8 +294,9 @@ def new_review_dialog(ctx: AppContext) -> None:
                 create_from_scratch()
                 return
             create_button.disable()
+            fields = knowledge_graph if start.value == KG else zotero
             try:
-                created = await zotero.create(target_folder(), name.value.strip())
+                created = await fields.create(target_folder(), name.value.strip())
             finally:
                 create_button.enable()
             if created is not None:
@@ -458,6 +474,129 @@ class _ZoteroImportFields:
             for warning in summary.warnings:
                 ui.notify(warning, type="warning", multi_line=True, timeout=10000)
         return created[0][0]
+
+
+class _KgImportFields:
+    """Fields of the "From a knowledge graph" mode of the New review dialog."""
+
+    def __init__(self, ctx: AppContext, name: ui.input):
+        self.ctx, self.name = ctx, name
+        self.info: kg_import.KgInfo | None = None
+        with ui.column().classes("w-full gap-2") as self.column:
+            ui.label(
+                "A knowledge graph exported by SciLEx (⑧ Export, scilex-lpwc-ap "
+                "profile, .ttl) becomes the review's results: papers, authors, venues, "
+                "coding (annotation grid), citation links and sub-corpora. The graph is "
+                "copied into the review. API keys or tokens found in it are masked."
+            ).classes("text-xs text-gray-500")
+            with ui.row().classes("w-full items-center no-wrap"):
+                self.path = (
+                    ui.input("Knowledge graph file", placeholder="…/kg/<review>.ttl")
+                    .classes("grow")
+                    .mark("kg-file")
+                )
+                if ctx.native:
+
+                    async def browse() -> None:
+                        chosen = await pick_kg_file(ctx)
+                        if chosen:
+                            self.path.value = chosen
+                            await self.inspect()
+
+                    ui.button(icon="hub", on_click=browse).props("flat").tooltip(
+                        "Browse…"
+                    ).mark("kg-browse")
+                ui.button("Read", on_click=self.inspect).props("flat no-caps").mark(
+                    "kg-read"
+                )
+            self.summary = ui.label("").classes("text-sm").mark("kg-summary")
+            with ui.row().classes("w-full items-center no-wrap"):
+                self.config = (
+                    ui.input(
+                        "Configuration file (optional)",
+                        placeholder="scilex.yml or legacy scilex.config.yml",
+                    )
+                    .classes("grow")
+                    .mark("kg-config")
+                )
+                if ctx.native:
+
+                    async def browse_config() -> None:
+                        chosen = await pick_config_file(ctx)
+                        if chosen:
+                            self.config.value = chosen
+
+                    ui.button(icon="description", on_click=browse_config).props(
+                        "flat"
+                    ).tooltip("Browse…")
+
+    def _file(self) -> Path | None:
+        text = (self.path.value or "").strip().strip('"')
+        return Path(text).expanduser() if text else None
+
+    async def inspect(self) -> None:
+        """Read the graph and show what it holds; suggest a name."""
+        path = self._file()
+        if path is None:
+            ui.notify("Choose a knowledge graph file", type="warning")
+            return
+        self.summary.text = "Reading the graph…"
+        try:
+            self.info = await run.io_bound(kg_import.describe, path)
+        except kg_import.KgImportError as exc:
+            self.info = None
+            self.summary.text = ""
+            show_error("Cannot read this knowledge graph", exc, expected=True)
+            return
+        info = self.info
+        parts = f"; sub-corpora: {', '.join(info.subcorpora)}" if info.subcorpora else ""
+        self.summary.text = (
+            f"'{info.title}': {info.papers} papers, {info.triples} triples{parts}."
+        )
+        if not (self.name.value or "").strip():
+            self.name.value = _safe_name(info.title)
+
+    async def create(self, folder: Path, name: str):
+        """Create the review from the graph; None (after a message) on error."""
+        path = self._file()
+        if path is None:
+            ui.notify("Choose a knowledge graph file", type="warning")
+            return None
+        config_text = (self.config.value or "").strip()
+        config_file = Path(config_text).expanduser() if config_text else None
+        if config_file is not None and not config_file.is_file():
+            ui.notify(f"No such file: {config_file}", type="warning")
+            return None
+        notice = ui.notification(
+            f"Reading {path.name}…", spinner=True, timeout=None
+        )
+        try:
+            review, summary = await run.io_bound(
+                kg_import.create_review_from_kg,
+                self.ctx.workspace,
+                folder,
+                name,
+                path,
+                config_file,
+            )
+        except (*EXPECTED_ERRORS, kg_import.KgImportError, ValueError, yaml.YAMLError) as exc:
+            show_error("Cannot create the review", exc, expected=True)
+            return None
+        except Exception as exc:
+            show_error("Cannot create the review", exc)
+            return None
+        finally:
+            notice.dismiss()
+        ui.notify(
+            f"{review.name}: {summary.papers} papers imported from the knowledge graph; "
+            f"years {summary.years or '—'}; {summary.grid_dimensions} grid dimensions.",
+            type="positive",
+            multi_line=True,
+            timeout=10000,
+        )
+        for warning in summary.warnings:
+            ui.notify(warning, type="info", multi_line=True, timeout=10000)
+        return review
 
 
 def _safe_name(text: str) -> str:

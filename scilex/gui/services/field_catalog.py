@@ -180,6 +180,10 @@ SECTIONS: dict[str, SectionMeta] = {
         "Ask a language model to score each paper against your topic (paid, "
         "through OpenRouter).",
     ),
+    "subcorpora": SectionMeta(
+        "Sub-corpora",
+        "Zotero collections every paper must belong to; checked in Consolidate.",
+    ),
 }
 
 _TYPE_OPTIONS = ITEM_TYPES
@@ -447,6 +451,13 @@ FIELDS: dict[str, FieldMeta] = {
         "Output price ($ per million tokens)",
         "Used only to estimate the cost before screening.",
         advanced=True,
+    ),
+    # -- sub-corpora ----------------------------------------------------------
+    "subcorpora.required": FieldMeta(
+        "Required sub-corpora",
+        "Every paper must be in at least one Zotero collection of these names, or "
+        "under one (e.g. datasets, surveys, models). Consolidate lists the papers in "
+        "none and adds them to one, in Zotero for linked papers.",
     ),
 }
 

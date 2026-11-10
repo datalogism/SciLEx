@@ -343,6 +343,27 @@ class CollectSettings(BaseModel):
     vpn: dict[str, Any] | None = None
 
 
+class SubcorporaSettings(BaseModel):
+    """Sub-corpora (Zotero collections) of a review.
+
+    ``required``: every paper must belong to at least one collection with one of
+    these names, or to a sub-collection of one (e.g. ``[datasets, surveys,
+    models]``). Checked in Consolidate and filterable in Explore.
+    """
+
+    model_config = _STRICT
+
+    required: list[str] = Field(default_factory=list)
+
+    @field_validator("required")
+    @classmethod
+    def _clean(cls, value: list[str]) -> list[str]:
+        cleaned = [name.strip() for name in value if name and name.strip()]
+        if len({name.casefold() for name in cleaned}) != len(cleaned):
+            raise ValueError("subcorpora.required lists a name twice")
+        return cleaned
+
+
 class LLMScreeningSettings(BaseModel):
     """Optional LLM relevance screening (OpenRouter), see ``llm_relevance.py``."""
 
@@ -383,6 +404,7 @@ class ScilexSettings(BaseModel):
     report: ReportSettings = Field(default_factory=ReportSettings)
     collect: CollectSettings = Field(default_factory=CollectSettings)
     llm_screening: LLMScreeningSettings = Field(default_factory=LLMScreeningSettings)
+    subcorpora: SubcorporaSettings = Field(default_factory=SubcorporaSettings)
 
     @field_validator("name")
     @classmethod

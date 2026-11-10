@@ -7,8 +7,9 @@ from nicegui import run, ui
 from scilex.gui.components.dialogs import one_shot_dialog
 from scilex.gui.components.errors import show_error
 from scilex.gui.components.job_panel import BusyNotice, JobPanel
+from scilex.gui.components.run_status import RunStatus
 from scilex.gui.components.zotero_picker import ZoteroPicker
-from scilex.gui.services import exports, kg_export, zotero_library
+from scilex.gui.services import exports, kg_export, run_history, zotero_library
 from scilex.gui.services.jobs import Job, JobConflictError
 from scilex.gui.services.screening import ReviewFileError
 from scilex.gui.services.workspace import Review, Workspace
@@ -17,6 +18,11 @@ from scilex.settings.schema import SettingsError
 
 KIND = "export"
 KG = "kg"
+
+
+def history_key(fmt: str) -> str:
+    """Run-history key of the export to ``fmt`` (each format has its own date)."""
+    return f"{KIND}-{fmt}"
 
 FORMATS = (
     (
@@ -167,7 +173,7 @@ def render(ctx: AppContext, review: Review) -> None:
             with scope_note:
                 ui.label(
                     "Included papers only is unavailable: no paper is included yet "
-                    "(mark papers as included in ④ Screen)."
+                    "(mark papers as included in ③ Screen)."
                 ).classes("text-sm text-gray-500")
 
     scope.on_value_change(refuse_empty_scope)
@@ -184,6 +190,8 @@ def render(ctx: AppContext, review: Review) -> None:
     kg_problem = kg_export.missing_dependencies()
     buttons = {}
     with ui.column().classes("gap-3 w-full"):
+        history = run_history.load(review.folder)
+        run_statuses: list[RunStatus] = []
         for fmt, label, text in FORMATS:
             with ui.card().classes("w-full"), ui.row().classes("items-center gap-4"):
                 with ui.column().classes("gap-0 w-96"):
@@ -193,6 +201,7 @@ def render(ctx: AppContext, review: Review) -> None:
                     f"Export {label}",
                     icon="cloud_upload" if fmt == exports.ZOTERO else "download",
                 ).mark(f"export-{fmt}")
+                run_statuses.append(RunStatus(review, history_key(fmt), history=history))
                 if fmt == KG and kg_problem:
                     ui.label(kg_problem).classes("text-sm text-negative").mark(
                         "export-kg-missing"
@@ -235,6 +244,9 @@ def render(ctx: AppContext, review: Review) -> None:
                 ui.label(path.name).classes("text-sm")
 
     def show_result(job: Job) -> None:
+        latest = run_history.load(review.folder)
+        for status in run_statuses:
+            status.update(latest)
         result_box.clear()
         with result_box:
             if job.error or job.result is None:
@@ -341,7 +353,9 @@ def render(ctx: AppContext, review: Review) -> None:
             return f"Exported {job.result.name}"
 
         try:
-            job = ctx.runner.start_task(review, KIND, body)
+            job = ctx.runner.start_task(
+                review, KIND, body, history_key=history_key(fmt)
+            )
         except JobConflictError as exc:
             show_error("Cannot start the export", exc, expected=True)
             return

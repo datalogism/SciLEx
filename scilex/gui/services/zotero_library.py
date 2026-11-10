@@ -499,13 +499,42 @@ def create_review_from_zotero(
         SettingsError: If the configuration (given or deduced) is invalid.
         ValueError: If the collection has no paper.
     """
+    return create_review_from_items(
+        workspace,
+        folder,
+        name,
+        items,
+        config_file,
+        origin=f"the Zotero collection '{source.collection_name}'",
+        archive="Zotero",
+        snapshot_origin="import",
+        finish=lambda review: save_source(review.folder, source),
+    )
+
+
+def create_review_from_items(
+    workspace,
+    folder: Path,
+    name: str,
+    items: list[dict],
+    config_file: Path | None = None,
+    *,
+    origin: str,
+    archive: str = "Zotero",
+    snapshot_origin: str = "import",
+    finish=None,
+):
+    """Create a review whose results are ``items`` (Zotero-shaped papers).
+
+    ``origin`` names where the papers come from (``scilex.yml`` header, errors);
+    ``archive`` fills the ``archive`` column; ``finish(review)`` writes the
+    files specific to the origin. Nothing is left behind on failure.
+    """
     from scilex.gui.services.workspace import resolve_folder
 
     papers = [item for item in items if is_paper(item)]
     if not papers:
-        raise ValueError(
-            f"The Zotero collection '{source.collection_name}' has no paper."
-        )
+        raise ValueError(f"{origin[0].upper()}{origin[1:]} has no paper.")
     folder = resolve_folder(folder)
     config_path = folder / CONFIG_FILENAME
     if config_path.exists():
@@ -516,10 +545,7 @@ def create_review_from_zotero(
     _validate(data)
 
     folder.mkdir(parents=True, exist_ok=True)
-    header = (
-        f"# scilex.yml: created from the Zotero collection '{source.collection_name}' "
-        f"on {dt.date.today().isoformat()}.\n"
-    )
+    header = f"# scilex.yml: created from {origin} on {dt.date.today().isoformat()}.\n"
     config_path.write_text(
         header
         + yaml.safe_dump(
@@ -530,19 +556,25 @@ def create_review_from_zotero(
     try:
         review = workspace.open_review(folder)
         review.collection_dir.mkdir(parents=True, exist_ok=True)
+        results = items_to_results(papers)
+        results["archive"] = archive
         write_aggregated_csv(
-            items_to_results(papers),
+            results,
             str(review.results_path),
             quoting=csv.QUOTE_NONNUMERIC,
         )
+        from scilex.gui.services import paper_log
+
+        paper_log.update(folder, results, when=dt.date.today(), fresh=True)
         grid = deduce_grid(papers)
         summary.grid_dimensions = len(grid)
         if len(grid):
             save_grid(grid, folder / GRID_FILENAME)
-        save_source(folder, source)
+        if finish is not None:
+            finish(review)
         from scilex.gui.services.overview import record_snapshot, zotero_tags
 
-        record_snapshot(folder, zotero_tags(papers), "import")
+        record_snapshot(folder, zotero_tags(papers), snapshot_origin)
     except BaseException:
         # Leave no half-created review: the user can retry the import.
         workspace.forget_review(folder)

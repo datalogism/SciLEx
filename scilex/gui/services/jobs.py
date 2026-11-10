@@ -18,11 +18,13 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from scilex.config import SciLExConfig
 from scilex.crawlers.utils import sanitize_secrets
 from scilex.gui.services import extend as extension
+from scilex.gui.services import run_history
 from scilex.gui.services.workspace import Review
 from scilex.pipeline import jobs as job_states
 from scilex.pipeline.jobs import LogLinesHandler, WorkerThreadFilter
@@ -62,6 +64,14 @@ class Job:
     error: str | None = None
     result: Any = None  # value returned by a task body, for the page to display
     started_at: datetime = field(default_factory=datetime.now)
+    # Where and under which name a completed run is kept in the run history
+    # (see run_history); an empty key keeps nothing (e.g. a dry run).
+    history_key: str = ""
+    folder: Path | None = field(default=None, repr=False)
+    # Results file of the review and its state when the job started: a job
+    # that rewrites it records the new papers in the paper log.
+    results_path: Path | None = field(default=None, repr=False)
+    results_mtime: float | None = field(default=None, repr=False)
     finished_at: datetime | None = None
     cancel_event: threading.Event = field(default_factory=threading.Event, repr=False)
     thread_ids: set[int] = field(default_factory=set, repr=False)
@@ -82,6 +92,13 @@ def _default_run_aggregation(*args, **kwargs):
     from scilex.pipeline.orchestrator import run_aggregation
 
     return run_aggregation(*args, **kwargs)
+
+
+def _mtime(path: Path | None) -> float | None:
+    try:
+        return path.stat().st_mtime if path is not None else None
+    except OSError:
+        return None
 
 
 def _scale(value: float, bounds: tuple[int, int]) -> int:
@@ -120,11 +137,21 @@ class JobRunner:
         ]
         return max(jobs, key=lambda job: job.started_at, default=None)
 
-    def _new_job(self, review: Review, kind: str) -> Job:
+    def _new_job(
+        self, review: Review, kind: str, history_key: str | None = None
+    ) -> Job:
         with self._lock:
             if self.active_job() is not None:
                 raise JobConflictError("Another job is already running")
-            job = Job(id=uuid.uuid4().hex[:12], review_id=review.id, kind=kind)
+            job = Job(
+                id=uuid.uuid4().hex[:12],
+                review_id=review.id,
+                kind=kind,
+                history_key=kind if history_key is None else history_key,
+                folder=review.folder,
+                results_path=review.results_path,
+                results_mtime=_mtime(review.results_path),
+            )
             self._jobs[job.id] = job
         return job
 
@@ -137,7 +164,12 @@ class JobRunner:
         ).start()
 
     def start_task(
-        self, review: Review, kind: str, body: Callable[[Job], str | None]
+        self,
+        review: Review,
+        kind: str,
+        body: Callable[[Job], str | None],
+        *,
+        history_key: str | None = None,
     ) -> Job:
         """Run ``body(job)`` in a background thread, with log capture.
 
@@ -145,10 +177,13 @@ class JobRunner:
         ``job.result``, should check ``job.cancel_event`` if it can stop
         early, and returns the completion message (or None).
 
+        Once completed, the run is kept in the review's run history under
+        ``history_key`` (default: ``kind``; ``""`` keeps nothing).
+
         Raises:
             JobConflictError: If another job is still active.
         """
-        job = self._new_job(review, kind)
+        job = self._new_job(review, kind, history_key)
         self._start_thread(job, lambda: body(job) or "Done.")
         return job
 
@@ -202,7 +237,11 @@ class JobRunner:
             extend = None
         if extend is not None and extend not in extension.MODES:
             raise ValueError(f"Unknown extension mode {extend!r}")
-        job = self._new_job(review, PIPELINE)
+        history_key = {
+            extension.ADD_NEW: run_history.EXTEND_ADD,
+            extension.REAGGREGATE: run_history.EXTEND_REAGGREGATE,
+        }.get(extend, run_history.PIPELINE)
+        job = self._new_job(review, PIPELINE, history_key)
 
         def body() -> str:
             if clear_dir is not None:
@@ -247,7 +286,7 @@ class JobRunner:
         Raises:
             JobConflictError: If another job is still active.
         """
-        job = self._new_job(review, PIPELINE)
+        job = self._new_job(review, PIPELINE, run_history.AGGREGATE)
         mode = extension.REAGGREGATE if keep_outside else None
 
         def body() -> str:
@@ -296,6 +335,25 @@ class JobRunner:
             job.status = status
             return True
 
+    @staticmethod
+    def _log_papers(job: Job) -> None:
+        """Date the papers a completed job added to the review (see paper_log)."""
+        if job.folder is None or job.results_path is None:
+            return
+        if _mtime(job.results_path) in (None, job.results_mtime):
+            return  # results not written by this job
+        from scilex.gui.services import paper_log
+
+        try:
+            paper_log.update_from_file(
+                job.folder,
+                job.results_path,
+                when=datetime.now().date(),
+                fresh=job.results_mtime is None,
+            )
+        except Exception:  # never fail a completed job for its bookkeeping
+            logger.warning("Cannot update the paper log", exc_info=True)
+
     def _finish(self, job: Job, status: str, message: str) -> None:
         if self._set_status(job, status):
             job.message = message
@@ -326,6 +384,10 @@ class JobRunner:
             message = body()
             if self._cancelled(job):
                 return
+            # Saved before the job turns COMPLETED: the page redraws its
+            # "last run" chip as soon as it sees the job finished.
+            self._remember(job, message)
+            self._log_papers(job)
             self._finish(job, job_states.COMPLETED, message)
         except BaseException as exc:
             # BaseException too: a SystemExit raised by pipeline code must not
@@ -342,6 +404,16 @@ class JobRunner:
             self._finish(job, job_states.FAILED, f"Error: {error}")
         finally:
             root_logger.removeHandler(handler)
+
+    @staticmethod
+    def _remember(job: Job, message: str) -> None:
+        """Keep a successful job in the review's run history (never fails the job)."""
+        if not job.history_key or job.folder is None:
+            return
+        try:
+            run_history.record(job.folder, job.history_key, datetime.now(), message)
+        except Exception as exc:
+            logger.warning("Cannot save the run history of %s: %s", job.kind, exc)
 
     def _collect(self, job: Job, config: SciLExConfig) -> None:
         job.phase = "collecting"

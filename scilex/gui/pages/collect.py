@@ -5,9 +5,11 @@ from nicegui import ui
 from scilex.gui.components.dialogs import one_shot_dialog
 from scilex.gui.components.errors import show_error
 from scilex.gui.components.job_panel import BusyNotice, JobPanel
+from scilex.gui.components.run_status import RunStatus
 from scilex.gui.pages.analyses import render_tabs
 from scilex.gui.services import analyses as analyses_service
 from scilex.gui.services import extend as extension
+from scilex.gui.services import run_history
 from scilex.gui.services.collect_summary import (
     KEYS_HINT,
     api_rows,
@@ -50,15 +52,19 @@ def _show_report(title: str, path) -> None:
     dialog.open()
 
 
-def render(ctx: AppContext, review: Review) -> None:
-    """Draw the Collect screen of ``review`` (Extend collect once it has papers)."""
-    extending = review.has_results
+def render(ctx: AppContext, review: Review, extending: bool = False) -> None:
+    """Draw the Collect screen of ``review``; ``extending``: the ⑤ Extend screen.
+
+    Both run the same collection pipeline. Collect builds the corpus (Run starts
+    from zero); Extend adds to the papers the review already has (collected or
+    loaded from Zotero) and holds the corpus-extension tools (snowball, keywords).
+    """
     if extending:
-        ui.label("Extend collect").classes("text-2xl font-bold").mark("extend-title")
+        ui.label("Extend").classes("text-2xl font-bold").mark("extend-title")
         ui.label(
-            "The review already has papers. Run the queries of scilex.yml that were "
-            "not run yet (new keywords, years or APIs set in ① Configure), or extend "
-            "the corpus by snowballing below."
+            "Add papers to the review: run the queries of scilex.yml that were not "
+            "run yet (new keywords, years or APIs set in ① Configure), or extend the "
+            "corpus through citations (Snowball) and new search keywords below."
         ).classes("text-gray-500")
     else:
         ui.label("Collect").classes("text-2xl font-bold")
@@ -66,6 +72,18 @@ def render(ctx: AppContext, review: Review) -> None:
             "Query the APIs listed in scilex.yml, then deduplicate, filter and rank "
             "the papers."
         ).classes("text-gray-500")
+        if review.has_results:
+            with ui.row().classes("items-center gap-2").mark("collect-has-papers"):
+                ui.icon("info").classes("text-primary")
+                ui.label(
+                    "This review already has papers. To add papers without losing "
+                    "them, use ⑤ Extend."
+                ).classes("text-sm")
+                ui.button(
+                    "Go to ⑤ Extend",
+                    icon="hub",
+                    on_click=lambda: ui.navigate.to(f"/review/{review.id}/extend"),
+                ).props("outline dense")
 
     # Pre-flight: validate scilex.yml before offering to run.
     with ui.column().classes("gap-1"):
@@ -112,7 +130,7 @@ def render(ctx: AppContext, review: Review) -> None:
     if load_decisions(review):
         ui.label(
             "Decisions are kept; papers that are no longer in the new results "
-            "will appear as orphans in ④ Screen."
+            "will appear as orphans in ③ Screen."
         ).classes("text-sm text-gray-600").mark("screening-kept-notice")
     busy_notice = BusyNotice(ctx)
     with ui.row().classes("items-center gap-4"):
@@ -152,6 +170,23 @@ def render(ctx: AppContext, review: Review) -> None:
             .props("outline color=negative")
             .mark("cancel")
         )
+    # When each pipeline action last completed: red never, green recent, grey older.
+    history = run_history.load(review.folder)
+    with ui.row().classes("items-center gap-2").mark("run-statuses"):
+        if extending:
+            actions = (
+                (run_history.EXTEND_ADD, "Add new papers"),
+                (run_history.EXTEND_REAGGREGATE, "Re-aggregate"),
+                (run_history.PIPELINE, "Full collection"),
+            )
+        else:
+            actions = (
+                (run_history.PIPELINE, "Collection"),
+                (run_history.AGGREGATE, "Aggregation"),
+            )
+        run_statuses = [
+            RunStatus(review, key, label, history) for key, label in actions
+        ]
     resume_hint = ui.label().classes("text-sm text-gray-500")
     if extending:
         ui.markdown(
@@ -206,6 +241,9 @@ def render(ctx: AppContext, review: Review) -> None:
 
     def on_job_finished(job: Job) -> None:
         resume_cache["info"] = detect_resume(review.collection_dir)
+        latest = run_history.load(review.folder)
+        for status in run_statuses:
+            status.update(latest)
         update_buttons(job)
 
     panel = JobPanel(
@@ -423,7 +461,7 @@ def render(ctx: AppContext, review: Review) -> None:
                 review,
                 Workspace.load_config(review),
                 skip_citations=skip_citations.value,
-                keep_outside=extending,
+                keep_outside=review.has_results,  # never drop imported or snowballed papers
             )
         except (SettingsError, FileNotFoundError, JobConflictError) as exc:
             show_error("Cannot start the aggregation", exc, expected=True)

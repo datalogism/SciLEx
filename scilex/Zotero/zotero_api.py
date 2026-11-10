@@ -426,6 +426,38 @@ class ZoteroAPI:
             totals["failed"] += outcome["failed"]
         return totals
 
+    def update_item_collections(
+        self, updates: dict[str, tuple[int, list[str]]], batch_size: int = 50
+    ) -> dict[str, int]:
+        """
+        Set the collections of existing items, ``batch_size`` items per request.
+
+        Same version check as :meth:`update_item_tags`: an item edited in
+        between is refused (counted as failed).
+
+        Args:
+            updates: ``{item key: (item version, collection keys)}``.
+            batch_size: Items per request (Zotero accepts at most 50).
+
+        Returns:
+            ``{"success": n, "failed": m}``
+        """
+        payload = [
+            {"key": key, "version": version, "collections": list(collections)}
+            for key, (version, collections) in updates.items()
+        ]
+        totals = {"success": 0, "failed": 0}
+        for start in range(0, len(payload), batch_size):
+            batch = payload[start : start + batch_size]
+            response = self._post("/items", batch)
+            if response is None:
+                totals["failed"] += len(batch)
+                continue
+            outcome = self._count_outcome(response, batch)
+            totals["success"] += outcome["success"]
+            totals["failed"] += outcome["failed"]
+        return totals
+
     def get_existing_item_urls(self, collection_key: str) -> set:
         """
         Get URLs of all existing items in a collection.

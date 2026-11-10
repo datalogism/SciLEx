@@ -278,5 +278,5 @@ def _draw(review: Review, data: service.Overview) -> None:
             ui.label(
                 "No snapshot yet. SciLEx records the annotation state each time it reads "
                 "it from Zotero: when the review is imported, when you build the report in "
-                "⑥ Annotate, and when you export the knowledge graph in ⑦ Export."
+                "④ Annotate, and when you export the knowledge graph in ⑧ Export."
             ).classes("text-sm text-gray-600")

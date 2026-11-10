@@ -24,7 +24,7 @@ REQUIRED_DATA = {
     "data/venue_rankings": "*.csv",
     "tagging": "*.csv",
     "gui/assets": "*.png",
-    # Pinned scilex-lpwc-ap profile, mapped by ⑦ Export (knowledge graph).
+    # Pinned scilex-lpwc-ap profile, mapped by ⑧ Export (knowledge graph).
     "kg/ap": "VERSION.json",
     "kg/ap/ontology": "*.ttl",
     "kg/ap/shapes": "*.ttl",

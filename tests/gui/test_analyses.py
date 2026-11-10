@@ -15,7 +15,7 @@ pytestmark = pytest.mark.anyio
 NAMES = [info.name for info in service.ANALYSES]
 # Step page showing each analysis.
 STEP = {
-    info.name: {"enrich": "enrich", "extend": "collect", "analyse": "analyses"}[info.group]
+    info.name: {"enrich": "enrich", "extend": "extend", "analyse": "analyses"}[info.group]
     for info in service.ANALYSES
 }
 
@@ -148,7 +148,7 @@ def _review_with_results(ctx, tmp_path):
 async def test_tabs_are_rendered(ctx, tmp_path):
     review = _review_with_results(ctx, tmp_path)
     async with user_simulation(build_root(ctx)) as user:
-        for step in ("enrich", "collect", "analyses"):
+        for step in ("enrich", "extend", "analyses"):
             await user.open(f"/review/{review.id}/{step}")
             for name in NAMES:
                 if STEP[name] == step:
@@ -160,7 +160,7 @@ async def test_tabs_are_rendered(ctx, tmp_path):
 async def test_missing_input_is_explained(ctx, tmp_path):
     review = _review_with_results(ctx, tmp_path)
     async with user_simulation(build_root(ctx)) as user:
-        await user.open(f"/review/{review.id}/collect")
+        await user.open(f"/review/{review.id}/extend")
         user.find(marker="analysis-tab-snowball").click()
         await user.should_see(marker="analysis-missing-snowball")
 
@@ -307,15 +307,15 @@ async def test_citations_job_lifts_snowball_warning(ctx, tmp_path, monkeypatch):
     _fake_fetchers(monkeypatch, calls)
     review = _review_with_dois(ctx, tmp_path)
     async with user_simulation(build_root(ctx)) as user:
-        # Snowball (② Extend collect) needs the citations fetched in ③ Enrich.
-        await user.open(f"/review/{review.id}/collect")
+        # Snowball (⑤ Extend) needs the citations fetched in ⑥ Enrich.
+        await user.open(f"/review/{review.id}/extend")
         user.find(marker="analysis-tab-snowball").click()
         await user.should_see(marker="analysis-missing-snowball")
         await user.open(f"/review/{review.id}/enrich")
         user.find(marker="analysis-tab-citations").click()
         user.find(marker="analysis-run-citations").click()
         await user.should_see("Completed", retries=50)
-        await user.open(f"/review/{review.id}/collect")
+        await user.open(f"/review/{review.id}/extend")
         user.find(marker="analysis-tab-snowball").click()
         await user.should_not_see(marker="analysis-missing-snowball", retries=50)
 
@@ -456,6 +456,7 @@ def test_tabs_follow_prerequisites():
         "enrich",
         "crossref",
         "lpwc",
+        "search_keywords",
         "orkg",
     ]
 

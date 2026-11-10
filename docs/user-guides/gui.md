@@ -5,8 +5,8 @@ It works on the same files as the CLI: a review is a folder containing a `scilex
 and API keys live in `~/.config/scilex/keys.yml`. You can switch between the app and
 the `scilex-*` commands at any time.
 
-Screens of a review: ① Configure, ② Collect (**Extend collect** once the review has
-papers), ③ Enrich, ④ Screen, ⑤ Analyses, ⑥ Annotate, ⑦ Export, plus API keys. Enrich,
+Screens of a review: ① Configure, ② Collect (**⑤ Extend** once the review has
+papers), ⑥ Enrich, ③ Screen, ⑦ Analyses, ④ Annotate, ⑧ Export, plus API keys. Enrich,
 Screen, Analyses and Export unlock once a collection has been aggregated (or imported
 from Zotero).
 
@@ -65,12 +65,26 @@ uv run scilex-gui --browser  # same UI in a browser tab (useful for debugging)
      (`scilex.yml`, or a legacy `scilex.config.yml` with its `scilex.advanced.yml`) wins
      over these deductions; what it lacks is still deduced. The library and collection
      are remembered in `zotero_source.yml`: they are the review's Zotero source (see
-     ⑦ Export).
+     ⑧ Export).
 2. **API keys** (once for all reviews), then **① Configure**, **② Collect**,
-   optionally **③ Enrich**, then **④ Screen**, optionally **⑤ Analyses** and
-   **⑥ Annotate**, and **⑦ Export**.
+   optionally **⑥ Enrich**, then **③ Screen**, optionally **⑦ Analyses** and
+   **④ Annotate**, and **⑧ Export**.
 
 Only one job (collection, export, analysis) runs at a time in the app.
+
+Each costly action (collection, aggregation, extension, every enrichment and analysis,
+every export, applying annotations in Zotero) shows when it last completed, so you
+do not run it again by mistake:
+
+- **red**: never run for this review;
+- **green**: completed in the last 30 days ("Last run 3 h ago");
+- **grey**: completed earlier.
+
+The colour is shown as a chip next to the action's button, and as a dot on the tabs
+of ⑤ Extend, ⑥ Enrich and ⑦ Analyses. Hover the chip for the exact date and the result
+of that run. The dates are kept in `gui_run_history.json` in the review folder; runs
+made before it existed (or with the command-line tools) are dated from the files they
+wrote, when there are any.
 
 ## Overview
 
@@ -82,9 +96,26 @@ history**.
 
 Zotero keeps no history of tags, so the history is made of snapshots SciLEx records
 each time it reads the annotations: when a review is imported from Zotero, when the
-report is built in ⑥ Annotate, and at each knowledge-graph export. They are kept in
+report is built in ④ Annotate, and at each knowledge-graph export. They are kept in
 `annotation_history.jsonl` in the review folder (one line per snapshot) and listed under
 the chart.
+
+## Explore
+
+Browses the papers of the review (once it has some). Filter them with the decision,
+a title/abstract search and the same property filters as ③ Screen; the count of
+matching papers is shown. **Break down by** draws the selection per value of any
+property (type, origin, collection, tags, LPWC tasks…); clicking a bar filters on it.
+
+Selecting a paper opens its **notice**: authors, venue, type, DOI and links (web page,
+PDF, Papers with Code, code repository, Linked Papers With Code, ORKG), origin and
+import date, citation counts, abstract, search keywords, LPWC tasks and datasets, ORKG
+research problems and fields, Zotero collection, sources, tags grouped by annotation
+dimension (`DIMENSION:value`) and the screening note. Clicking a value filters on it;
+the arrows move to the previous or next paper. **Save selection** writes the matching
+papers, with every column, to `output/<name>/explore_selection.csv`.
+
+Explore is read-only: decisions are taken in ③ Screen.
 
 ## ① Configure
 
@@ -142,10 +173,10 @@ available. **Cancel** stops the collection at the next query; the aggregation ca
 interrupted. Results go to `<folder>/output/<name>/aggregated_results.csv`, exactly as
 with `scilex-collect` then `scilex-aggregate`.
 
-### Extend collect
+### ⑤ Extend
 
 Once the review has papers (collected, imported from Zotero or snowballed), the step
-becomes **Extend collect**. Add keywords, years or sources in ① Configure: only the
+becomes **⑤ Extend**. Add keywords, years or sources in ① Configure: only the
 queries not run yet are collected. Then:
 
 - **Add new papers**: the papers of the review stay as they are (ranking and screening
@@ -157,13 +188,67 @@ queries not run yet are collected. Then:
 
 The previous results are saved in `output/<name>/previous_results/` first. Below, the
 **Extend the corpus** tabs hold **Snowball** (papers often cited by, or citing, the
-corpus; needs the citations of ③ Enrich) and **Keywords** (new search keywords from the
-communities of ⑤ Analyses → Graph).
+corpus; needs the citations of ⑥ Enrich) and **Keywords** (new search keywords from the
+communities of ⑦ Analyses → Graph).
 
-## ③ Enrich
+**Add papers from Zotero** adds the papers of a Zotero library (yours or a group) or of a
+collection, with or without its sub-collections (kept as sub-corpora). Zotero is not a
+keyword search, so it is a source of ⑤ Extend rather than of ② Collect. Papers the
+review already has (same DOI, else same title and year) are not added again; they get
+the Zotero tags and sub-corpora they lack (nothing is removed). With **Make it the
+review's Zotero library** (default), the choice is saved as the review's Zotero library
+(sync, push and knowledge-graph export use it) and every paper is matched with its
+Zotero item; otherwise the papers are added without a link. It runs as a job, so it
+waits for a running collection to finish.
+
+**Import a BibTeX file** adds the entries of a `.bib` file (exported from Zotero, Google
+Scholar, DBLP…) to the review, with `archive` = `BibTeX`. Papers the review already has
+(same DOI, else same title and year) and entries without a title are skipped, so a file
+can be imported again after adding entries to it. The entry `keywords` become tags,
+LaTeX accents are decoded, and the previous results are backed up first. The imported
+papers are kept by a re-aggregation, like Zotero and snowballed papers.
+
+### Consolidate
+
+The aggregation deduplicates and filters the papers of the keyword collection only.
+Papers added afterwards (new queries, Zotero, BibTeX, knowledge graph, snowball) are
+merged by exact DOI, or exact title and year, and the filters of `scilex.yml` never saw
+them. **Consolidate** works on the whole corpus; **Preview** writes nothing.
+
+- **Duplicates**: same DOI, same title, or titles at least *Title similarity* % alike
+  published at most a year apart. With **Keep copies in different sub-corpora apart**
+  (default), a paper annotated once per Zotero collection on purpose (e.g. as a model
+  and as a dataset) is not grouped. Each group lists its copies, their sub-corpus and
+  number of codes; tick the groups to merge. Groups whose copies carry different
+  `DIMENSION:value` codes are not pre-ticked: one paper may describe several datasets.
+  The most complete copy is kept; it gains the sources, keywords, sub-corpora and empty
+  fields of the others, and the codes of dimensions it has not coded (its own codes
+  win). A screening decision moves to the kept copy; a disagreement goes in its note.
+- **Filters of `scilex.yml`**: year range, item-type whitelist, required abstract / DOI /
+  year, minimum number of authors, abstract length (the item types of `always_keep` are
+  spared the quality rules, as in the aggregation). Only papers found by queries are
+  filtered unless **Filter imported papers too** is ticked; papers included in ③ Screen
+  are never filtered. Rejected papers are **excluded in ③ Screen** with the reason in the
+  note (reversible), or **removed** from the results.
+
+- **Required sub-corpora** (`subcorpora: required: [datasets, surveys, models]` in
+  `scilex.yml`, or *Sub-corpora* in ① Configure): every paper must be in a Zotero
+  collection of one of these names, or under one (`models / Website` counts as models).
+  The papers in none are listed with a suggestion (a collection whose name starts with
+  it, e.g. the `datasets 10/11/2026 15:35:35` collection a Zotero file import creates);
+  **Classify** adds them to the chosen collection, in Zotero for linked papers.
+
+**Apply** backs up the results first and runs as a job.
+
+Linking a review with Zotero (⑧ Export, or ⑤ Extend → Add papers from Zotero) gives each
+row its own Zotero item, preferring items in the required sub-corpora (so a paper kept as
+a model and as a dataset links to both items, and copies made by a Zotero import are not
+used), and takes each paper's sub-corpora from its item's collections.
+
+## ⑥ Enrich
 
 Adds data from external sources. Run it before screening on every paper, or after it
-with **Only the papers kept in ④ Screen** (included or maybe). One tab per source:
+with **Only the papers kept in ③ Screen** (included or maybe). One tab per source:
 
 - **Citations**: references and citing papers (needed by Snowball and the Graph). Source:
   Semantic Scholar then Crossref then OpenCitations (default), Crossref + OpenCitations,
@@ -177,11 +262,18 @@ with **Only the papers kept in ④ Screen** (included or maybe). One tab per sou
   `lpwc_methods`, `lpwc_datasets`, `lpwc_repositories`, `lpwc_conference`, `lpwc_paper`.
 - **ORKG** (by DOI, else exact title): `orkg_paper`, `orkg_research_fields`,
   `orkg_research_problems` (of the paper's contributions).
+- **Search keywords** (no network): tags each paper with the keywords of `scilex.yml`
+  found in its title or abstract: `Collect_KW<n>:keyword` in `collect_keywords` (group
+  *n*, exact phrase, any case) and `BK:keyword` in `bonus_keyword_tags` (bonus keywords,
+  all meaningful words present). Collected papers only carry the keywords of the queries
+  that found them; this gives keywords to papers imported from Zotero, a knowledge graph
+  or BibTeX, or added by snowballing. Existing tags are kept. The summary lists the
+  keywords found in no paper.
 
 Answers are cached in the collection folder (`<source>_cache.json`), so a rerun only asks
 for papers not looked up yet.
 
-## ④ Screen
+## ③ Screen
 
 Lists the aggregated papers by relevance score. Select a paper to read its abstract and
 open its DOI, then click **Include**, **Exclude** or **Maybe**, or press **I**, **E**,
@@ -190,23 +282,34 @@ Decisions are saved at once to `output/<name>/screening.csv` and survive a new
 aggregation; decisions on papers that disappeared are listed as *orphans* and can be
 forgotten. A note typed without a decision is not kept.
 
-## ⑤ Analyses
+**Filters** (under the search box) narrow the list by document type, origin (Collect,
+Extend collect, Zotero, knowledge graph or BibTeX import, Snowball), import date, source
+API, Zotero collection, search keywords, tags, LPWC tasks and datasets, and ORKG research
+problems and fields; only the properties whose values differ between papers are offered.
+Several values of one filter: any of them; several filters: all of them. **(none)**
+selects the papers without a value.
+
+The import date comes from `paper_log.json` in the review folder, which records when and
+how each paper first entered the review (collection, extension, snowball, imports, Zotero
+sync). Papers already there before this log existed show no date (*Before tracking*).
+
+## ⑦ Analyses
 
 Tabs: charts, citation graph and community summaries. Each tab describes the analysis,
 offers its main options and a **Run** button; progress and logs are shown live. Results
 (images, Markdown reports, tables) are read from the collection folder and shown again
-when the tab opens. The graph needs the citation data of ③ Enrich → Citations; summaries
-(and the keyword suggestions of Extend collect) need the graph to have run first.
+when the tab opens. The graph needs the citation data of ⑥ Enrich → Citations; summaries
+(and the keyword suggestions of ⑤ Extend) need the graph to have run first.
 **Cancel** stops an analysis at the end of its current step. **Run** buttons are disabled
 while another job is running.
 
-Snowball (in ② Extend collect) adds the new papers to `aggregated_results.csv` itself
+Snowball (in ⑤ Extend) adds the new papers to `aggregated_results.csv` itself
 (column `snowball_depth`), so Zotero and the exports include them; the original file is
 kept once as `aggregated_results_pre_snowball.csv`. Untick **Add to the collection** to
 write `aggregated_results_snowball.csv` instead (`scilex-snowball --separate-file` on the
 command line). **Re-aggregate everything** keeps the snowballed papers.
 
-## ⑥ Annotate
+## ④ Annotate
 
 Prepares and follows the manual annotation of the papers in Zotero.
 
@@ -224,14 +327,14 @@ Prepares and follows the manual annotation of the papers in Zotero.
   and who last edited each paper; the tables are also written to
   `output/<name>/annotations/`. Same as `python -m scilex.report_annotations`.
 
-Annotate reads the review's own Zotero library (see ⑦ Export).
+Annotate reads the review's own Zotero library (see ⑧ Export).
 
-## ⑦ Export
+## ⑧ Export
 
 **Zotero library of this review**: each review has its own Zotero source. Click
 **Change** to choose a library (yours or a group), then a collection (with or without its
 sub-collections) or the whole library. It is saved in `zotero_source.yml` and used by the
-Zotero push, ⑥ Annotate and the knowledge graph. Without one, the library of the API keys
+Zotero push, ④ Annotate and the knowledge graph. Without one, the library of the API keys
 and a collection named after the review are used.
 
 Choose the papers: only those marked *included* while screening, or all of them. Formats:

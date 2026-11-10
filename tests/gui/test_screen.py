@@ -79,3 +79,18 @@ async def test_orphans_can_be_forgotten(ctx, review):
         await user.should_see(marker="orphans")
         user.find(content="Forget").click()
     assert "doi:10.9/gone" not in screening.load_decisions(review)
+
+
+async def test_facet_filters_and_clear(ctx, review):
+    async with user_simulation(build_root(ctx)) as user:
+        await user.open(f"/review/{review.id}/screen")
+        await user.should_see(marker="screen-grid", retries=20)
+        grid = user.find(marker="screen-grid").elements.pop()
+        type_filter = user.find(marker="facet-item_type").elements.pop()
+        type_filter.set_value(["Journal article"])
+        assert [r["title"] for r in grid.options["rowData"]] == [
+            "Graph RAG",
+            "Unrelated topic",
+        ]
+        user.find(marker="clear-filters").click()
+        assert len(grid.options["rowData"]) == 3

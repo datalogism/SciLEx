@@ -26,20 +26,20 @@ class Step:
         return self.label
 
 
+# The review workflow: collect (or load from Zotero), screen, annotate, extend
+# the corpus, enrich it, analyse it, export it.
 PIPELINE_STEPS = (
     Step("overview", "Overview", "dashboard"),
+    Step("explore", "Explore", "manage_search", needs_results=True),
     Step("configure", "① Configure", "tune"),
-    Step(
-        "collect",
-        "② Collect",
-        "travel_explore",
-        label_with_results="② Extend collect",
-    ),
-    Step("enrich", "③ Enrich", "auto_awesome", needs_results=True),
-    Step("screen", "④ Screen", "fact_check", needs_results=True),
-    Step("analyses", "⑤ Analyses", "insights", needs_results=True),
-    Step("annotate", "⑥ Annotate", "sell"),
-    Step("export", "⑦ Export", "ios_share", needs_results=True),
+    Step("collect", "② Collect", "travel_explore"),
+    Step("screen", "③ Screen", "fact_check", needs_results=True),
+    Step("annotate", "④ Annotate", "sell"),
+    Step("extend", "⑤ Extend", "hub", needs_results=True),
+    Step("consolidate", "Consolidate", "merge_type", needs_results=True),
+    Step("enrich", "⑥ Enrich", "auto_awesome", needs_results=True),
+    Step("analyses", "⑦ Analyses", "insights", needs_results=True),
+    Step("export", "⑧ Export", "ios_share", needs_results=True),
 )
 EXTRA_STEPS = (Step("keys", "API keys", "key"),)
 STEPS = {step.key: step for step in (*PIPELINE_STEPS, *EXTRA_STEPS)}
