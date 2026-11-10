@@ -13,6 +13,14 @@ from nicegui import run, ui
 
 from scilex.gui.components.errors import show_error
 from scilex.gui.services import zotero_sync as sync
+from scilex.gui.services.jobs import (
+    ROWS,
+    Job,
+    JobConflictError,
+    results_resource,
+    review_zotero,
+    wait_for,
+)
 from scilex.gui.services.workspace import Review
 from scilex.gui.state import AppContext
 
@@ -28,7 +36,11 @@ LOOKS = {
     "pull": ("cloud_download", "primary", "Zotero has updates to get"),
     "push": ("cloud_upload", "warning", "SciLEx has changes to push to Zotero"),
     "both": ("sync", "deep-purple-6", "Updates on both sides: get and push"),
-    "conflict": ("sync_problem", "negative", "Changed on both sides: choose what to keep"),
+    "conflict": (
+        "sync_problem",
+        "negative",
+        "Changed on both sides: choose what to keep",
+    ),
 }
 
 
@@ -73,9 +85,11 @@ def summary(status: sync.SyncStatus) -> str:
 def render_sync_badge(ctx: AppContext, review: Review) -> None:
     """Draw the icon; it checks Zotero in the background."""
     current: dict = {"status": None}
-    with ui.button(icon=LOOKS["checking"][0]).props(
-        f"flat round dense color={LOOKS['checking'][1]}"
-    ).mark("sync-badge") as button:
+    with (
+        ui.button(icon=LOOKS["checking"][0])
+        .props(f"flat round dense color={LOOKS['checking'][1]}")
+        .mark("sync-badge") as button
+    ):
         tooltip = ui.tooltip(LOOKS["checking"][2])
         badge = ui.badge("").props("floating rounded").mark("sync-badge-count")
         badge.set_visibility(False)
@@ -102,34 +116,53 @@ def render_sync_badge(ctx: AppContext, review: Review) -> None:
     ui.timer(CHECK_EVERY_SECONDS, lambda: refresh(True))
 
 
-def _busy(ctx: AppContext) -> bool:
-    if ctx.runner.active_job() is not None:
-        ui.notify("A job is running: sync when it has finished", type="warning")
-        return True
-    return False
+SYNC_JOB = "zotero-sync"
+
+
+def _resources(review: Review) -> list:
+    """A sync rewrites the review's rows and writes its Zotero library."""
+    return [results_resource(review.id, ROWS), review_zotero(review)]
 
 
 def _open_dialog(ctx: AppContext, review: Review, current: dict, refresh) -> None:
-    with ui.dialog() as dialog, ui.card().classes("w-[44rem] max-w-full gap-2").mark(
-        "sync-dialog"
+    with (
+        ui.dialog() as dialog,
+        ui.card().classes("w-[44rem] max-w-full gap-2").mark("sync-dialog"),
     ):
         ui.label("Zotero sync").classes("text-lg font-bold")
         body = ui.column().classes("w-full gap-2")
 
         async def act(label: str, function, *args, reload: bool = False) -> None:
-            if _busy(ctx):
-                return
+            def job_body(job: Job) -> str:
+                try:
+                    job.result = function(review, *args)
+                except sync.SyncError as exc:
+                    job.result = exc  # explained to the user, not an app failure
+                return "Done."
+
             spinner.set_visibility(True)
             try:
-                result = await run.io_bound(function, review, *args)
-            except sync.SyncError as exc:
-                show_error(f"Cannot {label}", exc, expected=True)
-                return
-            except Exception as exc:
-                show_error(f"Cannot {label}", exc)
+                # A job, so it waits for (and blocks) the jobs using these papers.
+                job = ctx.runner.start_task(
+                    review,
+                    SYNC_JOB,
+                    job_body,
+                    history_key="",
+                    resources=_resources(review),
+                )
+                job = await wait_for(job)
+            except JobConflictError as exc:
+                ui.notify(f"{exc}: sync when it has finished", type="warning")
                 return
             finally:
                 spinner.set_visibility(False)
+            result = job.result
+            if job.error:
+                show_error(f"Cannot {label}", RuntimeError(job.error))
+                return
+            if isinstance(result, sync.SyncError):
+                show_error(f"Cannot {label}", result, expected=True)
+                return
             if isinstance(result, dict):
                 ui.notify(", ".join(f"{k}: {v}" for k, v in result.items()))
             await recheck()
@@ -159,7 +192,9 @@ def _open_dialog(ctx: AppContext, review: Review, current: dict, refresh) -> Non
                     ui.button(
                         "Link with Zotero",
                         icon="link",
-                        on_click=lambda: act("link with Zotero", sync.link, reload=True),
+                        on_click=lambda: act(
+                            "link with Zotero", sync.link, reload=True
+                        ),
                     ).props("no-caps").mark("sync-link")
                     return
                 if status.error:
@@ -170,14 +205,19 @@ def _open_dialog(ctx: AppContext, review: Review, current: dict, refresh) -> Non
                     status.zotero_changed,
                     [
                         f"{len(status.zotero_new)} new papers in the collection"
-                        if status.zotero_new else "",
+                        if status.zotero_new
+                        else "",
                         f"{len(status.zotero_removed)} papers removed from Zotero "
-                        "(kept in SciLEx)" if status.zotero_removed else "",
+                        "(kept in SciLEx)"
+                        if status.zotero_removed
+                        else "",
                     ],
                     "Get Zotero updates",
                     "cloud_download",
                     status.zotero_count > 0,
-                    lambda: act("get the Zotero updates", sync.pull, status, reload=True),
+                    lambda: act(
+                        "get the Zotero updates", sync.pull, status, reload=True
+                    ),
                     "sync-pull",
                 )
                 _side(
@@ -185,7 +225,9 @@ def _open_dialog(ctx: AppContext, review: Review, current: dict, refresh) -> Non
                     status.local_changed,
                     [
                         f"{status.local_unlinked} papers are not in Zotero: push them "
-                        "in ⑧ Export, then link again" if status.local_unlinked else "",
+                        "in ⑧ Export, then link again"
+                        if status.local_unlinked
+                        else "",
                     ],
                     "Push to Zotero",
                     "cloud_upload",
@@ -227,20 +269,26 @@ def _conflicts(status: sync.SyncStatus, review: Review, act) -> None:
     if not status.conflicts:
         return
     ui.label("Changed on both sides").classes("font-bold text-negative")
-    ui.label(
-        "Choose the value to keep; the others are synced meanwhile."
-    ).classes("text-xs text-gray-500")
+    ui.label("Choose the value to keep; the others are synced meanwhile.").classes(
+        "text-xs text-gray-500"
+    )
     for index, conflict in enumerate(status.conflicts):
         with ui.card().classes("w-full p-2 gap-1").mark(f"sync-conflict-{index}"):
-            ui.label(f"{conflict.title[:80]} — {conflict.what}").classes("text-sm font-medium")
+            ui.label(f"{conflict.title[:80]} — {conflict.what}").classes(
+                "text-sm font-medium"
+            )
             ui.label(f"SciLEx: {conflict.local[:200] or '(empty)'}").classes("text-xs")
             ui.label(f"Zotero: {conflict.zotero[:200] or '(empty)'}").classes("text-xs")
             with ui.row().classes("gap-2"):
                 ui.button(
                     "Keep SciLEx",
-                    on_click=lambda c=conflict: act("keep the SciLEx value", sync.resolve, c, "scilex"),
+                    on_click=lambda c=conflict: act(
+                        "keep the SciLEx value", sync.resolve, c, "scilex"
+                    ),
                 ).props("outline dense no-caps").mark(f"sync-keep-scilex-{index}")
                 ui.button(
                     "Use Zotero",
-                    on_click=lambda c=conflict: act("use the Zotero value", sync.resolve, c, "zotero", reload=True),
+                    on_click=lambda c=conflict: act(
+                        "use the Zotero value", sync.resolve, c, "zotero", reload=True
+                    ),
                 ).props("outline dense no-caps").mark(f"sync-use-zotero-{index}")

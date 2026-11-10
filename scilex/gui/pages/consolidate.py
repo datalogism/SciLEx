@@ -12,7 +12,13 @@ from scilex.gui.components.errors import show_error
 from scilex.gui.components.job_panel import JobPanel
 from scilex.gui.components.run_status import RunStatus
 from scilex.gui.services import consolidate as service
-from scilex.gui.services.jobs import Job, JobConflictError
+from scilex.gui.services.jobs import (
+    ROWS,
+    Job,
+    JobConflictError,
+    results_resource,
+    review_zotero,
+)
 from scilex.gui.services.workspace import Review, Workspace
 from scilex.gui.state import AppContext
 
@@ -219,13 +225,15 @@ class ConsolidatePage:
                     .classes("w-36")
                     .mark("consolidate-role")
                 )
-                where = "in Zotero" if paper.zotero_key else "in SciLEx only (not linked)"
+                where = (
+                    "in Zotero" if paper.zotero_key else "in SciLEx only (not linked)"
+                )
                 ui.label(
                     f"{paper.title} — now in: {paper.collections} — added {where}"
                 ).classes("text-sm")
-        ui.button(
-            "Classify", icon="category", on_click=self.classify
-        ).props("outline no-caps").mark("consolidate-classify")
+        ui.button("Classify", icon="category", on_click=self.classify).props(
+            "outline no-caps"
+        ).mark("consolidate-classify")
 
     def classify(self) -> None:
         assignments = {i: s.value for i, s in self.roles.items() if s.value}
@@ -239,7 +247,13 @@ class ConsolidatePage:
             return service.classify(review, assignments)
 
         try:
-            self.ctx.runner.start_task(review, JOB_KIND, body)
+            # Rewrites rows and adds items to Zotero collections.
+            self.ctx.runner.start_task(
+                review,
+                JOB_KIND,
+                body,
+                resources=[results_resource(review.id, ROWS), review_zotero(review)],
+            )
         except JobConflictError as exc:
             show_error("Cannot classify now", exc, expected=True)
 
@@ -259,6 +273,8 @@ class ConsolidatePage:
             )
 
         try:
-            self.ctx.runner.start_task(review, JOB_KIND, body)
+            self.ctx.runner.start_task(
+                review, JOB_KIND, body, resources=[results_resource(review.id, ROWS)]
+            )
         except JobConflictError as exc:
             show_error("Cannot consolidate now", exc, expected=True)

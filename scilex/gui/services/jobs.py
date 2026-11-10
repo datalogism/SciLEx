@@ -5,8 +5,24 @@ Two kinds of jobs: the pipeline (collection then aggregation, see
 analysis (:meth:`JobRunner.start_task`).
 
 A job runs in its own thread; the UI polls :class:`Job` fields with a timer.
-Only one job may be active in the whole app: log capture accepts the
-collector's anonymous threads, which is only correct for a single job.
+
+**Resources.** Several jobs run at the same time; a job declares what it uses
+and is refused only when an active job holds a conflicting use (see
+:func:`conflicts`):
+
+- ``collect`` (``exclusive``): the source APIs, rate limits and VPN, shared by
+  every review: one collection at a time in the app;
+- ``results:<review id>``: the review's ``aggregated_results.csv``, in mode
+  ``read`` (charts, graph, summaries, exports: never blocked), ``write`` (column
+  enrichers, which merge only what they changed, so they run together, see
+  :mod:`results_store`) or ``rows`` (aggregation, extension, consolidation,
+  imports, Zotero link/pull: alone on that review's results);
+- ``zotero:<library>`` (``rows``): writes to a Zotero library;
+- ``job:<kind>:<review id>`` (``rows``, added to every job): the same action
+  twice on one review.
+
+Log capture: records of the collector's anonymous threads cannot be traced to
+a job; they go to the collection when one runs, else to the only active job.
 """
 
 from __future__ import annotations
@@ -43,7 +59,49 @@ class CollectionFailedError(RuntimeError):
 
 
 class JobConflictError(RuntimeError):
-    """Raised when a job is started while another one is still active."""
+    """Raised when a job is started while a conflicting one is still active."""
+
+
+READ, WRITE, ROWS, EXCLUSIVE = "read", "write", "rows", "exclusive"
+COLLECT = "collect"
+Resource = tuple[str, str]  # (name, mode)
+
+
+def results_resource(review_id: str, mode: str) -> Resource:
+    """Use of a review's aggregated results."""
+    return (f"results:{review_id}", mode)
+
+
+def zotero_resource(library: str) -> Resource:
+    """Writes to one Zotero library (``"group:123"``, ``"user:45"``)."""
+    return (f"zotero:{library}", ROWS)
+
+
+def review_zotero(review: Review) -> Resource:
+    """Writes to the review's Zotero library (its own, else the keys' library)."""
+    from scilex.gui.services.zotero_library import load_source
+
+    try:
+        source = load_source(review.folder)
+    except Exception:  # unreadable zotero_source.yml: the default library
+        source = None
+    if source is None:
+        return zotero_resource("default")
+    return zotero_resource(f"{source.library_type}:{source.library_id}")
+
+
+def conflicts(mode_a: str, mode_b: str) -> bool:
+    """Whether two uses of the same resource cannot run at the same time.
+
+    Readers never conflict; column writers (``write``) run together; ``rows``
+    and ``exclusive`` exclude every other writer.
+    """
+    if READ in (mode_a, mode_b):
+        return False
+    return not (mode_a == WRITE and mode_b == WRITE)
+
+
+KIND_LABELS = {"pipeline": "collection"}
 
 
 @dataclass
@@ -72,6 +130,8 @@ class Job:
     # that rewrites it records the new papers in the paper log.
     results_path: Path | None = field(default=None, repr=False)
     results_mtime: float | None = field(default=None, repr=False)
+    review_name: str = ""
+    resources: tuple[Resource, ...] = ()
     finished_at: datetime | None = None
     cancel_event: threading.Event = field(default_factory=threading.Event, repr=False)
     thread_ids: set[int] = field(default_factory=set, repr=False)
@@ -80,6 +140,24 @@ class Job:
     def is_active(self) -> bool:
         """True while the job is pending, running or cancelling."""
         return self.status in job_states.ACTIVE_STATUSES
+
+    def describe(self) -> str:
+        """``"collection on rag_kg"``: what the user sees of a blocking job."""
+        kind = KIND_LABELS.get(self.kind, self.kind)
+        return f"{kind} on {self.review_name or self.review_id}"
+
+
+async def wait_for(job: Job, interval: float = 0.1) -> Job:
+    """Wait (without blocking the event loop) until ``job`` has ended.
+
+    For short actions a page awaits (Zotero sync, BibTeX import): running them
+    as jobs makes them respect the resources of longer jobs.
+    """
+    import asyncio
+
+    while job.is_active:
+        await asyncio.sleep(interval)
+    return job
 
 
 def _default_run_collection(*args, **kwargs):
@@ -107,7 +185,7 @@ def _scale(value: float, bounds: tuple[int, int]) -> int:
 
 
 class JobRunner:
-    """Start, track and cancel pipeline jobs, one at a time."""
+    """Start, track and cancel jobs; independent jobs run at the same time."""
 
     def __init__(
         self,
@@ -125,8 +203,49 @@ class JobRunner:
         return self._jobs.get(job_id)
 
     def active_job(self) -> Job | None:
-        """Return the job currently active in the app, if any."""
-        return next((job for job in self._jobs.values() if job.is_active), None)
+        """Return an active job of the app (the oldest), if any."""
+        return next(iter(self.active_jobs()), None)
+
+    def active_jobs(self) -> list[Job]:
+        """Every active job, oldest first."""
+        jobs = [job for job in self._jobs.values() if job.is_active]
+        return sorted(jobs, key=lambda job: job.started_at)
+
+    @staticmethod
+    def resources_for(
+        review: Review, kind: str, resources: list[Resource] | tuple | None = None
+    ) -> tuple[Resource, ...]:
+        """Resources of a job of ``kind`` on ``review``.
+
+        Without ``resources``, the job rewrites the review's results (``rows``):
+        the safe default for an action that did not say what it does.
+        """
+        declared = (
+            tuple(resources)
+            if resources is not None
+            else (results_resource(review.id, ROWS),)
+        )
+        return (*declared, (f"job:{kind}:{review.id}", ROWS))
+
+    def conflicting_job(
+        self, review: Review, kind: str, resources: list[Resource] | tuple | None = None
+    ) -> Job | None:
+        """The active job that would refuse this one (None: it can start)."""
+        wanted = self.resources_for(review, kind, resources)
+        for job in self.active_jobs():
+            for name, mode in wanted:
+                for other_name, other_mode in job.resources:
+                    if name == other_name and conflicts(mode, other_mode):
+                        return job
+        return None
+
+    def _anonymous_owner(self) -> Job | None:
+        """The job that gets the log records of anonymous pipeline threads."""
+        active = self.active_jobs()
+        collecting = [job for job in active if (COLLECT, EXCLUSIVE) in job.resources]
+        if collecting:
+            return collecting[0]
+        return active[0] if len(active) == 1 else None
 
     def latest_for(self, review_id: str, kind: str | None = None) -> Job | None:
         """Return the most recent job of a review (of ``kind`` if given), if any."""
@@ -138,11 +257,18 @@ class JobRunner:
         return max(jobs, key=lambda job: job.started_at, default=None)
 
     def _new_job(
-        self, review: Review, kind: str, history_key: str | None = None
+        self,
+        review: Review,
+        kind: str,
+        history_key: str | None = None,
+        resources: list[Resource] | tuple | None = None,
     ) -> Job:
         with self._lock:
-            if self.active_job() is not None:
-                raise JobConflictError("Another job is already running")
+            blocking = self.conflicting_job(review, kind, resources)
+            if blocking is not None:
+                raise JobConflictError(
+                    f"Cannot start now: {blocking.describe()} is running"
+                )
             job = Job(
                 id=uuid.uuid4().hex[:12],
                 review_id=review.id,
@@ -151,6 +277,8 @@ class JobRunner:
                 folder=review.folder,
                 results_path=review.results_path,
                 results_mtime=_mtime(review.results_path),
+                review_name=review.name,
+                resources=self.resources_for(review, kind, resources),
             )
             self._jobs[job.id] = job
         return job
@@ -170,6 +298,7 @@ class JobRunner:
         body: Callable[[Job], str | None],
         *,
         history_key: str | None = None,
+        resources: list[Resource] | tuple | None = None,
     ) -> Job:
         """Run ``body(job)`` in a background thread, with log capture.
 
@@ -180,10 +309,13 @@ class JobRunner:
         Once completed, the run is kept in the review's run history under
         ``history_key`` (default: ``kind``; ``""`` keeps nothing).
 
+        ``resources``: what the job uses (see the module docstring); default:
+        it rewrites the review's results.
+
         Raises:
-            JobConflictError: If another job is still active.
+            JobConflictError: If an active job holds a conflicting resource.
         """
-        job = self._new_job(review, kind, history_key)
+        job = self._new_job(review, kind, history_key, resources)
         self._start_thread(job, lambda: body(job) or "Done.")
         return job
 
@@ -215,7 +347,7 @@ class JobRunner:
                 :mod:`scilex.gui.services.extend`). Ignored with ``fresh``.
 
         Raises:
-            JobConflictError: If another job is still active.
+            JobConflictError: If a collection runs, or a job uses this review's results.
             ValueError: If ``since`` is not a valid date.
             FileNotFoundError: If ``resume`` is set but nothing can be resumed.
         """
@@ -241,7 +373,12 @@ class JobRunner:
             extension.ADD_NEW: run_history.EXTEND_ADD,
             extension.REAGGREGATE: run_history.EXTEND_REAGGREGATE,
         }.get(extend, run_history.PIPELINE)
-        job = self._new_job(review, PIPELINE, history_key)
+        job = self._new_job(
+            review,
+            PIPELINE,
+            history_key,
+            [(COLLECT, EXCLUSIVE), results_resource(review.id, ROWS)],
+        )
 
         def body() -> str:
             if clear_dir is not None:
@@ -284,9 +421,14 @@ class JobRunner:
         that do not come from the raw collection (imported, snowballed) are kept.
 
         Raises:
-            JobConflictError: If another job is still active.
+            JobConflictError: If a job uses this review's results.
         """
-        job = self._new_job(review, PIPELINE, run_history.AGGREGATE)
+        job = self._new_job(
+            review,
+            PIPELINE,
+            run_history.AGGREGATE,
+            [results_resource(review.id, ROWS)],
+        )
         mode = extension.REAGGREGATE if keep_outside else None
 
         def body() -> str:
@@ -374,7 +516,11 @@ class JobRunner:
         handler.setFormatter(
             logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", "%H:%M:%S")
         )
-        handler.addFilter(WorkerThreadFilter(job.thread_ids))
+        handler.addFilter(
+            WorkerThreadFilter(
+                job.thread_ids, accept_anonymous=lambda: self._anonymous_owner() is job
+            )
+        )
         root_logger = logging.getLogger()
         root_logger.addHandler(handler)
         try:

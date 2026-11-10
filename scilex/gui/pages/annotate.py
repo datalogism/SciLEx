@@ -13,7 +13,7 @@ from scilex.gui.components.job_panel import JobPanel
 from scilex.gui.components.run_status import RunStatus
 from scilex.gui.services import annotations as service
 from scilex.gui.services import zotero_library
-from scilex.gui.services.jobs import Job, JobConflictError
+from scilex.gui.services.jobs import Job, JobConflictError, review_zotero
 from scilex.gui.services.keys_editor import effective_keys
 from scilex.gui.services.workspace import Review
 from scilex.gui.state import AppContext
@@ -404,7 +404,9 @@ def _apply_card(
                 )
 
             try:
-                ctx.runner.start_task(review, JOB_KIND, body)
+                ctx.runner.start_task(
+                    review, JOB_KIND, body, resources=[review_zotero(review)]
+                )
             except JobConflictError as exc:
                 show_error("Cannot update Zotero now", exc, expected=True)
                 return

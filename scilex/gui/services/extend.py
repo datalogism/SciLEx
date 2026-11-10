@@ -35,23 +35,31 @@ BACKUP_FILENAME = "aggregated_results_before_extension.csv"
 
 
 def read_results(path: Path) -> pd.DataFrame | None:
-    """Read an aggregated results file exactly as written (None when absent)."""
+    """Read an aggregated results file exactly as written (None when absent).
+
+    Under the file's lock (see :mod:`results_store`): a job writing it at the
+    same moment cannot make this read, or its own replace, fail on Windows.
+    """
+    from scilex.gui.services.results_store import lock_for
     from scilex.io_utils import load_aggregated_data
 
-    if not Path(path).is_file():
-        return None
-    return load_aggregated_data(
-        {"collect_name": Path(path).parent.name},
-        collect_dir=str(Path(path).parent),
-        preserve_missing_marker=True,
-    )
+    with lock_for(path):
+        if not Path(path).is_file():
+            return None
+        return load_aggregated_data(
+            {"collect_name": Path(path).parent.name},
+            collect_dir=str(Path(path).parent),
+            preserve_missing_marker=True,
+        )
 
 
 def write_results(data: pd.DataFrame, path: Path) -> None:
-    """Write aggregated results atomically."""
+    """Write aggregated results atomically, under the file's lock."""
+    from scilex.gui.services.results_store import lock_for
     from scilex.io_utils import write_aggregated_csv
 
-    write_aggregated_csv(data, str(path), quoting=csv.QUOTE_NONNUMERIC)
+    with lock_for(path):
+        write_aggregated_csv(data, str(path), quoting=csv.QUOTE_NONNUMERIC)
 
 
 def backup(path: Path) -> Path | None:
@@ -108,7 +116,9 @@ def keep_outside_rows(
     records = previous.to_dict("records")
     carried = [
         index
-        for index, (record, key) in enumerate(zip(records, _keys(previous), strict=True))
+        for index, (record, key) in enumerate(
+            zip(records, _keys(previous), strict=True)
+        )
         if key not in present and is_outside_collection(record)
     ]
     if not carried:
@@ -117,7 +127,9 @@ def keep_outside_rows(
     return merged, len(carried)
 
 
-def apply_extension(mode: str, previous: pd.DataFrame | None, results_path: Path) -> str:
+def apply_extension(
+    mode: str, previous: pd.DataFrame | None, results_path: Path
+) -> str:
     """Merge the fresh aggregation at ``results_path`` with ``previous``; return a summary."""
     if mode not in MODES:
         raise ValueError(f"Unknown extension mode {mode!r}")
@@ -126,12 +138,13 @@ def apply_extension(mode: str, previous: pd.DataFrame | None, results_path: Path
         return ""
     if mode == ADD_NEW:
         merged, count = add_new_only(previous, current)
-        summary = f"{count} new papers added to the {len(previous)} already in the review."
+        summary = (
+            f"{count} new papers added to the {len(previous)} already in the review."
+        )
     else:
         merged, count = keep_outside_rows(previous, current)
-        summary = (
-            f"Re-aggregated: {len(current)} papers from the collection"
-            + (f", plus {count} imported or snowballed papers kept." if count else ".")
+        summary = f"Re-aggregated: {len(current)} papers from the collection" + (
+            f", plus {count} imported or snowballed papers kept." if count else "."
         )
     write_results(merged, results_path)
     return summary

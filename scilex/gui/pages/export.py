@@ -10,7 +10,13 @@ from scilex.gui.components.job_panel import BusyNotice, JobPanel
 from scilex.gui.components.run_status import RunStatus
 from scilex.gui.components.zotero_picker import ZoteroPicker
 from scilex.gui.services import exports, kg_export, run_history, zotero_library
-from scilex.gui.services.jobs import Job, JobConflictError
+from scilex.gui.services.jobs import (
+    READ,
+    Job,
+    JobConflictError,
+    results_resource,
+    review_zotero,
+)
 from scilex.gui.services.screening import ReviewFileError
 from scilex.gui.services.workspace import Review, Workspace
 from scilex.gui.state import AppContext
@@ -23,6 +29,7 @@ KG = "kg"
 def history_key(fmt: str) -> str:
     """Run-history key of the export to ``fmt`` (each format has its own date)."""
     return f"{KIND}-{fmt}"
+
 
 FORMATS = (
     (
@@ -201,7 +208,9 @@ def render(ctx: AppContext, review: Review) -> None:
                     f"Export {label}",
                     icon="cloud_upload" if fmt == exports.ZOTERO else "download",
                 ).mark(f"export-{fmt}")
-                run_statuses.append(RunStatus(review, history_key(fmt), history=history))
+                run_statuses.append(
+                    RunStatus(review, history_key(fmt), history=history)
+                )
                 if fmt == KG and kg_problem:
                     ui.label(kg_problem).classes("text-sm text-negative").mark(
                         "export-kg-missing"
@@ -219,19 +228,30 @@ def render(ctx: AppContext, review: Review) -> None:
                     ).mark("export-zotero-keys")
                     buttons[fmt].set_enabled(False)
 
+    def resources_of(fmt: str) -> list:
+        used = [results_resource(review.id, READ)]
+        if fmt == exports.ZOTERO:
+            used.append(review_zotero(review))
+        return used
+
     busy_notice = BusyNotice(ctx)
     result_box = ui.column().classes("gap-1 w-full")
     history_box = ui.column().classes("gap-1 w-full")
 
     def update_buttons(job: Job | None) -> None:
-        busy = ctx.runner.active_job() is not None
-        busy_notice.update(job)
+        # Exports read the papers: only a job rewriting them (or writing the
+        # same Zotero library, for a push) makes them wait.
+        blocking = {
+            fmt: ctx.runner.conflicting_job(review, KIND, resources_of(fmt))
+            for fmt in buttons
+        }
+        busy_notice.update(job, next((b for b in blocking.values() if b), None))
         for fmt, button in buttons.items():
             if fmt == exports.ZOTERO and not zotero_ready:
                 continue
             if fmt == KG and kg_problem:
                 continue
-            button.set_enabled(not busy)
+            button.set_enabled(blocking[fmt] is None)
 
     def show_history() -> None:
         history_box.clear()
@@ -354,7 +374,11 @@ def render(ctx: AppContext, review: Review) -> None:
 
         try:
             job = ctx.runner.start_task(
-                review, KIND, body, history_key=history_key(fmt)
+                review,
+                KIND,
+                body,
+                history_key=history_key(fmt),
+                resources=resources_of(fmt),
             )
         except JobConflictError as exc:
             show_error("Cannot start the export", exc, expected=True)

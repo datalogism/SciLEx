@@ -70,7 +70,19 @@ uv run scilex-gui --browser  # same UI in a browser tab (useful for debugging)
    optionally **⑥ Enrich**, then **③ Screen**, optionally **⑦ Analyses** and
    **④ Annotate**, and **⑧ Export**.
 
-Only one job (collection, export, analysis) runs at a time in the app.
+Several jobs run at the same time; a job waits only for one that uses the same thing:
+
+| Job | Runs alongside | Waits for |
+|---|---|---|
+| Collection (② Collect, ⑤ Extend queries) | anything on other reviews except a collection; analyses and exports of its review | another collection (the source APIs and the VPN are shared), and jobs rewriting its review's papers |
+| Aggregation, Extend modes, Consolidate, BibTeX / Zotero import, Zotero sync, Snowball adding papers | everything on other reviews; readers of this review | jobs writing this review's papers |
+| Enrichers (Papers with Code, Crossref, LPWC, ORKG, Search keywords) | each other, readers, other reviews | jobs rewriting the rows of this review |
+| Analyses (charts, graph, summaries, annotation report), Citations, file exports | everything | nothing |
+| Applying annotations or cleaning tags in Zotero, pushing to Zotero | everything else | another write to the same Zotero library |
+
+The same action is never run twice at once on a review. Enrichers running together each
+write only the cells they changed, so none erases another's results. When a button is
+disabled, the line under it names the job it waits for.
 
 Each costly action (collection, aggregation, extension, every enrichment and analysis,
 every export, applying annotations in Zotero) shows when it last completed, so you
@@ -199,7 +211,7 @@ the Zotero tags and sub-corpora they lack (nothing is removed). With **Make it t
 review's Zotero library** (default), the choice is saved as the review's Zotero library
 (sync, push and knowledge-graph export use it) and every paper is matched with its
 Zotero item; otherwise the papers are added without a link. It runs as a job, so it
-waits for a running collection to finish.
+waits for the jobs writing this review's papers (e.g. its collection) to finish.
 
 **Import a BibTeX file** adds the entries of a `.bib` file (exported from Zotero, Google
 Scholar, DBLP…) to the review, with `archive` = `BibTeX`. Papers the review already has
@@ -301,7 +313,7 @@ offers its main options and a **Run** button; progress and logs are shown live. 
 when the tab opens. The graph needs the citation data of ⑥ Enrich → Citations; summaries
 (and the keyword suggestions of ⑤ Extend) need the graph to have run first.
 **Cancel** stops an analysis at the end of its current step. **Run** buttons are disabled
-while another job is running.
+only while a conflicting job runs (see the table at the top), and say which.
 
 Snowball (in ⑤ Extend) adds the new papers to `aggregated_results.csv` itself
 (column `snowball_depth`), so Zotero and the exports include them; the original file is

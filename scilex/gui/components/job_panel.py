@@ -24,33 +24,26 @@ STATUS_LABELS = {
 
 
 class BusyNotice:
-    """One line explaining why buttons are disabled: another job is running.
+    """One line explaining why buttons are disabled: a conflicting job runs.
 
-    The label is created once; ``update`` only changes its text and visibility,
-    so it is safe to call on every tick.
+    Jobs that do not conflict with the page's action (other reviews, readers,
+    enrichers of other columns) run alongside and are not mentioned. The label
+    is created once; ``update`` only changes its text and visibility, so it is
+    safe to call on every tick.
     """
 
     def __init__(self, ctx: AppContext):
         """Draw the (initially hidden) line at the current position."""
         self.ctx = ctx
-        self._names: dict[str, str] = {}
         self.label = ui.label().classes("text-sm text-warning").mark("busy-notice")
         self.label.set_visibility(False)
 
-    def _review_name(self, review_id: str) -> str:
-        if review_id not in self._names:
-            review = self.ctx.workspace.get(review_id)
-            self._names[review_id] = review.name if review else review_id
-        return self._names[review_id]
-
-    def update(self, own_job: Job | None = None) -> None:
-        """Show the notice when a job other than ``own_job`` is active."""
-        active = self.ctx.runner.active_job()
-        busy = active is not None and active is not own_job
+    def update(self, own_job: Job | None = None, blocking: Job | None = None) -> None:
+        """Show ``blocking`` (from ``runner.conflicting_job``) unless it is ``own_job``."""
+        busy = blocking is not None and blocking is not own_job
         self.label.set_visibility(busy)
         if busy:
-            kind = "collection" if active.kind == "pipeline" else active.kind
-            self.label.text = f"Another job is running: {kind} on {self._review_name(active.review_id)}"
+            self.label.text = f"Waiting for {blocking.describe()} to finish"
 
 
 class JobPanel:
@@ -105,11 +98,9 @@ class JobPanel:
         """Latest job of this kind for the review."""
         return self.ctx.runner.latest_for(self.review.id, self.kind)
 
-    @property
-    def busy_elsewhere(self) -> bool:
-        """True if another job (any review, any kind) is active."""
-        other = self.ctx.runner.active_job()
-        return other is not None and other is not self.job
+    def blocking(self, resources=None) -> Job | None:
+        """The active job that would refuse a new job of this kind (or None)."""
+        return self.ctx.runner.conflicting_job(self.review, self.kind, resources)
 
     def refresh(self) -> None:
         """Update the widgets from the job state."""

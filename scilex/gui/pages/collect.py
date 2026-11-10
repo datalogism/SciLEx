@@ -21,7 +21,15 @@ from scilex.gui.services.collect_summary import (
     preflight_line,
     target_collection_dir,
 )
-from scilex.gui.services.jobs import PIPELINE, Job, JobConflictError
+from scilex.gui.services.jobs import (
+    COLLECT,
+    EXCLUSIVE,
+    PIPELINE,
+    ROWS,
+    Job,
+    JobConflictError,
+    results_resource,
+)
 from scilex.gui.services.screening import load_decisions
 from scilex.gui.services.workspace import Review, Workspace
 from scilex.gui.state import AppContext
@@ -139,7 +147,9 @@ def render(ctx: AppContext, review: Review, extending: bool = False) -> None:
                 "extend-add"
             )
             with run_button:
-                busy_tooltip = ui.tooltip("Another job is running")
+                busy_tooltip = ui.tooltip(
+                    "Waiting for a collection, or a job using this review's papers"
+                )
             reaggregate_button = (
                 ui.button("Re-aggregate everything", icon="sync")
                 .props("outline")
@@ -153,7 +163,9 @@ def render(ctx: AppContext, review: Review, extending: bool = False) -> None:
         else:
             run_button = ui.button("Run", icon="play_arrow").mark("run")
             with run_button:
-                busy_tooltip = ui.tooltip("Another job is running")
+                busy_tooltip = ui.tooltip(
+                    "Waiting for a collection, or a job using this review's papers"
+                )
             reaggregate_button = start_over_button = None
         resume_button = (
             ui.button("Resume interrupted collection", icon="replay")
@@ -212,16 +224,35 @@ def render(ctx: AppContext, review: Review, extending: bool = False) -> None:
 
     def update_buttons(job: Job | None) -> None:
         running = job is not None and job.is_active
-        busy_elsewhere = not running and ctx.runner.active_job() is not None
+        # Only conflicting jobs block: another collection anywhere (shared APIs
+        # and VPN), or a job using this review's results. Analyses, exports and
+        # other reviews' enrichments run alongside.
+        blocking_collect = (
+            None
+            if running
+            else ctx.runner.conflicting_job(
+                review,
+                PIPELINE,
+                [(COLLECT, EXCLUSIVE), results_resource(review.id, ROWS)],
+            )
+        )
+        blocking_aggregate = (
+            None
+            if running
+            else ctx.runner.conflicting_job(
+                review, PIPELINE, [results_resource(review.id, ROWS)]
+            )
+        )
+        busy_elsewhere = blocking_collect is not None
         run_button.set_enabled(not running and not busy_elsewhere)
         for extra in (reaggregate_button, start_over_button):
             if extra is not None:
                 extra.set_enabled(not running and not busy_elsewhere)
         # One tooltip, shown or hidden: calling .tooltip() here would add a new one every tick.
         busy_tooltip.set_visibility(busy_elsewhere)
-        busy_notice.update(job)
+        busy_notice.update(job, blocking_collect or blocking_aggregate)
         aggregate_button.set_visibility(not running and has_collection())
-        aggregate_button.set_enabled(not busy_elsewhere)
+        aggregate_button.set_enabled(blocking_aggregate is None)
         cancel_button.set_visibility(running)
         resume_info = None if running else resume_cache["info"]
         resume_button.set_visibility(resume_info is not None)

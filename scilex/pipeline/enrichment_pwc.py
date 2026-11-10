@@ -79,6 +79,10 @@ class EnrichmentOptions:
     collect_dir: str | None = None
     workers: int | None = None
     row_filter: RowFilter | None = None
+    # Writes the enriched table: ``writer(data, csv_path, columns)``. Default:
+    # rewrite the whole CSV. The desktop app passes a writer that merges only
+    # the enrichment columns, so enrichers running at the same time keep theirs.
+    writer: Callable[[pd.DataFrame, str, list[str]], None] | None = None
 
 
 @dataclass
@@ -345,13 +349,20 @@ def run_enrichment(
         # Final progress report
         progress_callback(
             processed,
-            len(_rows_to_process(data, options.limit, getattr(options, "row_filter", None))),
+            len(
+                _rows_to_process(
+                    data, options.limit, getattr(options, "row_filter", None)
+                )
+            ),
             {**stats, "updated": updated},
         )
 
     output_path = None
     if not options.dry_run:
-        write_aggregated_csv(data, csv_path)
+        if options.writer is not None:
+            options.writer(data, str(csv_path), list(ENRICHMENT_COLUMNS))
+        else:
+            write_aggregated_csv(data, csv_path)
         output_path = str(csv_path)
         logging.info(f"✓ Updated CSV written: {csv_path}")
 

@@ -17,7 +17,7 @@ from nicegui import run, ui
 from scilex.gui.components.errors import show_error
 from scilex.gui.components.job_panel import JobPanel
 from scilex.gui.services import tag_review
-from scilex.gui.services.jobs import Job, JobConflictError
+from scilex.gui.services.jobs import Job, JobConflictError, review_zotero
 from scilex.gui.services.workspace import Review
 from scilex.gui.state import AppContext
 
@@ -30,7 +30,13 @@ def _selectable_table(frame: pd.DataFrame, columns: list[tuple[str, str]], mark:
     return (
         ui.table(
             columns=[
-                {"name": f, "label": label, "field": f, "align": "left", "sortable": True}
+                {
+                    "name": f,
+                    "label": label,
+                    "field": f,
+                    "align": "left",
+                    "sortable": True,
+                }
                 for f, label in columns
             ],
             rows=rows,
@@ -105,7 +111,10 @@ def _merges_card(paths: tag_review.TagPaths) -> None:
                     ids = {row["_id"] for row in rows}
                     for row in table.rows:
                         if row["_id"] in ids:
-                            row["value"], row["merge_into"] = row["merge_into"], row["value"]
+                            row["value"], row["merge_into"] = (
+                                row["merge_into"],
+                                row["value"],
+                            )
                     table.selected = [row for row in table.rows if row["_id"] in ids]
                     table.update()
                     ui.notify("Direction swapped for the selected rows")
@@ -117,17 +126,15 @@ def _merges_card(paths: tag_review.TagPaths) -> None:
                     ui.button(
                         "Reject selected", icon="block", on_click=lambda: decide(False)
                     ).props("outline no-caps").mark("tags-reject")
-                    ui.button(
-                        "Swap direction", icon="swap_horiz", on_click=swap
-                    ).props("flat no-caps").mark("tags-swap").tooltip(
+                    ui.button("Swap direction", icon="swap_horiz", on_click=swap).props(
+                        "flat no-caps"
+                    ).mark("tags-swap").tooltip(
                         "Keep the other spelling as the value to merge into"
                     )
 
             synonyms = tag_analysis_table(paths.synonyms)
             if not synonyms.empty:
-                ui.label(f"Merges in use ({len(synonyms)})").classes(
-                    "font-medium mt-2"
-                )
+                ui.label(f"Merges in use ({len(synonyms)})").classes("font-medium mt-2")
                 used = _selectable_table(
                     synonyms,
                     [
@@ -183,8 +190,10 @@ def _cross_card(paths: tag_review.TagPaths) -> None:
                 .classes("w-64")
                 .mark("tags-cross-second")
             )
-            button = ui.button("Cross", icon="grid_on").props("no-caps").mark(
-                "tags-cross-button"
+            button = (
+                ui.button("Cross", icon="grid_on")
+                .props("no-caps")
+                .mark("tags-cross-button")
             )
         chart = ui.column().classes("w-full")
 
@@ -273,7 +282,9 @@ def _zotero_card(ctx: AppContext, review: Review, paths: tag_review.TagPaths) ->
                 )
 
             try:
-                ctx.runner.start_task(review, CLEAN_JOB_KIND, body)
+                ctx.runner.start_task(
+                    review, CLEAN_JOB_KIND, body, resources=[review_zotero(review)]
+                )
             except JobConflictError as exc:
                 show_error("Cannot update Zotero now", exc, expected=True)
                 return
@@ -284,8 +295,10 @@ def _zotero_card(ctx: AppContext, review: Review, paths: tag_review.TagPaths) ->
             ui.button("Preview changes", icon="preview", on_click=compute).props(
                 "outline no-caps"
             ).mark("tags-zotero-preview-button")
-            apply_button = ui.button(
-                "Apply in Zotero", icon="cleaning_services", on_click=apply
-            ).props("no-caps").mark("tags-zotero-apply")
+            apply_button = (
+                ui.button("Apply in Zotero", icon="cleaning_services", on_click=apply)
+                .props("no-caps")
+                .mark("tags-zotero-apply")
+            )
             apply_button.set_enabled(False)
         JobPanel(ctx, review, CLEAN_JOB_KIND, show_logs=False)
