@@ -201,3 +201,16 @@ async def test_card_computes_alpha(ctx, tmp_path, zotero):
             "papers": 1,
         }
         assert rows["GRANULARITY"]["level"] == "n/a"  # only placeholders so far
+
+
+def test_kg_export_drops_discarded_papers_and_copies():
+    bib = (
+        "@article{rebel2021,\n  title = {REBEL},\n  keywords = {TASK:RE, LANG:English},\n}\n\n"
+        "@article{old2015,\n  title = {Old},\n  keywords = {DELETED_BY:filter:year 2015},\n}\n\n"
+        "@inproceedings{rebel2021a,\n  title = {REBEL},\n"
+        "  keywords = {ANNOT:ann, AGREEMENT_COPY:REF1},\n}\n"
+    )
+    text, dropped = zl.drop_excluded_entries(bib)
+    assert dropped == {"old2015", "rebel2021a"}
+    assert text == bib.split("@article{old2015")[0]
+    assert zl.drop_excluded_entries("no entry") == ("no entry", set())

@@ -271,8 +271,10 @@ def export_source_biblatex(
         keys = descendant_keys(collections, source.collection_key)
         full = None
     else:
-        return export(source.collection_key), {}
+        return drop_excluded_entries(export(source.collection_key))[0], {}
     paths = {c.key: c.path for c in collections or []}
+    # The agreement study's copies are not sub-corpora of the review.
+    keys = [k for k in keys if paths.get(k, "").split("/")[0].strip() != "agreement"]
     parts: list[str] = []
     subcorpora: dict[str, list[str]] = {}
     for key in keys:
@@ -282,7 +284,47 @@ def export_source_biblatex(
         if cited:
             subcorpora[paths.get(key, key)] = cited
     # Duplicated entries (a paper in two collections) are dropped by bib2json.
-    return (full if full is not None else "\n".join(parts)), subcorpora
+    text, dropped = drop_excluded_entries(
+        full if full is not None else "\n".join(parts)
+    )
+    if dropped:
+        subcorpora = {
+            path: [key for key in cited if key not in dropped]
+            for path, cited in subcorpora.items()
+        }
+        subcorpora = {path: cited for path, cited in subcorpora.items() if cited}
+    return text, subcorpora
+
+
+EXCLUDED_TAG_PREFIXES = ("DELETED_BY:", "AGREEMENT_COPY:")
+_ENTRY_START = re.compile(r"^@\w+\s*\{\s*([^,\s]+)\s*,", re.MULTILINE)
+_KEYWORDS = re.compile(r"^\s*keywords\s*=\s*(.*)$", re.IGNORECASE | re.MULTILINE)
+
+
+def drop_excluded_entries(text: str) -> tuple[str, set[str]]:
+    """Remove from a Zotero BibLaTeX export the discarded papers and the copies.
+
+    Entries whose ``keywords`` (the Zotero tags) hold ``DELETED_BY:`` (discarded,
+    see :mod:`scilex.review_tags`) or ``AGREEMENT_COPY:`` (an annotator's copy)
+    leave the knowledge graph. The other entries are kept byte for byte.
+
+    Returns:
+        ``(text without them, their citation keys)``.
+    """
+    starts = list(_ENTRY_START.finditer(text))
+    if not starts:
+        return text, set()
+    kept = [text[: starts[0].start()]]
+    dropped: set[str] = set()
+    for index, match in enumerate(starts):
+        end = starts[index + 1].start() if index + 1 < len(starts) else len(text)
+        entry = text[match.start() : end]
+        keywords = " ".join(_KEYWORDS.findall(entry))
+        if any(prefix in keywords for prefix in EXCLUDED_TAG_PREFIXES):
+            dropped.add(match.group(1))
+        else:
+            kept.append(entry)
+    return "".join(kept), dropped
 
 
 def list_collections(api) -> list[ZoteroCollection]:
