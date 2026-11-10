@@ -15,7 +15,9 @@ pytestmark = pytest.mark.anyio
 NAMES = [info.name for info in service.ANALYSES]
 # Step page showing each analysis.
 STEP = {
-    info.name: {"enrich": "enrich", "extend": "extend", "analyse": "analyses"}[info.group]
+    info.name: {"enrich": "enrich", "extend": "extend", "analyse": "analyses"}[
+        info.group
+    ]
     for info in service.ANALYSES
 }
 
@@ -340,7 +342,9 @@ async def test_cancel_stops_running_analysis(ctx, tmp_path, monkeypatch):
         await user.should_see("Cancelled", retries=50)
 
 
-async def test_run_buttons_disabled_while_another_job_runs(ctx, tmp_path, monkeypatch):
+async def test_run_buttons_disabled_only_by_conflicting_jobs(
+    ctx, tmp_path, monkeypatch
+):
     import threading
 
     review = _review_with_results(ctx, tmp_path)
@@ -351,17 +355,32 @@ async def test_run_buttons_disabled_while_another_job_runs(ctx, tmp_path, monkey
         return service.AnalysisResult("ok")
 
     monkeypatch.setitem(service.RUNNERS, "report", slow_runner)
-    async with user_simulation(build_root(ctx)) as user:
-        await user.open(f"/review/{review.id}/analyses")
-        user.find(marker="analysis-run-report").click()
-        await user.should_see("Running", retries=50)
-        await user.open(f"/review/{review.id}/enrich")
-        user.find(marker="analysis-tab-enrich").click()
-        buttons = user.find(marker="analysis-run-enrich").elements
-        assert all(not button.enabled for button in buttons)
+    try:
+        async with user_simulation(build_root(ctx)) as user:
+            await user.open(f"/review/{review.id}/analyses")
+            user.find(marker="analysis-run-report").click()
+            await user.should_see("Running", retries=50)
+            # Charts only read the papers: an enricher can run alongside.
+            await user.open(f"/review/{review.id}/enrich")
+            user.find(marker="analysis-tab-enrich").click()
+            buttons = user.find(marker="analysis-run-enrich").elements
+            assert all(button.enabled for button in buttons)
+
+            # A job rewriting the papers blocks the enrichers of this review.
+            blocker = ctx.runner.start_task(
+                review, "consolidate", lambda job: release.wait(10) and "done"
+            )
+            await user.open(f"/review/{review.id}/enrich")
+            user.find(marker="analysis-tab-enrich").click()
+            await user.should_see("Waiting for: consolidate", retries=20)
+            buttons = user.find(marker="analysis-run-enrich").elements
+            assert all(not button.enabled for button in buttons)
+            release.set()
+            await user.open(f"/review/{review.id}/analyses")
+            await user.should_see("Completed", retries=50)
+            assert blocker is not None
+    finally:
         release.set()
-        await user.open(f"/review/{review.id}/analyses")
-        await user.should_see("Completed", retries=50)
 
 
 def test_run_enrich_cache_path_is_inside_review(ctx, tmp_path, monkeypatch):
@@ -485,7 +504,10 @@ async def test_busy_reason_is_visible_and_chart_caption_is_file_name(
         user.find(marker="analysis-run-enrich").click()
         await user.should_see("Running", retries=50)
         await user.open(f"/review/{review.id}/analyses")
-        await user.should_see("Another job is running (Papers with Code)", retries=50)
+        await user.should_see("years.png")
+        # Charts only read the papers: the running enricher does not block them.
+        await user.should_not_see("Waiting for: Papers with Code")
+        assert all(b.enabled for b in user.find(marker="analysis-run-report").elements)
         release.set()
         await user.open(f"/review/{review.id}/enrich")
         user.find(marker="analysis-tab-enrich").click()

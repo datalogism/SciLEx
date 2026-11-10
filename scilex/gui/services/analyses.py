@@ -198,6 +198,36 @@ def in_group(group: str) -> tuple[AnalysisInfo, ...]:
     return tuple(info for info in ANALYSES if info.group == group)
 
 
+# How each analysis uses the review's aggregated results (see the resources of
+# scilex.gui.services.jobs): readers never wait; column enrichers ("write")
+# merge what they changed, so they run together; Snowball adding papers
+# rewrites the rows.
+RESULTS_MODE = {
+    "report": "read",
+    "graph": "read",
+    "summaries": "read",
+    "keywords": "read",
+    "tags": "read",
+    "citations": "read",  # writes its own caches, not the results
+    "snowball": "rows",
+    "enrich": "write",
+    "crossref": "write",
+    "lpwc": "write",
+    "orkg": "write",
+    "search_keywords": "write",
+}
+
+
+def results_mode(name: str, options: dict | None = None) -> str:
+    """How analysis ``name`` with these (normalised) options uses the results."""
+    options = options or {}
+    if options.get("dry_run"):
+        return "read"
+    if name == "snowball" and not options.get("add_to_collection", True):
+        return "read"  # writes aggregated_results_snowball.csv only
+    return RESULTS_MODE.get(name, "rows")
+
+
 # Analyses that can be limited to the papers kept in screening.
 SCOPED = ("citations", "enrich", "crossref", "lpwc", "orkg", "tags", "search_keywords")
 
@@ -500,6 +530,7 @@ def run_enrich(
     ``row_filter`` limits the papers looked up (e.g. to those kept in screening);
     the other rows are written back unchanged.
     """
+    from scilex.gui.services import results_store
     from scilex.pipeline.enrichment_pwc import EnrichmentOptions, run_enrichment
 
     _prepare_enrichment_config(config)
@@ -508,6 +539,10 @@ def run_enrich(
         limit=limit or None,
         threshold=threshold or None,
         row_filter=row_filter,
+        # Only the Papers with Code columns: other enrichers may write meanwhile.
+        writer=lambda data, path, columns: results_store.write_columns(
+            path, data, columns
+        ),
     )
 
     def on_progress(processed: int, total: int, stats: dict) -> None:
@@ -737,6 +772,21 @@ def run_snowball(
     )
 
 
+def _read_for_enrichment(config: SciLExConfig) -> tuple[Path, pd.DataFrame]:
+    """Path and content of the aggregated results, read under the file's lock."""
+    from scilex.gui.services.extend import read_results
+    from scilex.io_utils import resolve_aggregate_path
+
+    path = Path(resolve_aggregate_path(config.main))
+    try:
+        data = read_results(path)
+    except ValueError as exc:  # damaged CSV
+        raise AnalysisError(str(exc)) from exc
+    if data is None:
+        raise AnalysisError(f"No aggregated results yet: {path} is missing.")
+    return path, data
+
+
 def run_linked(
     config: SciLExConfig,
     progress: ProgressFn,
@@ -752,14 +802,11 @@ def run_linked(
     when the run is cancelled (they are also cached for the next run).
     """
     from scilex import linked_enrichment
-    from scilex.gui.services.extend import write_results
-    from scilex.io_utils import load_aggregated_data, resolve_aggregate_path
+    from scilex.gui.services import results_store
 
     collect_dir = collect_dir_of(config)
-    try:
-        data = load_aggregated_data(config.main, preserve_missing_marker=True)
-    except (FileNotFoundError, ValueError) as exc:
-        raise AnalysisError(str(exc)) from exc
+    path, data = _read_for_enrichment(config)
+    before = data.copy()
     kwargs = {}
     if source == "crossref":
         kwargs["mailto"] = config.api.get("CrossRef", {}).get("mailto")
@@ -775,8 +822,8 @@ def run_linked(
         )
     except linked_enrichment.Cancelled:
         return AnalysisResult("Cancelled; what was fetched is cached for the next run.")
-    path = Path(resolve_aggregate_path(config.main))
-    write_results(data, path)
+    # Only the cells this source filled: other enrichers may write meanwhile.
+    results_store.write_changes(path, before, data)
     if report.looked_up == 0 and report.failed:
         raise AnalysisError(
             f"{report.source} could not be reached: check your connection."
@@ -796,26 +843,22 @@ def run_search_keywords(
     See :mod:`scilex.keyword_annotation`.
     """
     from scilex import keyword_annotation
-    from scilex.gui.services.extend import write_results
-    from scilex.io_utils import load_aggregated_data, resolve_aggregate_path
+    from scilex.gui.services import results_store
 
     groups = keyword_annotation.keyword_groups(config.main)
     bonus = config.main.get("bonus_keywords") or []
     if not groups and not bonus:
         raise AnalysisError("No search keyword in scilex.yml: set them in ① Configure.")
-    try:
-        data = load_aggregated_data(config.main, preserve_missing_marker=True)
-    except (FileNotFoundError, ValueError) as exc:
-        raise AnalysisError(str(exc)) from exc
+    path, data = _read_for_enrichment(config)
+    before = data.copy()
     progress(10, "Looking for the search keywords in titles and abstracts…")
     report = keyword_annotation.annotate_keywords(
         data, groups, bonus, row_filter=row_filter
     )
     if _cancelled(cancel_event):
         return AnalysisResult("Cancelled; nothing was written.")
-    path = Path(resolve_aggregate_path(config.main))
     if report.updated:
-        write_results(data, path)
+        results_store.write_changes(path, before, data)
     progress(100, report.message())
     return AnalysisResult(report.message(), [path] if report.updated else [])
 

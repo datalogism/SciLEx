@@ -5,7 +5,7 @@ keyword suggestions, and papers from a Zotero library or a BibTeX file. Same pip
 :mod:`scilex.gui.pages.collect`.
 """
 
-from nicegui import events, run, ui
+from nicegui import events, ui
 
 from scilex.gui.components.errors import show_error
 from scilex.gui.components.job_panel import JobPanel
@@ -13,7 +13,13 @@ from scilex.gui.components.run_status import RunStatus
 from scilex.gui.components.zotero_picker import ZoteroPicker
 from scilex.gui.pages import collect
 from scilex.gui.services import bibtex_import, zotero_extend, zotero_library
-from scilex.gui.services.jobs import Job, JobConflictError
+from scilex.gui.services.jobs import (
+    ROWS,
+    Job,
+    JobConflictError,
+    results_resource,
+    wait_for,
+)
 from scilex.gui.services.workspace import Review
 from scilex.gui.state import AppContext
 
@@ -22,7 +28,7 @@ def render(ctx: AppContext, review: Review) -> None:
     """Draw the Extend screen of ``review``."""
     collect.render(ctx, review, extending=True)
     _zotero_card(ctx, review)
-    _bibtex_card(review)
+    _bibtex_card(ctx, review)
 
 
 ZOTERO_JOB = "extend-zotero"
@@ -66,7 +72,10 @@ def _zotero_card(ctx: AppContext, review: Review) -> None:
             ).message()
 
         try:
-            ctx.runner.start_task(review, ZOTERO_JOB, body)
+            # Rewrites the review's rows (reads Zotero only).
+            ctx.runner.start_task(
+                review, ZOTERO_JOB, body, resources=[results_resource(review.id, ROWS)]
+            )
         except JobConflictError as exc:
             show_error(
                 "Cannot add papers from Zotero now",
@@ -87,7 +96,10 @@ def _zotero_card(ctx: AppContext, review: Review) -> None:
     )
 
 
-def _bibtex_card(review: Review) -> None:
+BIBTEX_JOB = "bibtex-import"
+
+
+def _bibtex_card(ctx: AppContext, review: Review) -> None:
     """Add the papers of a .bib file (Zotero, Google Scholar, DBLP exports…)."""
     ui.separator()
     ui.label("Import a BibTeX file").classes("text-lg font-bold")
@@ -104,14 +116,37 @@ def _bibtex_card(review: Review) -> None:
         try:
             raw = await event.file.read()
             text = raw.decode("utf-8-sig", errors="replace")
-            summary = await run.io_bound(
-                bibtex_import.import_bibtex, review, text, event.file.name
+
+            def body(job: Job) -> str:
+                try:
+                    job.result = bibtex_import.import_bibtex(
+                        review, text, event.file.name
+                    )
+                except bibtex_import.BibtexImportError as exc:
+                    job.result = exc  # the user's file, not a failure of the app
+                    return str(exc)
+                return job.result.message()
+
+            # A job: it rewrites the rows, so it waits for (and blocks) the jobs
+            # using this review's papers.
+            job = ctx.runner.start_task(
+                review, BIBTEX_JOB, body, resources=[results_resource(review.id, ROWS)]
             )
-        except bibtex_import.BibtexImportError as exc:
-            show_error("Cannot import this BibTeX file", exc, expected=True)
+            job = await wait_for(job)
+        except JobConflictError as exc:
+            show_error("Cannot import this BibTeX file now", exc, expected=True)
             return
         except Exception as exc:
             show_error("Cannot import this BibTeX file", exc)
+            return
+        if job.error:
+            show_error("Cannot import this BibTeX file", RuntimeError(job.error))
+            return
+        if isinstance(job.result, bibtex_import.BibtexImportError):
+            show_error("Cannot import this BibTeX file", job.result, expected=True)
+            return
+        summary = job.result
+        if summary is None:  # cancelled before it ran
             return
         result.clear()
         with result:

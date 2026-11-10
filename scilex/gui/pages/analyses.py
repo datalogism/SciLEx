@@ -14,9 +14,8 @@ from scilex.gui.components.job_panel import JobPanel
 from scilex.gui.components.run_status import RunStatus, set_tab_dot, state_of
 from scilex.gui.components.tag_tools import render_tag_tools
 from scilex.gui.services import analyses as service
-from scilex.gui.services import run_history
-from scilex.gui.services import screening
-from scilex.gui.services.jobs import Job, JobConflictError
+from scilex.gui.services import run_history, screening
+from scilex.gui.services.jobs import Job, JobConflictError, results_resource
 from scilex.gui.services.workspace import Review, Workspace
 from scilex.gui.state import AppContext
 from scilex.settings.schema import SettingsError
@@ -51,7 +50,7 @@ def kept_papers_filter(review: Review) -> Callable:
     }
     if not kept:
         raise service.AnalysisError(
-            "No paper is kept in ③ Screen yet: untick \"Only the papers kept\" "
+            'No paper is kept in ③ Screen yet: untick "Only the papers kept" '
             "or screen first."
         )
 
@@ -67,13 +66,18 @@ def kind_of(name: str) -> str:
 
 
 def _job_label(job: Job) -> str:
-    """Human name of a job: the analysis title, or the pipeline."""
+    """Human name of a job: the analysis title, else what the job says it is."""
     prefix = "analysis-"
     if job.kind.startswith(prefix):
         for info in service.ANALYSES:
             if info.name == job.kind[len(prefix) :]:
-                return info.title
-    return "Collect"
+                return f"{info.title} on {job.review_name or job.review_id}"
+    return job.describe()
+
+
+def resources_of(review: Review, name: str, options: dict) -> list:
+    """Resources of analysis ``name`` with these (normalised) options."""
+    return [results_resource(review.id, service.results_mode(name, options))]
 
 
 def render(ctx: AppContext, review: Review) -> None:
@@ -166,7 +170,7 @@ def _render_analysis(
     with ui.row().classes("items-center gap-2"):
         run_button = ui.button("Run", icon="play_arrow").mark(f"analysis-run-{name}")
         with run_button:
-            busy_tooltip = ui.tooltip("Another job is running")
+            busy_tooltip = ui.tooltip("A job using the same data is running")
         cancel_button = (
             ui.button("Cancel", icon="stop")
             .props("outline color=negative")
@@ -220,15 +224,29 @@ def _render_analysis(
         ):
             shown_job.append(job.id)
             show_result(job.result.message, job.result.files)
-        active = ctx.runner.active_job()
-        busy_elsewhere = not running and active is not None
+        try:
+            current = service.normalize_options(
+                name, {key: widget.value for key, widget in options.items()}
+            )
+        except (TypeError, ValueError):
+            current = {}
+        # Only a job that really conflicts (e.g. a collection rewriting this
+        # review's results) blocks this analysis; others run alongside.
+        active = (
+            None
+            if running
+            else ctx.runner.conflicting_job(
+                review, kind_of(name), resources_of(review, name, current)
+            )
+        )
+        busy_elsewhere = active is not None
         missing = service.missing_prerequisite(collect_dir, info.needs)
         run_button.set_enabled(not running and not busy_elsewhere and not missing)
         # One tooltip, shown or hidden: calling .tooltip() here would add one per tick.
         busy_tooltip.set_visibility(busy_elsewhere)
         # A missing input is already explained by the line above the options.
         if busy_elsewhere:
-            reason_label.set_text(f"Another job is running ({_job_label(active)})")
+            reason_label.set_text(f"Waiting for: {_job_label(active)}")
         reason_label.set_visibility(busy_elsewhere)
         cancel_button.set_visibility(running)
 
@@ -284,7 +302,11 @@ def _render_analysis(
             # A dry run writes nothing: it must not look like a finished run.
             dry_run = "dry_run" in options and options["dry_run"].value
             ctx.runner.start_task(
-                review, kind_of(name), body, history_key="" if dry_run else None
+                review,
+                kind_of(name),
+                body,
+                history_key="" if dry_run else None,
+                resources=resources_of(review, name, kwargs),
             )
             # Disable at once: the panel timer would leave a double-click window.
             run_button.set_enabled(False)
@@ -334,9 +356,20 @@ def _render_options(name: str) -> dict:
             number("limit", "Max papers (0 = all)", 0, min=0, precision=0)
             number("threshold", "Title match threshold (0-100)", 85, min=0, max=100)
         elif name == "tags":
-            checkbox("from_zotero", "Read the tags from Zotero now (else: as of the last import)")
-            number("max_dimensions", "Dimensions to cross", 5, min=2, max=12, precision=0)
-            number("similarity", "Merge suggestions: min similarity (0-100)", 88, min=50, max=100)
+            checkbox(
+                "from_zotero",
+                "Read the tags from Zotero now (else: as of the last import)",
+            )
+            number(
+                "max_dimensions", "Dimensions to cross", 5, min=2, max=12, precision=0
+            )
+            number(
+                "similarity",
+                "Merge suggestions: min similarity (0-100)",
+                88,
+                min=50,
+                max=100,
+            )
         elif name in ("crossref", "lpwc", "orkg"):
             number("limit", "Max papers (0 = all)", 0, min=0, precision=0)
         elif name == "citations":

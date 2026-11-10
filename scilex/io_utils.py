@@ -9,6 +9,7 @@ import csv
 import logging
 import os
 import tempfile
+import time
 
 import pandas as pd
 
@@ -90,6 +91,26 @@ def load_aggregated_data(
     )
 
 
+REPLACE_ATTEMPTS = 20
+REPLACE_WAIT_SECONDS = 0.05
+
+
+def _replace_with_retry(source: str, target: str) -> None:
+    """``os.replace`` that waits for a reader to close ``target`` (Windows).
+
+    On Windows a file open for reading cannot be replaced: another job (or the
+    page) reading the results for a moment would make the write fail.
+    """
+    for attempt in range(REPLACE_ATTEMPTS):
+        try:
+            os.replace(source, target)
+            return
+        except PermissionError:
+            if attempt == REPLACE_ATTEMPTS - 1:
+                raise
+            time.sleep(REPLACE_WAIT_SECONDS * (attempt + 1))
+
+
 def write_aggregated_csv(
     data: pd.DataFrame, path: str, quoting: int = csv.QUOTE_MINIMAL
 ) -> None:
@@ -107,7 +128,7 @@ def write_aggregated_csv(
     try:
         with os.fdopen(file_descriptor, "w", encoding="utf-8", newline="") as handle:
             data.to_csv(handle, sep=AGGREGATED_CSV_SEP, index=False, quoting=quoting)
-        os.replace(temp_path, path)
+        _replace_with_retry(temp_path, path)
     except BaseException:
         if os.path.exists(temp_path):
             os.remove(temp_path)

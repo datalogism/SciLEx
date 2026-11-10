@@ -55,19 +55,24 @@ class WorkerThreadFilter(logging.Filter):
 
     Worker threads register their id in ``thread_ids``. Threads spawned by the
     pipeline itself (``Worker-<api>`` collector threads, ``ThreadPoolExecutor``
-    pools, default ``Thread-N`` names) are accepted too, which is only correct
-    while a single job runs at a time (both runners enforce it).
+    pools, default ``Thread-N`` names) cannot be traced to a job: they are
+    accepted when ``accept_anonymous()`` says so (default: always, which is
+    right while a single job runs; the desktop runner, which runs several,
+    gives them to one job only).
     """
 
     PIPELINE_THREAD_PREFIXES = ("Thread-", "Worker-", "ThreadPoolExecutor-")
 
-    def __init__(self, thread_ids: set[int]):
+    def __init__(self, thread_ids: set[int], accept_anonymous=None):
         """Accept records from the threads whose ids are in ``thread_ids``."""
         super().__init__()
         self.thread_ids = thread_ids
+        self.accept_anonymous = accept_anonymous
 
     def filter(self, record: logging.LogRecord) -> bool:
         """Return True if ``record`` comes from one of the job's threads."""
         if record.thread in self.thread_ids:
             return True
-        return (record.threadName or "").startswith(self.PIPELINE_THREAD_PREFIXES)
+        if not (record.threadName or "").startswith(self.PIPELINE_THREAD_PREFIXES):
+            return False
+        return self.accept_anonymous is None or bool(self.accept_anonymous())
