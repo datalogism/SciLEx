@@ -33,7 +33,9 @@ class KgExport:
 
 def missing_dependencies() -> str | None:
     """Return why the knowledge graph cannot be built here, or None."""
-    missing = [m for m in ("morph_kgc", "pyoxigraph") if importlib.util.find_spec(m) is None]
+    missing = [
+        m for m in ("morph_kgc", "pyoxigraph") if importlib.util.find_spec(m) is None
+    ]
     if missing:
         return (
             f"Building the knowledge graph needs {', '.join(missing)}: "
@@ -81,6 +83,47 @@ def _record_kg_snapshot(folder: Path, bib: Path) -> None:
         if row["field"] == "keywords" and row["entry"] in tags:
             tags[row["entry"]].append(row["value"])
     record_snapshot(folder, tags.values(), "kg-export")
+
+
+def _profile_version() -> dict:
+    """Version of the pinned scilex-lpwc-ap profile (``scilex/kg/ap/VERSION.json``)."""
+    import json
+
+    path = Path(__file__).resolve().parents[2] / "kg" / "ap" / "VERSION.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {k: data.get(k) for k in ("version_iri", "version_info", "commit")}
+
+
+def _journal_export(folder: Path, turtle: Path, source, report) -> None:
+    from scilex.gui.services import journal
+    from scilex.gui.services.overview import load_history
+
+    history = load_history(folder)
+    snap = history[-1] if history else None
+    annotation = (
+        {
+            "papers": snap.papers,
+            "annotated": snap.annotated,
+            "pending": snap.pending,
+            "codes": snap.values,
+            "by_dimension": snap.by_dimension,
+        }
+        if snap
+        else None
+    )
+    journal.append(
+        folder,
+        "export-kg",
+        used={"zotero": journal.library_of(source), "profile": _profile_version()},
+        generated={
+            "turtle": Path(turtle).name,
+            "valid": getattr(report, "conforms", None),
+        },
+        annotation=annotation,
+    )
 
 
 def grid_dimensions(folder: Path) -> list[str] | None:
@@ -150,5 +193,6 @@ def export_knowledge_graph(
         subcorpora=subcorpora or None,
     )
     _record_kg_snapshot(folder, Path(bib))
+    _journal_export(folder, turtle, source, report)
     progress(100, "Done")
     return KgExport(turtle=turtle, bib=Path(bib), report=report, source=source)

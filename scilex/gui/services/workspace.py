@@ -3,6 +3,16 @@
 A review is a working folder holding a ``scilex.yml``, exactly as for the
 CLI. The app only remembers the list of folders in a small registry file
 stored in the per-OS user configuration directory.
+
+**Stable results folder.** The CLI writes a collection to
+``<output_dir>/<name>``, so renaming a review used to leave its results
+behind in the old folder. The app records the folder a review uses in
+``review_state.yml`` (review folder) the first time it reads the review, and
+keeps using it after a rename: results never move. ``scilex.yml`` is
+unchanged, so the CLI keeps its own rule. A review read for the first time
+whose ``<output_dir>/<name>`` holds no results adopts a sibling folder that
+does, when that folder carries a name the review had (its folder name, or an
+earlier name from its journal).
 """
 
 from __future__ import annotations
@@ -28,6 +38,7 @@ logger = logging.getLogger(__name__)
 
 RESULTS_FILENAME = "aggregated_results.csv"
 REGISTRY_FILENAME = "gui_reviews.yml"
+STATE_FILENAME = "review_state.yml"
 
 
 def default_registry_path() -> Path:
@@ -47,6 +58,8 @@ class Review:
     # Set when scilex.yml exists but cannot be loaded: the review stays listed
     # so the user can fix it in the Configure screen instead of losing it.
     error: str | None = field(default=None, compare=False)
+    # Results folder recorded in review_state.yml (None: output_root / name).
+    collection_folder: Path | None = None
 
     @property
     def id(self) -> str:
@@ -60,8 +73,11 @@ class Review:
 
     @property
     def collection_dir(self) -> Path:
-        """Directory where the pipeline writes this review's collection."""
-        return self.output_root / self.name
+        """Directory where the pipeline writes this review's collection.
+
+        The recorded folder (see the module docstring), else ``output_root / name``.
+        """
+        return self.collection_folder or self.output_root / self.name
 
     @property
     def results_path(self) -> Path:
@@ -120,6 +136,149 @@ def _raw_review_name(folder: Path) -> str:
     return folder.name
 
 
+def load_state(folder: Path) -> dict:
+    """``review_state.yml`` of a review (empty when missing or unreadable)."""
+    try:
+        data = yaml.safe_load(
+            (Path(folder) / STATE_FILENAME).read_text(encoding="utf-8")
+        )
+    except (OSError, yaml.YAMLError, UnicodeDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_state(folder: Path, state: dict) -> None:
+    """Write ``review_state.yml`` atomically (errors are logged, not raised)."""
+    path = Path(folder) / STATE_FILENAME
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        tmp.write_text(
+            "# Written by the SciLEx desktop app: the results folder of this review\n"
+            "# (kept when the review is renamed) and the names it has had.\n"
+            + yaml.safe_dump(state, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+        os.replace(tmp, path)
+    except OSError:
+        logger.warning("Cannot save %s", path, exc_info=True)
+        with contextlib.suppress(OSError):
+            tmp.unlink()
+
+
+def _stored(folder: Path, path: Path) -> str:
+    """``path`` relative to the review folder when inside it (posix), else absolute."""
+    try:
+        return path.relative_to(folder).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def _resolve_stored(folder: Path, value: str) -> Path:
+    path = Path(value).expanduser()
+    return (path if path.is_absolute() else folder / path).resolve()
+
+
+def known_names(folder: Path, state: dict | None = None) -> list[str]:
+    """Names the review has had: recorded ones, earlier names in its journal, its folder."""
+    from scilex.gui.services import journal
+
+    state = load_state(folder) if state is None else state
+    names = [str(n) for n in state.get("names") or []]
+    for event in journal.load(folder):
+        if event.get("activity") == "rename":
+            names.extend(
+                str(event.get("params", {}).get(k) or "") for k in ("from", "to")
+            )
+    names.append(Path(folder).name)
+    return list(dict.fromkeys(n for n in names if n))
+
+
+def results_candidates(
+    folder: Path, output_root: Path, exclude: Path | None = None
+) -> list[Path]:
+    """Folders of ``output_root`` holding results and named after the review."""
+    names = set(known_names(folder))
+    try:
+        children = sorted(output_root.iterdir())
+    except OSError:
+        return []
+    return [
+        child
+        for child in children
+        if child.name in names
+        and (child / RESULTS_FILENAME).is_file()
+        and (exclude is None or child.resolve() != exclude.resolve())
+    ]
+
+
+def adopt_folder(folder: Path, collection_folder: Path, reason: str) -> None:
+    """Make ``collection_folder`` the review's results folder (recorded + journal)."""
+    from scilex.gui.services import journal
+
+    folder = Path(folder)
+    state = load_state(folder)
+    previous = state.get("output_folder")
+    state["output_folder"] = _stored(folder, collection_folder)
+    save_state(folder, state)
+    journal.append(
+        folder,
+        "adopt-output",
+        params={"from": previous, "to": state["output_folder"], "reason": reason},
+        generated={"output_folder": state["output_folder"]},
+        message=f"Results folder: {state['output_folder']} ({reason}).",
+    )
+
+
+def _collection_folder(folder: Path, name: str, output_root: Path) -> Path:
+    """The review's results folder; records it (and renames) in review_state.yml."""
+    from scilex.gui.services import journal
+
+    state = load_state(folder)
+    default = (output_root / name).resolve()
+    changed = False
+    recorded = state.get("output_folder")
+    if recorded:
+        collection = _resolve_stored(folder, str(recorded))
+    else:
+        collection = default
+        if not (default / RESULTS_FILENAME).is_file():
+            candidates = results_candidates(folder, output_root, exclude=default)
+            if len(candidates) == 1:
+                collection = candidates[0].resolve()
+                journal.append(
+                    folder,
+                    "adopt-output",
+                    params={
+                        "from": _stored(folder, default),
+                        "to": _stored(folder, collection),
+                    },
+                    generated={"output_folder": _stored(folder, collection)},
+                    message=(
+                        f"{_stored(folder, default)} holds no results; "
+                        f"{_stored(folder, collection)}, named after the review, does."
+                    ),
+                )
+        state["output_folder"] = _stored(folder, collection)
+        changed = True
+    previous_name = state.get("name")
+    if previous_name and previous_name != name:
+        journal.append(
+            folder,
+            "rename",
+            params={"from": previous_name, "to": name},
+            generated={"output_folder": state["output_folder"]},
+            message=f"Renamed from {previous_name} to {name}; results stay in "
+            f"{state['output_folder']}.",
+        )
+    if previous_name != name:
+        state["name"] = name
+        state["names"] = list(dict.fromkeys([*(state.get("names") or []), name]))
+        changed = True
+    if changed:
+        save_state(folder, state)
+    return collection
+
+
 def read_review(folder: Path) -> Review:
     """Validate ``folder/scilex.yml`` and describe the review.
 
@@ -138,7 +297,16 @@ def read_review(folder: Path) -> Review:
     output_root = Path(settings.output_dir).expanduser()
     if not output_root.is_absolute():
         output_root = folder / output_root
-    return Review(folder=folder, name=settings.name, output_root=output_root.resolve())
+    output_root = output_root.resolve()
+    collection = _collection_folder(folder, settings.name, output_root)
+    return Review(
+        folder=folder,
+        name=settings.name,
+        output_root=output_root,
+        collection_folder=None
+        if collection == output_root / settings.name
+        else collection,
+    )
 
 
 class Workspace:
@@ -259,7 +427,16 @@ class Workspace:
         else:
             config_path.parent.mkdir(parents=True, exist_ok=True)
             config_path.write_text(skeleton_text(name), encoding="utf-8")
-        return self.open_review(config_path.parent)
+        review = self.open_review(config_path.parent)
+        from scilex.gui.services import journal
+
+        journal.append(
+            review.folder,
+            "created",
+            params={"origin": journal.EMPTY, "name": name, "template": template},
+            generated={"output_folder": _stored(review.folder, review.collection_dir)},
+        )
+        return review
 
     def forget_review(self, folder: Path) -> None:
         """Remove a folder from the registry (its files are left untouched)."""
@@ -302,4 +479,8 @@ class Workspace:
                     config_path=review.config_path, keys_path=empty_keys
                 )
         config.main["output_dir"] = str(review.output_root)
+        if review.collection_folder is not None:
+            # A renamed review keeps its results folder: point the pipeline at it.
+            config.main["output_dir"] = str(review.collection_folder.parent)
+            config.main["collect_name"] = review.collection_folder.name
         return config

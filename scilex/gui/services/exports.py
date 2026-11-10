@@ -134,13 +134,23 @@ def run_file_export(review: Review, fmt: str, scope: str) -> Path:
     if data.empty:
         raise ValueError("There is no paper to export for this scope.")
     target = export_path(review, "papers", scope, EXTENSIONS[fmt])
-    if fmt == BIBTEX:
-        return write_bibtex(data, target)
-    if fmt == CSV:
-        return write_csv(review, data, target)
-    if fmt == TURTLE:
-        return write_turtle(review, data, target)
-    raise ValueError(f"Unknown format {fmt!r}")
+    writers = {
+        BIBTEX: lambda: write_bibtex(data, target),
+        CSV: lambda: write_csv(review, data, target),
+        TURTLE: lambda: write_turtle(review, data, target),
+    }
+    if fmt not in writers:
+        raise ValueError(f"Unknown format {fmt!r}")
+    written = writers[fmt]()
+    from scilex.gui.services import journal
+
+    journal.append(
+        review.folder,
+        "export-file",
+        params={"format": fmt, "scope": scope},
+        generated={"file": Path(written).name, "papers": len(data)},
+    )
+    return written
 
 
 def zotero_settings(config: SciLExConfig) -> ZoteroSettings | None:

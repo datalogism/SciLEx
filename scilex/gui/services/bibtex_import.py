@@ -228,4 +228,19 @@ def import_bibtex(review: Review, text: str, filename: str = "") -> BibtexImport
         paper_log.update(review.folder, merged, when=today, fresh=previous is None)
     except OSError:
         logger.warning("Cannot update the paper log", exc_info=True)
+    from scilex.gui.services import journal
+
+    journal.append(
+        review.folder,
+        "import-bibtex",
+        used={"file": Path(filename).name},
+        params={"category": "extension", "mode": "BibTeX file"},
+        generated={
+            "entries": summary.entries,
+            "added": summary.added,
+            "already_there": summary.already_there,
+            "results_rows": len(merged),
+        },
+        message=summary.message(),
+    )
     return summary

@@ -99,7 +99,9 @@ def zotero_record(item: dict) -> dict:
     data = item.get("data", {})
     return {
         "fields": {name: _text(data.get(zname)) for name, zname in FIELDS.items()},
-        "tags": sorted({str(t.get("tag", "")).strip() for t in data.get("tags", [])} - {""}),
+        "tags": sorted(
+            {str(t.get("tag", "")).strip() for t in data.get("tags", [])} - {""}
+        ),
     }
 
 
@@ -113,7 +115,10 @@ def _item_collections(item: dict) -> set[str]:
 
 def _is_paper(item: dict) -> bool:
     data = item.get("data", {})
-    return data.get("itemType") not in ("attachment", "note", "annotation") and "title" in data
+    return (
+        data.get("itemType") not in ("attachment", "note", "annotation")
+        and "title" in data
+    )
 
 
 @dataclass
@@ -122,7 +127,9 @@ class Change:
 
     key: str
     title: str
-    fields: dict[str, tuple[str, str]] = field(default_factory=dict)  # name -> (old, new)
+    fields: dict[str, tuple[str, str]] = field(
+        default_factory=dict
+    )  # name -> (old, new)
     added: set[str] = field(default_factory=set)
     removed: set[str] = field(default_factory=set)
 
@@ -165,7 +172,9 @@ class Conflict:
 def conflicts_between(local: Change, remote: Change) -> list[Conflict]:
     """Values ``local`` and ``remote`` (same paper) changed in different ways."""
     found = [
-        Conflict(local.key, local.title, name, local.fields[name][1], remote.fields[name][1])
+        Conflict(
+            local.key, local.title, name, local.fields[name][1], remote.fields[name][1]
+        )
         for name in set(local.fields) & set(remote.fields)
         if local.fields[name][1] != remote.fields[name][1]
     ]
@@ -174,8 +183,13 @@ def conflicts_between(local: Change, remote: Change) -> list[Conflict]:
     remote_screen = {t for t in remote.added if t.upper().startswith(SCREEN_PREFIX)}
     if local_screen and remote_screen and local_screen != remote_screen:
         found.append(
-            Conflict(local.key, local.title, "screening",
-                     ", ".join(sorted(local_screen)), ", ".join(sorted(remote_screen)))
+            Conflict(
+                local.key,
+                local.title,
+                "screening",
+                ", ".join(sorted(local_screen)),
+                ", ".join(sorted(remote_screen)),
+            )
         )
     return found
 
@@ -192,7 +206,9 @@ class SyncState:
     library_version: int = 0
     synced_at: str = ""
     collections: list[str] | None = None  # None: the whole library
-    papers: dict[str, dict] = field(default_factory=dict)  # key -> {version, zotero, local}
+    papers: dict[str, dict] = field(
+        default_factory=dict
+    )  # key -> {version, zotero, local}
     # Papers whose Zotero side must be re-read at each check (open conflicts).
     pending: list[str] = field(default_factory=list)
 
@@ -217,7 +233,9 @@ def load_state(review: Review) -> SyncState | None:
 def save_state(review: Review, state: SyncState) -> None:
     path = state_path(review)
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(asdict(state), ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.write_text(
+        json.dumps(asdict(state), ensure_ascii=False, indent=1), encoding="utf-8"
+    )
     tmp.replace(path)
 
 
@@ -288,7 +306,9 @@ def _fetch_items(api, keys: list[str]) -> dict[str, dict]:
     items: dict[str, dict] = {}
     for start in range(0, len(keys), BATCH):
         batch = keys[start : start + BATCH]
-        found, _ = _get_json(api, "/items", {"itemKey": ",".join(batch), "limit": BATCH})
+        found, _ = _get_json(
+            api, "/items", {"itemKey": ",".join(batch), "limit": BATCH}
+        )
         for item in found or []:
             items[item["key"]] = item
     return items
@@ -347,7 +367,9 @@ class SyncStatus:
 
     @property
     def zotero_count(self) -> int:
-        return len(self.zotero_changed) + len(self.zotero_new) + len(self.zotero_removed)
+        return (
+            len(self.zotero_changed) + len(self.zotero_new) + len(self.zotero_removed)
+        )
 
     @property
     def local_count(self) -> int:
@@ -420,7 +442,9 @@ def check(review: Review) -> SyncStatus:
             if not in_scope or item.get("data", {}).get("deleted"):
                 status.zotero_removed.append(key)
                 continue
-            change = diff(key, _title(item), state.papers[key]["zotero"], zotero_record(item))
+            change = diff(
+                key, _title(item), state.papers[key]["zotero"], zotero_record(item)
+            )
             if not change.empty:
                 remote[key] = change
         elif in_scope and not item.get("data", {}).get("deleted"):
@@ -511,7 +535,9 @@ def link(review: Review, required: list[str] | None = None) -> dict[str, int]:
     index: dict[str, list[str]] = {}
     for item in papers:
         data = item.get("data", {})
-        for match in _match_key({"DOI": data.get("DOI"), "url": data.get("url"), "title": data.get("title")}):
+        for match in _match_key(
+            {"DOI": data.get("DOI"), "url": data.get("url"), "title": data.get("title")}
+        ):
             index.setdefault(match, []).append(item["key"])
     by_key = {item["key"]: item for item in papers}
     names = required if required is not None else _required_subcorpora(review)
@@ -529,7 +555,9 @@ def link(review: Review, required: list[str] | None = None) -> dict[str, int]:
         ]
         if not candidates:
             return ""
-        corpora = {c.casefold() for c in split_semicolon_field(row.get("zotero_collections"))}
+        corpora = {
+            c.casefold() for c in split_semicolon_field(row.get("zotero_collections"))
+        }
 
         def rank(key: str) -> tuple[bool, bool, bool]:
             """Items in a required sub-corpus first (not a stray import copy),
@@ -571,6 +599,18 @@ def link(review: Review, required: list[str] | None = None) -> dict[str, int]:
     _write_results(review, data)
     save_state(review, state)
     forget_cache(review)
+    from scilex.gui.services import journal
+
+    journal.append(
+        review.folder,
+        "zotero-sync-link",
+        used={"zotero_library_version": state.library_version},
+        generated={"linked": linked, "papers": len(data), "zotero_items": len(papers)},
+        annotation=journal.annotation_of_results(review.results_path),
+        zotero_actors=journal.zotero_actors(
+            papers, since=journal.last_zotero_time(review.folder)
+        ),
+    )
     return {"linked": linked, "papers": len(data), "zotero": len(papers)}
 
 
@@ -582,7 +622,9 @@ def link(review: Review, required: list[str] | None = None) -> dict[str, int]:
 def _set_tags(data: pd.DataFrame, index, tags: set[str]) -> None:
     """Write ``tags`` into the ``tags`` / ``collect_keywords`` columns of a row."""
     keywords = sorted(t for t in tags if COLLECT_KEYWORD.match(t))
-    others = sorted(t for t in tags if t not in keywords and not t.upper().startswith(SCREEN_PREFIX))
+    others = sorted(
+        t for t in tags if t not in keywords and not t.upper().startswith(SCREEN_PREFIX)
+    )
     for column, values in (("tags", others), ("collect_keywords", keywords)):
         if column not in data.columns:
             data[column] = ""
@@ -612,7 +654,11 @@ def pull(review: Review, status: SyncStatus | None = None) -> dict[str, int]:
     status = status or check(review)
     conflicted = {(c.key, c.what) for c in status.conflicts}
     data = _read_results(review)
-    rows = {_row_key(r): i for i, r in zip(data.index, data.to_dict("records"), strict=True) if _row_key(r)}
+    rows = {
+        _row_key(r): i
+        for i, r in zip(data.index, data.to_dict("records"), strict=True)
+        if _row_key(r)
+    }
     decisions = screening.load_decisions(review)
     updated = 0
     for change in status.zotero_changed:
@@ -627,12 +673,15 @@ def pull(review: Review, status: SyncStatus | None = None) -> dict[str, int]:
                 data.at[index, name] = new
         row = data.loc[index].to_dict()
         paper = screening.paper_key(row)
-        current = set(local_record(row, getattr(decisions.get(paper), "decision", None))["tags"])
+        current = set(
+            local_record(row, getattr(decisions.get(paper), "decision", None))["tags"]
+        )
         current |= change.added
         current -= change.removed
         _set_tags(data, index, current)
         if (change.key, "screening") not in conflicted and (
-            change.added & set(SCREEN_TAGS.values()) or change.removed & set(SCREEN_TAGS.values())
+            change.added & set(SCREEN_TAGS.values())
+            or change.removed & set(SCREEN_TAGS.values())
         ):
             decision = _screen_decision(current)
             note = getattr(decisions.get(paper), "note", "")
@@ -644,7 +693,9 @@ def pull(review: Review, status: SyncStatus | None = None) -> dict[str, int]:
         new_rows = pd.DataFrame([item_to_row(item) for item in status.zotero_new])
         data = pd.concat([data, new_rows], ignore_index=True)
         added = len(new_rows)
-        for item, row in zip(status.zotero_new, new_rows.to_dict("records"), strict=True):
+        for item, row in zip(
+            status.zotero_new, new_rows.to_dict("records"), strict=True
+        ):
             decision = _screen_decision(set(zotero_record(item)["tags"]))
             if decision:
                 screening.set_decision(review, screening.paper_key(row), decision)
@@ -654,8 +705,12 @@ def pull(review: Review, status: SyncStatus | None = None) -> dict[str, int]:
     decisions = _decisions(review)
     records = {_row_key(r): r for r in data.to_dict("records") if _row_key(r)}
     keep_pending = {c.key for c in status.conflicts}
-    for key in {c.key for c in status.zotero_changed} | {i["key"] for i in status.zotero_new}:
-        item = status.items.get(key) or next((i for i in status.zotero_new if i["key"] == key), None)
+    for key in {c.key for c in status.zotero_changed} | {
+        i["key"] for i in status.zotero_new
+    }:
+        item = status.items.get(key) or next(
+            (i for i in status.zotero_new if i["key"] == key), None
+        )
         row = records.get(key)
         if item is None or row is None:
             continue
@@ -668,17 +723,39 @@ def pull(review: Review, status: SyncStatus | None = None) -> dict[str, int]:
             "version": _item_version(item),
             "zotero": zotero_record(item),
             # Local changes not yet pushed stay pending: rebase only what was pulled.
-            "local": local_now if previous is None else _rebase_local(previous, local_now, status, key),
+            "local": local_now
+            if previous is None
+            else _rebase_local(previous, local_now, status, key),
         }
     state.pending = sorted(keep_pending)
     state.library_version = status.library_version or state.library_version
     state.synced_at = datetime.now().isoformat(timespec="seconds")
     save_state(review, state)
     forget_cache(review)
+    from scilex.gui.services import journal
+
+    changed_items = list(status.items.values()) + list(status.zotero_new)
+    journal.append(
+        review.folder,
+        "zotero-pull",
+        used={"zotero_library_version": state.library_version},
+        generated={
+            "updated": updated,
+            "added": added,
+            "removed": len(status.zotero_removed),
+            "results_rows": len(data),
+        },
+        annotation=journal.annotation_of_results(review.results_path),
+        zotero_actors=journal.zotero_actors(
+            changed_items, since=journal.last_zotero_time(review.folder)
+        ),
+    )
     return {"updated": updated, "added": added, "removed": len(status.zotero_removed)}
 
 
-def _rebase_local(previous: dict, local_now: dict, status: SyncStatus, key: str) -> dict:
+def _rebase_local(
+    previous: dict, local_now: dict, status: SyncStatus, key: str
+) -> dict:
     """Local baseline after a pull: the old one plus what was pulled.
 
     Values SciLEx changed itself (to push) stay different from the baseline.
@@ -714,7 +791,9 @@ def push(review: Review, status: SyncStatus | None = None) -> dict[str, int]:
     for change in status.local_changed:
         base = state.papers[change.key]
         item = status.items.get(change.key)
-        remote_tags = set(zotero_record(item)["tags"]) if item else set(base["zotero"]["tags"])
+        remote_tags = (
+            set(zotero_record(item)["tags"]) if item else set(base["zotero"]["tags"])
+        )
         version = _item_version(item) if item else base["version"]
         entry: dict = {"key": change.key, "version": version}
         for name, (_, new) in change.fields.items():
@@ -725,7 +804,9 @@ def push(review: Review, status: SyncStatus | None = None) -> dict[str, int]:
             added = {t for t in added if not t.upper().startswith(SCREEN_PREFIX)}
             removed = {t for t in removed if not t.upper().startswith(SCREEN_PREFIX)}
         if added or removed:
-            entry["tags"] = [{"tag": t} for t in sorted((remote_tags | added) - removed)]
+            entry["tags"] = [
+                {"tag": t} for t in sorted((remote_tags | added) - removed)
+            ]
         if len(entry) > 2:
             payload.append(entry)
 
@@ -752,10 +833,15 @@ def push(review: Review, status: SyncStatus | None = None) -> dict[str, int]:
                 state.papers[key] = {
                     "version": _item_version(item),
                     "zotero": zotero_record(item),
-                    "local": local_record(records[key], decisions.get(screening.paper_key(records[key]))),
+                    "local": local_record(
+                        records[key], decisions.get(screening.paper_key(records[key]))
+                    ),
                 }
         save_state(review, state)
     forget_cache(review)
+    from scilex.gui.services import journal
+
+    journal.append(review.folder, "zotero-push", generated=dict(totals))
     return totals
 
 
@@ -778,8 +864,11 @@ def resolve(review: Review, conflict: Conflict, keep: str) -> None:
     paper = state.papers[conflict.key]
     if keep == "zotero":
         data = _read_results(review)
-        index = next(i for i, r in zip(data.index, data.to_dict("records"), strict=True)
-                     if _row_key(r) == conflict.key)
+        index = next(
+            i
+            for i, r in zip(data.index, data.to_dict("records"), strict=True)
+            if _row_key(r) == conflict.key
+        )
         if conflict.what == "screening":
             row = data.loc[index].to_dict()
             decision = _screen_decision(set(zotero_record(item)["tags"]))
@@ -791,7 +880,11 @@ def resolve(review: Review, conflict: Conflict, keep: str) -> None:
     remote = zotero_record(item)
     if conflict.what == "screening":
         screen = {t for t in remote["tags"] if t.upper().startswith(SCREEN_PREFIX)}
-        others = {t for t in paper["zotero"]["tags"] if not t.upper().startswith(SCREEN_PREFIX)}
+        others = {
+            t
+            for t in paper["zotero"]["tags"]
+            if not t.upper().startswith(SCREEN_PREFIX)
+        }
         paper["zotero"]["tags"] = sorted(others | screen)
     else:
         paper["zotero"]["fields"][conflict.what] = remote["fields"][conflict.what]
@@ -802,7 +895,11 @@ def resolve(review: Review, conflict: Conflict, keep: str) -> None:
         now = local_record(row, decisions.get(screening.paper_key(row)))
         if conflict.what == "screening":
             paper["local"]["tags"] = sorted(
-                {t for t in paper["local"]["tags"] if not t.upper().startswith(SCREEN_PREFIX)}
+                {
+                    t
+                    for t in paper["local"]["tags"]
+                    if not t.upper().startswith(SCREEN_PREFIX)
+                }
                 | {t for t in now["tags"] if t.upper().startswith(SCREEN_PREFIX)}
             )
         else:
