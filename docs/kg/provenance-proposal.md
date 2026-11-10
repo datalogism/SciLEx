@@ -158,3 +158,24 @@ exists, the export would add, per event:
 
 `rename` and `adopt-output` stay local (file layout, not research provenance); job
 events keep only completed ones with their `history_key`.
+
+## Annotation workflow and citation metrics (to add to the profile)
+
+SciLEx now writes, as Zotero tags, the annotation workflow of each paper
+(`ANNOT:<id>` assigned, `ANNOT_VALID_BY:<id>` validated against the grid,
+`DELETED_BY:<who>` discarded, `AGREEMENT_COPY:<key>` an annotator's copy in an
+agreement study) and its citation metrics (`CITATIONS:10^n`, `REFERENCES:10^n`,
+`CITATIONS_PER_YEAR:10^n`, `CITED_IN_CORPUS:10^n`, `PAGERANK:top5%`, `QUALITY:80`,
+`VENUE_RANK:A*`). Until the profile has terms for them, the knowledge-graph export
+treats them as automation tags (dropped from the codes; discarded papers and
+copies are left out of the graph). Candidate terms:
+
+- `sxv:assignedTo` / `sxv:validatedBy` (range `foaf:Agent`, ORCID IRI when known) on
+  the paper's coding, with `prov:generatedAtTime` from the journal;
+- the agreement study as a `prov:Activity` with one `sxv:AgreementMeasure` per
+  dimension (`sxv:dimension`, `sxv:krippendorffAlpha` xsd:decimal,
+  `sxv:distance "MASI"`, `sxv:paperCount`);
+- metrics as observations on the paper (`sxv:citationCount`, `sxv:referenceCount`,
+  `sxv:citationsPerYear`, `sxv:inCorpusCitationCount`, `sxv:pageRank`) attached to
+  the citation snapshot they were computed from (`prov:wasDerivedFrom`
+  `zotero_citations.json`, with its read date).

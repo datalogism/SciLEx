@@ -35,7 +35,32 @@ DEFAULT_GRID_PATH = Path(__file__).with_name("TAG_LIST_FINAL - DIM_ANNOTATIONS.c
 AUTOMATION_EXACT_TAGS = frozenset(
     {"HavePDF", "HaveHF", "HavePWC", "HaveGithub", "SciLexCollected"}
 )
-AUTOMATION_PREFIXES = ("QUALI_SCORE:", "REL_SCORE:", "CITAT:")
+# Workflow tags (scilex.review_tags), screening decisions pushed by the Zotero
+# sync, and citation metrics (scilex.citation_metrics): written by SciLEx, so
+# never annotation codes (grid deduction, tag analysis, Overview, knowledge graph).
+WORKFLOW_TAG_PREFIXES = (
+    "ANNOT:",
+    "ANNOT_VALID_BY:",
+    "DELETED_BY:",
+    "AGREEMENT_COPY:",
+    "SCREEN:",
+)
+METRIC_TAG_PREFIXES = (
+    "CITATIONS:",
+    "REFERENCES:",
+    "CITATIONS_PER_YEAR:",
+    "CITED_IN_CORPUS:",
+    "PAGERANK:",
+    "QUALITY:",
+    "VENUE_RANK:",
+)
+AUTOMATION_PREFIXES = (
+    "QUALI_SCORE:",
+    "REL_SCORE:",
+    "CITAT:",
+    *WORKFLOW_TAG_PREFIXES,
+    *METRIC_TAG_PREFIXES,
+)
 AUTOMATION_REGEXES = (re.compile(r"^Collect_KW\d*:"),)
 COLLECT_KEYWORD_TAG = re.compile(r"^Collect_KW(\d+):(.+)$")
 

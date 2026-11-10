@@ -63,3 +63,13 @@ def test_metrics_and_tags():
     ]
     assert b["metric_pagerank"] > a["metric_pagerank"]  # the cited paper ranks first
     assert c["tags"] == "LANG:English"  # no DOI, no quality: nothing added
+
+
+def test_scilex_tags_are_never_annotation_codes():
+    from scilex.review_tags import WORKFLOW_PREFIXES
+    from scilex.tagging.grid import is_automation_tag
+
+    for dimension in (*cm.METRIC_DIMENSIONS, *WORKFLOW_PREFIXES, "SCREEN"):
+        assert is_automation_tag(f"{dimension}:x"), dimension
+    assert not is_automation_tag("TASK:RE")
+    assert not is_automation_tag("GRANULARITY:Document")
