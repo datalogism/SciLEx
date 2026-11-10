@@ -23,7 +23,9 @@ from dataclasses import dataclass, field
 ASSIGNED = "ANNOT"
 VALIDATED = "ANNOT_VALID_BY"
 DELETED = "DELETED_BY"
-WORKFLOW_PREFIXES = (ASSIGNED, VALIDATED, DELETED)
+# AGREEMENT_COPY:<item key>: an annotator's copy of a paper (scilex.gui.services.agreement).
+AGREEMENT_COPY = "AGREEMENT_COPY"
+WORKFLOW_PREFIXES = (ASSIGNED, VALIDATED, DELETED, AGREEMENT_COPY)
 FILTER_PREFIX = "filter:"
 ORCID = re.compile(r"^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$")
 

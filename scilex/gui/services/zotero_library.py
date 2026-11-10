@@ -328,7 +328,16 @@ def fetch_papers(api, collection_key: str | None) -> list[dict]:
     items = api.get_top_items(collection_key)
     if items is None:
         raise ConnectionError("Cannot read the papers of this Zotero collection.")
-    return [item for item in items if is_paper(item)]
+    return [item for item in items if is_paper(item) and not is_agreement_copy(item)]
+
+
+def is_agreement_copy(item: dict) -> bool:
+    """True for an annotator's copy made for an agreement study (not a paper of
+    the review: imports, sync and exports skip it)."""
+    return any(
+        str(tag.get("tag", "")).startswith("AGREEMENT_COPY:")
+        for tag in item.get("data", {}).get("tags", [])
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -75,6 +75,9 @@ def render(ctx: AppContext, review: Review) -> None:
         from scilex.gui.components.annotators import AnnotatorsCard
 
         AnnotatorsCard(review)
+        from scilex.gui.components.agreement_card import AgreementCard
+
+        AgreementCard(ctx, review)
 
 
 class _GridState:

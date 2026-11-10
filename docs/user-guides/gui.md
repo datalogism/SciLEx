@@ -384,6 +384,31 @@ Prepares and follows the manual annotation of the papers in Zotero.
   and who last edited each paper; the tables are also written to
   `output/<name>/annotations/`. Same as `python -m scilex.report_annotations`.
 
+- **Annotators**: **Find in Zotero** lists the members of the review's Zotero library
+  (a group's owner, admins and members, and everyone who edited its items), kept in
+  `members.yml`; add each person's ORCID iD, or add people by hand. **Assign** spreads
+  the papers over the chosen annotators with balanced loads (all papers or one
+  sub-corpus, 1 to 5 annotators per paper, only papers not assigned yet), as
+  `ANNOT:<id>` tags; **Progress** counts, per annotator, the papers assigned, validated
+  and discarded. `<id>` is the ORCID iD, else the Zotero user name.
+- **Workflow tags** (shared with Zotero by the sync): `ANNOT:<id>` assigned,
+  `ANNOT_VALID_BY:<id>` annotation complete against the grid, `DELETED_BY:<who>`
+  discarded (kept in the corpus but left out of the analyses, the counts and the
+  charts; `DELETED_BY:filter:<reason>` when a Consolidate filter did it). Explore's
+  notice has **Validated by me** and **Discard** with your ORCID iD; Screen and Explore
+  filter on the annotation status, the annotator and the validator. These tags never
+  count as annotation dimensions.
+- **Agreement study**: papers assigned to two annotators or more are copied, by
+  **Create annotator copies**, into the Zotero collection `agreement/<annotator>` of each
+  of them: same bibliographic data and `DIMENSION:?` placeholders, but no codes (blind
+  annotation), plus `ANNOT:<id>` and `AGREEMENT_COPY:<key of the paper>`. Copies are
+  never taken for papers of the review. Once the annotators have coded their copies,
+  **Compute agreement** gives Krippendorff's alpha with the MASI distance per dimension
+  (≥ 0.8 good, ≥ 0.667 tentative, ≥ 0.4 moderate, ≥ 0.2 fair, below poor), and **Merge
+  into the papers** writes on each paper the codes every annotator gave (and, ticked,
+  those a majority gave), removing the placeholders of the dimensions now coded; the
+  other codes are listed to adjudicate.
+
 Annotate reads the review's own Zotero library (see ⑧ Export).
 
 ## ⑧ Export
