@@ -246,22 +246,25 @@ def plan_assignment(
 
 def apply_tags(review: Review, changes: dict[int, tuple[list[str], list[str]]]) -> int:
     """Add / remove tags on results rows: ``{index: (add, remove)}``; return rows changed."""
-    from scilex.gui.services.extend import backup, read_results, write_results
+    from scilex.gui.services.extend import backup, read_results
+    from scilex.gui.services.results_store import write_changes
 
-    data = read_results(review.results_path)
+    before = read_results(review.results_path)
+    data = before.copy()
     if "tags" not in data.columns:
         data["tags"] = ""
     data["tags"] = data["tags"].astype(object)
     changed = 0
     for index, (add, remove) in changes.items():
-        before = data.at[index, "tags"]
-        after = review_tags.with_tags(before, add, remove)
-        if after != review_tags.with_tags(before):
-            data.at[index, "tags"] = after
+        old = data.at[index, "tags"]
+        new = review_tags.with_tags(old, add, remove)
+        if new != review_tags.with_tags(old):
+            data.at[index, "tags"] = new
             changed += 1
     if changed:
         backup(review.results_path)
-        write_results(data, review.results_path)
+        # Only the changed tag cells: an enricher running meanwhile keeps its work.
+        write_changes(review.results_path, before, data)
     return changed
 
 
