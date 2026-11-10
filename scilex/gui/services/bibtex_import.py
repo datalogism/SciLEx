@@ -234,6 +234,7 @@ def import_bibtex(review: Review, text: str, filename: str = "") -> BibtexImport
         review.folder,
         "import-bibtex",
         used={"file": Path(filename).name},
+        params={"category": "extension", "mode": "BibTeX file"},
         generated={
             "entries": summary.entries,
             "added": summary.added,

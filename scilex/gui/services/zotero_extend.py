@@ -118,6 +118,9 @@ def extend_from_zotero(
     api = zotero_library.client(effective_keys(review.folder), library=source)
     collections = zotero_library.list_collections(api)
     items = zotero_library.fetch_source_papers(api, source, collections)
+    from scilex.gui.services import journal
+
+    actors = journal.zotero_actors(items, since=journal.last_zotero_time(review.folder))
     incoming = zotero_library.items_to_results(items)
     summary.fetched = len(incoming)
     say(50, f"{summary.fetched} papers read; merging with the review…")
@@ -181,8 +184,6 @@ def extend_from_zotero(
         say(75, "Linking the review with this Zotero library…")
         zotero_library.save_source(review.folder, source)
         summary.linked = zotero_sync.link(review)["linked"]
-    from scilex.gui.services import journal
-
     state = zotero_sync.load_state(review) if link else None
     journal.append(
         review.folder,
@@ -191,8 +192,9 @@ def extend_from_zotero(
             "zotero": journal.library_of(source),
             "zotero_library_version": getattr(state, "library_version", None),
         },
-        params={"link": link},
+        params={"link": link, "category": "extension", "mode": "Zotero"},
         generated={
+            "results_rows": len(merged),
             "fetched": summary.fetched,
             "added": summary.added,
             "already_there": summary.already_there,
@@ -200,6 +202,8 @@ def extend_from_zotero(
             "linked": summary.linked,
         },
         message=summary.message(),
+        annotation=journal.annotation_of_results(review.results_path),
+        zotero_actors=actors,
     )
     say(100, summary.message())
     return summary

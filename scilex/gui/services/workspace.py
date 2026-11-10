@@ -432,8 +432,8 @@ class Workspace:
 
         journal.append(
             review.folder,
-            "create",
-            params={"name": name, "template": template},
+            "created",
+            params={"origin": journal.EMPTY, "name": name, "template": template},
             generated={"output_folder": _stored(review.folder, review.collection_dir)},
         )
         return review

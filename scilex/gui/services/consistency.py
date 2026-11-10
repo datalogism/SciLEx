@@ -68,9 +68,11 @@ def _zotero_issues(review: Review) -> list[Issue]:
     origin = None
     for event in reversed(journal.load(review.folder)):
         library = (event.get("used") or {}).get("zotero") or {}
-        if event.get("activity") in ("import-zotero", "extend-zotero") and library.get(
-            "library_id"
-        ):
+        if event.get("activity") in (
+            "created",
+            "import-zotero",
+            "extend-zotero",
+        ) and library.get("library_id"):
             origin = event
             break
         if event.get("activity") == "link":

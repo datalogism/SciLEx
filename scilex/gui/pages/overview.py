@@ -8,7 +8,7 @@ from pathlib import Path
 from nicegui import run, ui
 
 from scilex.gui.components.errors import show_error
-from scilex.gui.services import consistency, journal
+from scilex.gui.services import consistency, journal, provenance
 from scilex.gui.services import overview as service
 from scilex.gui.services.workspace import Review, Workspace, adopt_folder
 from scilex.gui.state import AppContext
@@ -199,13 +199,14 @@ def render(ctx: AppContext, review: Review) -> None:
 
     async def load() -> None:
         try:
-            data, issues, events = await run.io_bound(_gather, review)
+            data, issues, events, card = await run.io_bound(_gather, review)
         except Exception as exc:
             with body:
                 show_error("Cannot read the review", exc)
             return
         body.clear()
         with body:
+            _review_card(card)
             _issues(review, issues)
             _draw(review, data)
             _timeline(events)
@@ -226,7 +227,107 @@ def _gather(review: Review):
         service.compute(review),
         consistency.check(review, main),
         journal.load(review.folder),
+        provenance.review_card(review.folder),
     )
+
+
+def _short(iso: str) -> str:
+    return _when(iso)[:10] if iso else "?"
+
+
+def _steps(title: str, steps: list[provenance.Step], unit: str, marker: str) -> None:
+    ui.label(title).classes("text-xs font-medium text-gray-600")
+    if not steps:
+        ui.label("none yet").classes("text-xs text-gray-500")
+        return
+    with ui.column().classes("gap-0").mark(marker):
+        for step in reversed(steps[-6:]):
+            count = (
+                f" — {'+' if unit == 'added' and step.papers > 0 else ''}{step.papers} {unit}"
+                if step.papers is not None
+                else ""
+            )
+            failed = "" if step.status == "completed" else f" ({step.status})"
+            ui.label(
+                f"{_short(step.at)} · {step.what}{count}{failed} · {step.who}"
+            ).classes("text-xs")
+        if len(steps) > 6:
+            ui.label(f"… and {len(steps) - 6} earlier (see History)").classes(
+                "text-xs text-gray-500"
+            )
+
+
+def _review_card(card: provenance.ReviewCard) -> None:
+    """Origin, growth and contributors of the review, from its journal."""
+    with ui.card().classes("w-full gap-2").mark("review-card"):
+        with ui.row().classes("items-baseline gap-2 w-full"):
+            ui.label("Review").classes("font-bold")
+            ui.badge(card.origin_label).props("outline").mark("review-origin")
+            if card.created_at:
+                ui.label(
+                    f"created {_short(card.created_at)} by {card.created_by}"
+                ).classes("text-xs text-gray-600")
+        if card.origin_detail:
+            ui.label(card.origin_detail).classes("text-sm").style(
+                "overflow-wrap: anywhere"
+            )
+        with ui.element("div").classes("grid gap-3 w-full md:grid-cols-2"):
+            with ui.column().classes("gap-1"):
+                _steps("Extensions", card.extensions, "added", "review-extensions")
+            with ui.column().classes("gap-1"):
+                _steps(
+                    "Enrichments",
+                    card.enrichments,
+                    "papers updated",
+                    "review-enrichments",
+                )
+        if card.annotation:
+            first, last = card.annotation[0], card.annotation[-1]
+            ui.label(
+                f"Annotation: {last[1]} papers annotated, {last[2]} codes "
+                f"(first record: {first[1]} papers, {first[2]} codes, {_short(first[0])})"
+            ).classes("text-sm").mark("review-annotation")
+            if len(card.annotation) > 1:
+                ui.echart(
+                    {
+                        "grid": {
+                            "left": 8,
+                            "right": 8,
+                            "top": 8,
+                            "bottom": 8,
+                            "containLabel": True,
+                        },
+                        "tooltip": {"trigger": "axis"},
+                        "xAxis": {"type": "time", **_AXIS},
+                        "yAxis": {"type": "value", **_AXIS, "minInterval": 1},
+                        "series": [
+                            {
+                                "type": "line",
+                                "name": "annotated papers",
+                                "data": [
+                                    [at, annotated]
+                                    for at, annotated, _ in card.annotation
+                                ],
+                                "itemStyle": {"color": BLUE},
+                                "showSymbol": True,
+                            }
+                        ],
+                    }
+                ).classes("w-full").style("height: 140px")
+        people = [
+            f"{name} ({n})"
+            for name, n in sorted(card.scilex_users.items(), key=lambda kv: -kv[1])
+        ]
+        zotero = [
+            f"{name} ({n})"
+            for name, n in sorted(card.zotero_users.items(), key=lambda kv: -kv[1])
+        ]
+        ui.label(
+            "Contributors — SciLEx: "
+            + (", ".join(people) or "none recorded")
+            + " · Zotero: "
+            + (", ".join(zotero) or "none recorded")
+        ).classes("text-xs text-gray-600").mark("review-contributors")
 
 
 def _issues(review: Review, issues: list[consistency.Issue]) -> None:
@@ -306,8 +407,9 @@ def _timeline(events: list[dict]) -> None:
                         text = event.get("message") or _event_details(event)
                         if text:
                             ui.label(text).classes("text-xs text-gray-600")
-                        if event.get("agent"):
-                            ui.label(event["agent"]).classes("text-xs text-gray-400")
+                        ui.label(journal.agent_name(event)).classes(
+                            "text-xs text-gray-400"
+                        )
 
 
 def _draw(review: Review, data: service.Overview) -> None:

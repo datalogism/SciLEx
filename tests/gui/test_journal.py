@@ -43,14 +43,17 @@ def rename(review, new_name):
 
 
 def test_append_load_skips_damaged_lines_and_masks_secrets(tmp_path):
-    journal.set_agent("https://orcid.org/0000-0002-1825-0097")
+    journal.set_agent("https://orcid.org/0000-0002-1825-0097", "Ada Lovelace")
     event = journal.append(
         tmp_path,
         "extend-zotero",
         used={"zotero": {"library_id": "1", "api_key": "SECRETKEY123"}},
         message="GET https://api.example.org/items?api_key=SECRETKEY123&q=re",
     )
-    assert event["agent"] == "https://orcid.org/0000-0002-1825-0097"
+    assert event["agent"] == {
+        "id": "https://orcid.org/0000-0002-1825-0097",
+        "name": "Ada Lovelace",
+    }
     with open(journal.journal_path(tmp_path), "a", encoding="utf-8") as handle:
         handle.write("{not json\n")
     text = journal.journal_path(tmp_path).read_text(encoding="utf-8")
@@ -97,7 +100,7 @@ def test_backfill_reconstructs_the_past_once(tmp_path):
     assert [e["at"] for e in events] == sorted(e["at"] for e in events)
     activities = {e["activity"] for e in events}
     assert {
-        "import-zotero",
+        "created",
         "link",
         "job:analysis-tags",
         "annotation-snapshot",
@@ -156,7 +159,8 @@ def test_new_review_records_its_own_folder(ctx, tmp_path):
     state = load_state(review.folder)
     assert state["output_folder"] == "output/fresh"
     assert (review.folder / STATE_FILENAME).is_file()
-    assert journal.last(review.folder, "create")["params"]["name"] == "fresh"
+    created = journal.last(review.folder, "created")
+    assert created["params"] == {"origin": "empty", "name": "fresh", "template": None}
 
 
 # --- hooks ----------------------------------------------------------------------

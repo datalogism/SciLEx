@@ -21,4 +21,4 @@ class AppContext:
         """The workflow journals record the user's ORCID iD as the agent."""
         from scilex.gui.services import journal
 
-        journal.set_agent(self.profile.orcid_uri)
+        journal.set_agent(self.profile.orcid_uri, self.profile.name)

@@ -139,7 +139,9 @@ def zotero_credentials(keys: dict) -> tuple[str, str, str]:
     return str(api_key), str(library_id), str(block.get("user_mode") or "user")
 
 
-def client(keys: dict | None = None, library: ZoteroLibrary | ZoteroSource | None = None):
+def client(
+    keys: dict | None = None, library: ZoteroLibrary | ZoteroSource | None = None
+):
     """Return a ``ZoteroAPI`` for ``library``, else for the library of the keys file."""
     from scilex.gui.services import keys_editor
     from scilex.Zotero.zotero_api import ZoteroAPI
@@ -238,7 +240,9 @@ def split_by_collection(items: list[dict]) -> dict[str, list[dict]]:
     return groups
 
 
-def export_source_biblatex(api, source: ZoteroSource, collections=None) -> tuple[str, dict]:
+def export_source_biblatex(
+    api, source: ZoteroSource, collections=None
+) -> tuple[str, dict]:
     """Return the BibLaTeX export of the review's Zotero source and its sub-corpora.
 
     Returns:
@@ -253,7 +257,9 @@ def export_source_biblatex(api, source: ZoteroSource, collections=None) -> tuple
     def export(key: str | None) -> str:
         text = api.export_top_items(key, "biblatex")
         if text is None:
-            raise ConnectionError(f"Cannot export the Zotero collection {key or '(library)'}")
+            raise ConnectionError(
+                f"Cannot export the Zotero collection {key or '(library)'}"
+            )
         return text
 
     if source.whole_library:
@@ -579,13 +585,22 @@ def create_review_from_items(
 
         journal.append(
             folder,
-            "import-kg" if archive == "KG" else "import-zotero",
+            "created",
+            params={
+                "origin": journal.KG_IMPORT
+                if archive == "KG"
+                else journal.ZOTERO_IMPORT,
+                "name": name,
+            },
             used={"source": origin, "zotero": journal.library_of(load_source(folder))},
             generated={
                 "papers": len(results),
+                "results_rows": len(results),
                 "output_folder": str(review.collection_dir),
             },
             message=f"Review created from {origin}: {len(results)} papers.",
+            annotation=journal.annotation_of_items(papers),
+            zotero_actors=journal.zotero_actors(papers),
         )
     except BaseException:
         # Leave no half-created review: the user can retry the import.

@@ -112,6 +112,27 @@ its journal, the past is reconstructed once from the files that already exist (m
 *reconstructed*). The **History** card of the Overview lists the events, most recent
 first.
 
+**Review card.** At the top of the Overview, from the journal:
+
+- **origin**: SciLEx collection (keywords, years, sources, fingerprint of the
+  configuration), Zotero import (library, collection or whole library), knowledge-graph
+  or BibTeX import, or empty review; when and by whom it was created;
+- **extensions**: each one (new queries, re-aggregation, Zotero, BibTeX, snowball) with
+  who, when and the papers added;
+- **enrichments**: each run (citations, Papers with Code, Crossref, Linked Papers With
+  Code, ORKG, search keywords…) with who, when and the papers updated (the columns it
+  filled, compared with the previous run);
+- **annotation**: annotated papers and codes now and at the first record, with a chart
+  over time. Events that can change the annotation (imports, Zotero link and pull,
+  consolidation, knowledge-graph export) record the state and its change since the
+  previous one; papers validated against the grid (`ANNOT_VALID_BY:<id>` tags) are
+  counted apart;
+- **contributors**: SciLEx users (ORCID iD and name, events) and Zotero users who
+  added or modified items of the review's library, read from Zotero at each import,
+  link and pull — group annotators appear even if they never used SciLEx.
+
+Events reconstructed from older files have the agent *unknown (before tracking)*.
+
 **Things to check.** On opening, the Overview compares the review with its journal and
 lists what looks inconsistent, each with its fix: results found in another folder
 named after the review (**Use this folder**), a Zotero library other than the one the

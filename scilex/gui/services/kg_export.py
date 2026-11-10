@@ -33,7 +33,9 @@ class KgExport:
 
 def missing_dependencies() -> str | None:
     """Return why the knowledge graph cannot be built here, or None."""
-    missing = [m for m in ("morph_kgc", "pyoxigraph") if importlib.util.find_spec(m) is None]
+    missing = [
+        m for m in ("morph_kgc", "pyoxigraph") if importlib.util.find_spec(m) is None
+    ]
     if missing:
         return (
             f"Building the knowledge graph needs {', '.join(missing)}: "
@@ -97,12 +99,30 @@ def _profile_version() -> dict:
 
 def _journal_export(folder: Path, turtle: Path, source, report) -> None:
     from scilex.gui.services import journal
+    from scilex.gui.services.overview import load_history
 
+    history = load_history(folder)
+    snap = history[-1] if history else None
+    annotation = (
+        {
+            "papers": snap.papers,
+            "annotated": snap.annotated,
+            "pending": snap.pending,
+            "codes": snap.values,
+            "by_dimension": snap.by_dimension,
+        }
+        if snap
+        else None
+    )
     journal.append(
         folder,
         "export-kg",
         used={"zotero": journal.library_of(source), "profile": _profile_version()},
-        generated={"turtle": Path(turtle).name, "valid": getattr(report, "conforms", None)},
+        generated={
+            "turtle": Path(turtle).name,
+            "valid": getattr(report, "conforms", None),
+        },
+        annotation=annotation,
     )
 
 
