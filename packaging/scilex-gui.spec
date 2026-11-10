@@ -1,6 +1,9 @@
 # PyInstaller spec for the SciLEx desktop app.
 # Build: scripts/build_gui.sh   (or: uv run --extra gui --extra build pyinstaller packaging/scilex-gui.spec --noconfirm)
 # Output: dist/SciLEx/ (Windows, Linux) and dist/SciLEx.app (macOS).
+# SCILEX_ONEFILE=1 builds one self-extracting dist/SciLEx.exe instead
+# (Windows only; see scripts/build_exe_desktop.ps1).
+import os
 import sys
 from pathlib import Path
 
@@ -68,28 +71,45 @@ a = Analysis(  # noqa: F821
 )
 pyz = PYZ(a.pure)  # noqa: F821
 
-exe = EXE(  # noqa: F821
-    pyz,
-    a.scripts,
-    [],
-    exclude_binaries=True,
-    name="SciLEx",
-    icon=str(ASSETS / "icon.ico"),
-    console=False,
-    disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
-)
-coll = COLLECT(  # noqa: F821
-    exe,
-    a.binaries,
-    a.datas,
-    strip=False,
-    upx=False,
-    name="SciLEx",
-)
+ONEFILE = os.environ.get("SCILEX_ONEFILE") == "1" and sys.platform == "win32"
+
+if ONEFILE:
+    # One self-extracting SciLEx.exe (unpacks to %TEMP% on each launch).
+    exe = EXE(  # noqa: F821
+        pyz,
+        a.scripts,
+        a.binaries,
+        a.datas,
+        [],
+        name="SciLEx",
+        icon=str(ASSETS / "icon.ico"),
+        console=False,
+        disable_windowed_traceback=False,
+        upx=False,
+    )
+else:
+    exe = EXE(  # noqa: F821
+        pyz,
+        a.scripts,
+        [],
+        exclude_binaries=True,
+        name="SciLEx",
+        icon=str(ASSETS / "icon.ico"),
+        console=False,
+        disable_windowed_traceback=False,
+        argv_emulation=False,
+        target_arch=None,
+        codesign_identity=None,
+        entitlements_file=None,
+    )
+    coll = COLLECT(  # noqa: F821
+        exe,
+        a.binaries,
+        a.datas,
+        strip=False,
+        upx=False,
+        name="SciLEx",
+    )
 
 if sys.platform == "darwin":
     app = BUNDLE(  # noqa: F821
