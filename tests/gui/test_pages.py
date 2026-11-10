@@ -125,6 +125,7 @@ async def test_create_review_without_folder_goes_to_scilex_home(
     ctx, tmp_path, monkeypatch
 ):
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "home"))  # "~" on Windows
     async with user_simulation(root=build_root(ctx)) as user:
         await user.open("/")
         user.find(marker="new-review").click()

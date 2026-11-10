@@ -11,6 +11,7 @@ Tests cover:
 import json
 import os
 import tempfile
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from scilex.crawlers.collectors import BioRxiv_collector
@@ -185,7 +186,7 @@ class TestBioRxivCacheHelpers:
     def test_cache_dir_path(self):
         collector = _make_collector(year=2024, data_path="/tmp/test_collect")
         cache_dir = collector._get_year_cache_dir(2024)
-        assert cache_dir == "/tmp/test_collect/BioRxiv/_cache/2024"
+        assert Path(cache_dir) == Path("/tmp/test_collect/BioRxiv/_cache/2024")
 
     def test_cache_exists_with_marker(self):
         with tempfile.TemporaryDirectory() as tmpdir:

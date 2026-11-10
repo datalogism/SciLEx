@@ -73,12 +73,16 @@ def test_step_order():
     ]
 
 
-def test_collect_becomes_extend_collect_once_there_are_papers(ctx, tmp_path):
+def test_extend_step_opens_once_there_are_papers(ctx, tmp_path):
+    from scilex.gui.components.stepper import is_enabled
+
     review = ctx.workspace.create_review(tmp_path / "r", name="r")
     assert STEPS["collect"].label_for(review) == "② Collect"
+    assert not is_enabled(STEPS["extend"], review)
     review.collection_dir.mkdir(parents=True)
     review.results_path.write_text("title\nA\n")
-    assert STEPS["collect"].label_for(review) == "⑤ Extend"
+    assert is_enabled(STEPS["extend"], review)
+    assert STEPS["collect"].label_for(review) == "② Collect"  # Collect stays Collect
 
 
 async def test_extend_collect_page(ctx, tmp_path):
@@ -86,7 +90,7 @@ async def test_extend_collect_page(ctx, tmp_path):
     review.collection_dir.mkdir(parents=True)
     review.results_path.write_text("title\nA\n")
     async with user_simulation(build_root(ctx)) as user:
-        await user.open(f"/review/{review.id}/collect")
+        await user.open(f"/review/{review.id}/extend")
         await user.should_see(marker="extend-title")
         await user.should_see(marker="extend-add")
         await user.should_see(marker="extend-reaggregate")

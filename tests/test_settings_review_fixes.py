@@ -3,6 +3,7 @@
 import importlib
 import logging
 import os
+from pathlib import Path
 
 import matplotlib.pyplot  # noqa: F401  (load the font cache before HOME is isolated)
 import pytest
@@ -25,6 +26,7 @@ def isolated(tmp_path, monkeypatch):
     package = tmp_path / "package"
     package.mkdir()
     monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))  # "~" on Windows
     monkeypatch.chdir(tmp_path)
     for variable in list(os.environ):
         if variable.startswith("SCILEX_"):
@@ -117,13 +119,13 @@ def test_missing_config_file_exits_1_with_path_on_stderr(
     assert exit_info.value.code == 1
     captured = capsys.readouterr()
     assert "Traceback" not in captured.err + captured.out
-    assert "/nonexistent/x.yml" in captured.err
+    assert str(Path("/nonexistent/x.yml")) in captured.err
 
 
 def test_config_show_with_missing_file_is_not_a_traceback(monkeypatch, capsys):
     monkeypatch.setenv("SCILEX_CONFIG", "/nonexistent/x.yml")
     assert cli.config_show() == 1
-    assert "/nonexistent/x.yml" in capsys.readouterr().err
+    assert str(Path("/nonexistent/x.yml")) in capsys.readouterr().err
 
 
 # ---------------------------------------------------------------------------

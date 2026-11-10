@@ -6,6 +6,25 @@ import pandas as pd
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _isolated_home(tmp_path_factory, monkeypatch):
+    """Keep every test away from the developer's own files.
+
+    Without this, tests read the real ``~/.config/scilex/keys.yml``, the
+    ``~/SciLEx`` reviews, the desktop app's profile and registry (platformdirs:
+    ``%APPDATA%`` on Windows) and the package's own legacy ``api.config.yml``.
+    """
+    home = tmp_path_factory.mktemp("home")
+    for variable in ("HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "XDG_CONFIG_HOME"):
+        monkeypatch.setenv(variable, str(home))
+    for variable in ("SCILEX_KEYS", "SCILEX_CONFIG"):
+        monkeypatch.delenv(variable, raising=False)
+    from scilex.settings import loader
+
+    monkeypatch.setattr(loader, "LEGACY_KEYS_PATH", home / "api.config.yml")
+    return home
+
+
 @pytest.fixture
 def data_query_dual():
     """Dual-keyword query dict used across collector tests."""

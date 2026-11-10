@@ -28,6 +28,7 @@ def isolated(tmp_path, monkeypatch):
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))  # "~" on Windows
     monkeypatch.chdir(tmp_path)
     for variable in list(os.environ):
         if variable.startswith("SCILEX_"):

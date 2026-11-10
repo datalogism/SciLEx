@@ -23,7 +23,8 @@ def test_round_trip_mode_and_unknown_blocks(isolated_scilex_env):
     saved = yaml.safe_load(isolated_scilex_env.read_text())
     assert saved["Custom"] == {"foo": "bar"}
     assert saved["OpenAlex"]["api_key"] == ["k1", "k2"]
-    assert stat.S_IMODE(os.stat(isolated_scilex_env).st_mode) == 0o600
+    if os.name != "nt":  # Windows has no POSIX permission bits
+        assert stat.S_IMODE(os.stat(isolated_scilex_env).st_mode) == 0o600
     assert editor.get_keys_list(saved["OpenAlex"]) == ["k1", "k2"]
 
 
@@ -89,4 +90,5 @@ def test_save_keeps_a_private_backup_of_the_previous_file(isolated_scilex_env):
     editor.save_keys({"OpenAlex": {"api_key": "new"}})
     backup = isolated_scilex_env.with_name(isolated_scilex_env.name + ".bak")
     assert "old" in backup.read_text()
-    assert stat.S_IMODE(os.stat(backup).st_mode) == 0o600
+    if os.name != "nt":  # Windows has no POSIX permission bits
+        assert stat.S_IMODE(os.stat(backup).st_mode) == 0o600

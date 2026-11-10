@@ -20,6 +20,7 @@ DOMAINS = [
 def isolated(tmp_path, monkeypatch):
     monkeypatch.setenv(init_templates.PROFILES_DIR_ENV, str(tmp_path / "profiles"))
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "home"))  # "~" on Windows
     monkeypatch.delenv("SCILEX_KEYS", raising=False)
     monkeypatch.chdir(tmp_path)
 
