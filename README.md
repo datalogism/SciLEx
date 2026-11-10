@@ -27,8 +27,6 @@
 ---
 > SciLEx — like the silex stone that early humans relied on to spark fire from raw material — is a lightweight, portable tool designed to ignite research exploration. Rather than navigating fragmented databases, confronting redundant results, and manually sifting through noise, SciLEx strikes directly at the core challenge: it queries heterogeneous digital library APIs, applies smart deduplication and quality filtering, and delivers a clean, curated corpus ready for export to Zotero or BibTeX. It is not a full-scale review platform — it is the essential flint in the researcher's toolkit, engineered to quick-start systematic literature reviews with precision and minimal friction.
 
-![SciLEx Web Interface- Beta version](https://github.com/Wimmics/SciLEx/blob/main/img/ScreenSciLEx.png)
-
 ## Table of Contents
 
 - [Overview](#overview)
@@ -117,7 +115,6 @@ See the [API Comparison](https://scilex.readthedocs.io/en/latest/reference/api-c
     │   ├── rdf/             # RDF/Turtle export
     │   ├── graph_analysis/, snowball/, summarize/, keyword_suggestions/
     │   ├── gui/             # desktop app (scilex-gui)
-    │   ├── webapi/          # FastAPI + Streamlit web interface
     │   ├── Zotero/
     │   └── PapersWithCode/
     ├── tests/
@@ -259,7 +256,7 @@ See the [Quick Start Guide](https://scilex.readthedocs.io/en/latest/getting-star
 
 Ready-to-run builds for macOS (`.dmg`), Windows (`.zip`) and Linux (`.tar.gz`) are attached to each
 [GitHub Release](https://github.com/Wimmics/SciLEx/releases/latest) (the macOS app is not signed yet:
-right-click → **Open** the first time). A review goes through ① Configure, ② Collect, ③ Screen, ④ Export and ⑤ Analyses;
+right-click → **Open** the first time). A review goes through ① Configure, ② Collect, ③ Screen, ④ Export, ⑤ Analyses and ⑥ Annotate (a review can also start from an existing Zotero collection);
 API keys are set once for all reviews.
 
 From a checkout:
@@ -271,10 +268,6 @@ From a checkout:
 ❯ scripts/build_gui.sh           # build a standalone app with PyInstaller (dist/), then self-test it
 ```
 See the [desktop app guide](docs/user-guides/gui.md).
-
-**Option D - 💻 Web Interface [BETA VERSION]**
-* [Youtube Tutorial](https://www.youtube.com/watch?v=FXZtrlOJ-vU)
-* [Complete Documentation](https://scilex.readthedocs.io/en/latest/user-guides/WebInterfaceGuide.html)
 
 ### Testing
 
