@@ -22,6 +22,7 @@ from typing import Any
 
 from scilex.config import SciLExConfig
 from scilex.crawlers.utils import sanitize_secrets
+from scilex.gui.services import extend as extension
 from scilex.gui.services.workspace import Review
 from scilex.pipeline import jobs as job_states
 from scilex.pipeline.jobs import LogLinesHandler, WorkerThreadFilter
@@ -160,6 +161,7 @@ class JobRunner:
         since: str | None = None,
         resume: bool = False,
         fresh: bool = False,
+        extend: str | None = None,
     ) -> Job:
         """Run collection then aggregation for ``review`` in a background thread.
 
@@ -173,6 +175,9 @@ class JobRunner:
                 configuration (like ``scilex-collect --resume``).
             fresh: Delete the raw results already collected first, so every
                 query is collected again (ignored with ``resume``).
+            extend: Extend the review's existing papers instead of replacing
+                them: ``"add"`` or ``"reaggregate"`` (see
+                :mod:`scilex.gui.services.extend`). Ignored with ``fresh``.
 
         Raises:
             JobConflictError: If another job is still active.
@@ -193,12 +198,17 @@ class JobRunner:
             parse_since(since)
             config.main["since"] = since
         clear_dir = target_collection_dir(config) if fresh and not resume else None
+        if fresh:
+            extend = None
+        if extend is not None and extend not in extension.MODES:
+            raise ValueError(f"Unknown extension mode {extend!r}")
         job = self._new_job(review, PIPELINE)
 
         def body() -> str:
             if clear_dir is not None:
                 job.message = "Deleting the previous collection…"
                 clear_collection(clear_dir)
+            previous = self._snapshot(review) if extend else None
             self._collect(job, config)
             if job.cancel_event.is_set():
                 return ""
@@ -214,30 +224,57 @@ class JobRunner:
                 # Aggregating nothing would end "Completed" with an empty review.
                 raise CollectionFailedError(failure)
             self._aggregate(job, config, skip_citations)
-            return "Pipeline completed."
+            summary = self._extend(job, review, extend, previous)
+            return summary or "Pipeline completed."
 
         self._start_thread(job, body)
         return job
 
     def start_aggregation(
-        self, review: Review, config: SciLExConfig, *, skip_citations: bool = False
+        self,
+        review: Review,
+        config: SciLExConfig,
+        *,
+        skip_citations: bool = False,
+        keep_outside: bool = False,
     ) -> Job:
         """Aggregate the existing collection of ``review`` with its current config.
 
         Works on a partial collection and can be replayed after editing
-        ``scilex.yml``: nothing is collected again.
+        ``scilex.yml``: nothing is collected again. With ``keep_outside``, papers
+        that do not come from the raw collection (imported, snowballed) are kept.
 
         Raises:
             JobConflictError: If another job is still active.
         """
         job = self._new_job(review, PIPELINE)
+        mode = extension.REAGGREGATE if keep_outside else None
 
         def body() -> str:
+            previous = self._snapshot(review) if mode else None
             self._aggregate(job, config, skip_citations)
-            return "Aggregation completed."
+            summary = self._extend(job, review, mode, previous)
+            return summary or "Aggregation completed."
 
         self._start_thread(job, body)
         return job
+
+    @staticmethod
+    def _snapshot(review: Review):
+        """Read (and back up) the review's results before an extension rewrites them."""
+        previous = extension.read_results(review.results_path)
+        extension.backup(review.results_path)
+        return previous
+
+    @staticmethod
+    def _extend(job: Job, review: Review, mode: str | None, previous) -> str:
+        if not mode or previous is None or job.cancel_event.is_set():
+            return ""
+        job.message = "Merging with the papers already in the review…"
+        summary = extension.apply_extension(mode, previous, review.results_path)
+        if summary:
+            logger.info(summary)
+        return summary
 
     def cancel(self, job_id: str) -> bool:
         """Request cancellation; returns False if the job is not active.

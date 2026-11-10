@@ -5,6 +5,9 @@ from nicegui import ui
 from scilex.gui.components.dialogs import one_shot_dialog
 from scilex.gui.components.errors import show_error
 from scilex.gui.components.job_panel import BusyNotice, JobPanel
+from scilex.gui.pages.analyses import render_tabs
+from scilex.gui.services import analyses as analyses_service
+from scilex.gui.services import extend as extension
 from scilex.gui.services.collect_summary import (
     KEYS_HINT,
     api_rows,
@@ -48,12 +51,21 @@ def _show_report(title: str, path) -> None:
 
 
 def render(ctx: AppContext, review: Review) -> None:
-    """Draw the Collect screen of ``review``."""
-    ui.label("Collect").classes("text-2xl font-bold")
-    ui.label(
-        "Query the APIs listed in scilex.yml, then deduplicate, filter and rank "
-        "the papers."
-    ).classes("text-gray-500")
+    """Draw the Collect screen of ``review`` (Extend collect once it has papers)."""
+    extending = review.has_results
+    if extending:
+        ui.label("Extend collect").classes("text-2xl font-bold").mark("extend-title")
+        ui.label(
+            "The review already has papers. Run the queries of scilex.yml that were "
+            "not run yet (new keywords, years or APIs set in ① Configure), or extend "
+            "the corpus by snowballing below."
+        ).classes("text-gray-500")
+    else:
+        ui.label("Collect").classes("text-2xl font-bold")
+        ui.label(
+            "Query the APIs listed in scilex.yml, then deduplicate, filter and rank "
+            "the papers."
+        ).classes("text-gray-500")
 
     # Pre-flight: validate scilex.yml before offering to run.
     with ui.column().classes("gap-1"):
@@ -100,13 +112,31 @@ def render(ctx: AppContext, review: Review) -> None:
     if load_decisions(review):
         ui.label(
             "Decisions are kept; papers that are no longer in the new results "
-            "will appear as orphans in ③ Screen."
+            "will appear as orphans in ④ Screen."
         ).classes("text-sm text-gray-600").mark("screening-kept-notice")
     busy_notice = BusyNotice(ctx)
     with ui.row().classes("items-center gap-4"):
-        run_button = ui.button("Run", icon="play_arrow").mark("run")
-        with run_button:
-            busy_tooltip = ui.tooltip("Another job is running")
+        if extending:
+            run_button = ui.button("Add new papers", icon="playlist_add").mark(
+                "extend-add"
+            )
+            with run_button:
+                busy_tooltip = ui.tooltip("Another job is running")
+            reaggregate_button = (
+                ui.button("Re-aggregate everything", icon="sync")
+                .props("outline")
+                .mark("extend-reaggregate")
+            )
+            start_over_button = (
+                ui.button("Start over", icon="restart_alt")
+                .props("outline color=negative")
+                .mark("run")
+            )
+        else:
+            run_button = ui.button("Run", icon="play_arrow").mark("run")
+            with run_button:
+                busy_tooltip = ui.tooltip("Another job is running")
+            reaggregate_button = start_over_button = None
         resume_button = (
             ui.button("Resume interrupted collection", icon="replay")
             .props("outline")
@@ -123,6 +153,15 @@ def render(ctx: AppContext, review: Review) -> None:
             .mark("cancel")
         )
     resume_hint = ui.label().classes("text-sm text-gray-500")
+    if extending:
+        ui.markdown(
+            "- **Add new papers**: keeps the papers of the review (and their ranking "
+            "and screening) as they are and appends the new ones only.\n"
+            "- **Re-aggregate everything**: deduplicates, filters and ranks the whole "
+            "collection again; imported and snowballed papers are kept.\n"
+            "- **Start over**: deletes the raw results and collects every query again.\n\n"
+            "The previous results are saved in `previous_results/` first."
+        ).classes("text-sm text-gray-600").mark("extend-help")
     ui.label(
         "Aggregate existing results re-runs deduplication, filters and ranking on "
         "what is already collected (even a partial collection) with the current "
@@ -140,6 +179,9 @@ def render(ctx: AppContext, review: Review) -> None:
         running = job is not None and job.is_active
         busy_elsewhere = not running and ctx.runner.active_job() is not None
         run_button.set_enabled(not running and not busy_elsewhere)
+        for extra in (reaggregate_button, start_over_button):
+            if extra is not None:
+                extra.set_enabled(not running and not busy_elsewhere)
         # One tooltip, shown or hidden: calling .tooltip() here would add a new one every tick.
         busy_tooltip.set_visibility(busy_elsewhere)
         busy_notice.update(job)
@@ -314,7 +356,9 @@ def render(ctx: AppContext, review: Review) -> None:
     panel.on_change = lambda job: (update_buttons(job), update_details(job))
     panel.refresh()
 
-    def start(*, resume: bool, confirmed: bool = False) -> None:
+    def start(
+        *, resume: bool, confirmed: bool = False, extend: str | None = None
+    ) -> None:
         since = (since_input.value or "").strip() or None
         try:
             if since:
@@ -326,7 +370,7 @@ def render(ctx: AppContext, review: Review) -> None:
             return
         try:
             config = Workspace.load_config(review)
-            if not resume and not confirmed:
+            if not resume and not confirmed and extend is None:
                 previous = collected_api_dirs(target_collection_dir(config, since))
                 if previous:
                     confirm_fresh_run(previous)
@@ -337,7 +381,8 @@ def render(ctx: AppContext, review: Review) -> None:
                 skip_citations=skip_citations.value,
                 since=since,
                 resume=resume,
-                fresh=not resume,
+                fresh=not resume and extend is None,
+                extend=extend,
             )
         except (SettingsError, FileNotFoundError, JobConflictError) as exc:
             show_error("Cannot start the collection", exc, expected=True)
@@ -378,6 +423,7 @@ def render(ctx: AppContext, review: Review) -> None:
                 review,
                 Workspace.load_config(review),
                 skip_citations=skip_citations.value,
+                keep_outside=extending,
             )
         except (SettingsError, FileNotFoundError, JobConflictError) as exc:
             show_error("Cannot start the aggregation", exc, expected=True)
@@ -392,7 +438,19 @@ def render(ctx: AppContext, review: Review) -> None:
             ctx.runner.cancel(job.id)
         refresh()
 
-    run_button.on_click(lambda: start(resume=False))
+    if extending:
+        run_button.on_click(lambda: start(resume=False, extend=extension.ADD_NEW))
+        reaggregate_button.on_click(
+            lambda: start(resume=False, extend=extension.REAGGREGATE)
+        )
+        start_over_button.on_click(lambda: start(resume=False))
+    else:
+        run_button.on_click(lambda: start(resume=False))
     resume_button.on_click(lambda: start(resume=True))
     aggregate_button.on_click(aggregate_only)
     cancel_button.on_click(cancel)
+
+    if extending:
+        ui.separator()
+        ui.label("Extend the corpus").classes("text-lg font-bold")
+        render_tabs(ctx, review, analyses_service.in_group("extend"))

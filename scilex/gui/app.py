@@ -25,9 +25,23 @@ ACCESSIBILITY_CSS = (
 
 def build_root(ctx) -> Callable[[], None]:
     """Return the NiceGUI root function routing between the screens."""
+    import functools
+
     from nicegui import ui
 
-    from scilex.gui.pages import home, review
+    from scilex.gui.pages import home, keys, profile, review
+
+    def require_orcid(page: Callable) -> Callable:
+        """Show the ORCID form instead of ``page`` while the user has no ORCID iD."""
+
+        @functools.wraps(page)  # keeps the signature NiceGUI reads the route data from
+        def gated(*args, **kwargs):
+            if not ctx.profile.is_complete:
+                profile.render(ctx)
+                return None
+            return page(*args, **kwargs)
+
+        return gated
 
     def root() -> None:
         # Contrast (WCAG AA): NiceGUI's light blue gives 3:1 with white text.
@@ -37,9 +51,11 @@ def build_root(ctx) -> Callable[[], None]:
         ui.add_head_html(f"<style>{ACCESSIBILITY_CSS}</style>")
         ui.sub_pages(
             {
-                "/": home.render,
-                "/review/{review_id}": review.render,
-                "/review/{review_id}/{step}": review.render,
+                "/": require_orcid(home.render),
+                "/profile": profile.render,
+                "/keys": require_orcid(keys.render_global),
+                "/review/{review_id}": require_orcid(review.render),
+                "/review/{review_id}/{step}": require_orcid(review.render),
             },
             data={"ctx": ctx},
         ).classes("w-full")  # flex column with align-items:flex-start would shrink-wrap

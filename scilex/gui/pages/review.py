@@ -61,7 +61,7 @@ def render(ctx: AppContext, review_id: str, step: str = DEFAULT_STEP) -> None:
         return
     if step not in STEPS:
         step = DEFAULT_STEP
-    ui.page_title(f"{STEPS[step].label} · {review.name} · SciLEx")
+    ui.page_title(f"{STEPS[step].label_for(review)} · {review.name} · SciLEx")
 
     with ui.row().classes("w-full p-4 gap-6 no-wrap items-start"):
         with ui.column().classes("gap-0"):
@@ -82,5 +82,5 @@ def render(ctx: AppContext, review_id: str, step: str = DEFAULT_STEP) -> None:
             elif module is not None:
                 module.render(ctx, review)
             else:
-                ui.label(STEPS[step].label).classes("text-2xl font-bold")
+                ui.label(STEPS[step].label_for(review)).classes("text-2xl font-bold")
                 ui.label("Not available yet.").classes("text-gray-500")

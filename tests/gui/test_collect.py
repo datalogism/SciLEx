@@ -298,7 +298,10 @@ async def test_page_failed_job_has_copy_log(ctx, tmp_path):
         raise RuntimeError("boom")
 
     ctx = AppContext(
-        workspace=ctx.workspace, runner=JobRunner(collection), native=False
+        workspace=ctx.workspace,
+        runner=JobRunner(collection),
+        native=False,
+        profile=ctx.profile,
     )
     async with user_simulation(build_root(ctx)) as user:
         await user.open(f"/review/{review.id}/collect")

@@ -6,6 +6,8 @@ import pytest
 
 pytest.importorskip("nicegui", reason="GUI extra not installed (uv sync --extra gui)")
 
+TEST_ORCID = "0000-0002-1825-0097"  # ORCID's documented example iD (valid check digit)
+
 
 @pytest.fixture(autouse=True)
 def isolated_scilex_env(tmp_path, monkeypatch):
@@ -42,11 +44,15 @@ def ctx(tmp_path):
     from scilex.gui.services.jobs import JobRunner
     from scilex.gui.services.workspace import Workspace
     from scilex.gui.state import AppContext
+    from scilex.user_profile import UserProfile
 
+    profile = UserProfile(path=tmp_path / "user.yml")
+    profile.set(TEST_ORCID, "Test User")  # the app is locked without an ORCID iD
     return AppContext(
         workspace=Workspace(registry_path=tmp_path / "gui_reviews.yml"),
         runner=JobRunner(fake_collection, fake_aggregation),
         native=False,
+        profile=profile,
     )
 
 

@@ -16,18 +16,34 @@ class Step:
     label: str
     icon: str
     needs_results: bool = False
+    # Label once the review has papers (collected, imported or snowballed).
+    label_with_results: str | None = None
+
+    def label_for(self, review: Review) -> str:
+        """Return the label shown for ``review``."""
+        if self.label_with_results and review.has_results:
+            return self.label_with_results
+        return self.label
 
 
 PIPELINE_STEPS = (
+    Step("overview", "Overview", "dashboard"),
     Step("configure", "① Configure", "tune"),
-    Step("collect", "② Collect", "travel_explore"),
-    Step("screen", "③ Screen", "fact_check", needs_results=True),
-    Step("export", "④ Export", "ios_share", needs_results=True),
+    Step(
+        "collect",
+        "② Collect",
+        "travel_explore",
+        label_with_results="② Extend collect",
+    ),
+    Step("enrich", "③ Enrich", "auto_awesome", needs_results=True),
+    Step("screen", "④ Screen", "fact_check", needs_results=True),
     Step("analyses", "⑤ Analyses", "insights", needs_results=True),
+    Step("annotate", "⑥ Annotate", "sell"),
+    Step("export", "⑦ Export", "ios_share", needs_results=True),
 )
 EXTRA_STEPS = (Step("keys", "API keys", "key"),)
 STEPS = {step.key: step for step in (*PIPELINE_STEPS, *EXTRA_STEPS)}
-DEFAULT_STEP = "collect"
+DEFAULT_STEP = "overview"  # opening a review shows its summary first
 RESULTS_POLL_SECONDS = 1.0
 INVALID_CONFIG_HINT = "Fix scilex.yml in ① Configure first"
 # Steps usable while scilex.yml cannot be loaded (to repair it).
@@ -83,7 +99,7 @@ def _step_button(
     review: Review, step: Step, active: str, locked: list[ui.button]
 ) -> None:
     button = ui.button(
-        step.label,
+        step.label_for(review),
         icon=step.icon,
         on_click=lambda: ui.navigate.to(f"/review/{review.id}/{step.key}"),
     ).props("align=left no-caps" + ("" if step.key == active else " flat"))
