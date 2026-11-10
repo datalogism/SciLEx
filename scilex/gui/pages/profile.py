@@ -53,6 +53,9 @@ def render(ctx: AppContext) -> None:
             error.text = ""
             try:
                 profile.set(orcid_input.value or "", name_input.value or "")
+                from scilex.gui.services import journal
+
+                journal.set_agent(profile.orcid_uri)
             except InvalidOrcidError as exc:
                 error.text = str(exc)
                 return

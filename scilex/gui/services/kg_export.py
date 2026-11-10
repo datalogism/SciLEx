@@ -83,6 +83,29 @@ def _record_kg_snapshot(folder: Path, bib: Path) -> None:
     record_snapshot(folder, tags.values(), "kg-export")
 
 
+def _profile_version() -> dict:
+    """Version of the pinned scilex-lpwc-ap profile (``scilex/kg/ap/VERSION.json``)."""
+    import json
+
+    path = Path(__file__).resolve().parents[2] / "kg" / "ap" / "VERSION.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {k: data.get(k) for k in ("version_iri", "version_info", "commit")}
+
+
+def _journal_export(folder: Path, turtle: Path, source, report) -> None:
+    from scilex.gui.services import journal
+
+    journal.append(
+        folder,
+        "export-kg",
+        used={"zotero": journal.library_of(source), "profile": _profile_version()},
+        generated={"turtle": Path(turtle).name, "valid": getattr(report, "conforms", None)},
+    )
+
+
 def grid_dimensions(folder: Path) -> list[str] | None:
     """Dimensions of the review's annotation grid (None: no grid)."""
     path = Path(folder) / GRID_FILENAME
@@ -150,5 +173,6 @@ def export_knowledge_graph(
         subcorpora=subcorpora or None,
     )
     _record_kg_snapshot(folder, Path(bib))
+    _journal_export(folder, turtle, source, report)
     progress(100, "Done")
     return KgExport(turtle=turtle, bib=Path(bib), report=report, source=source)

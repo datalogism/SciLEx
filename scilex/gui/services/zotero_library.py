@@ -575,6 +575,18 @@ def create_review_from_items(
         from scilex.gui.services.overview import record_snapshot, zotero_tags
 
         record_snapshot(folder, zotero_tags(papers), snapshot_origin)
+        from scilex.gui.services import journal
+
+        journal.append(
+            folder,
+            "import-kg" if archive == "KG" else "import-zotero",
+            used={"source": origin, "zotero": journal.library_of(load_source(folder))},
+            generated={
+                "papers": len(results),
+                "output_folder": str(review.collection_dir),
+            },
+            message=f"Review created from {origin}: {len(results)} papers.",
+        )
     except BaseException:
         # Leave no half-created review: the user can retry the import.
         workspace.forget_review(folder)
@@ -584,7 +596,13 @@ def create_review_from_items(
 
 
 def save_source(folder: Path, source: ZoteroSource) -> Path:
-    """Remember the Zotero library and collection a review is linked to."""
+    """Remember the Zotero library and collection a review is linked to.
+
+    A change of library or collection is journaled (``link``, old and new).
+    """
+    from scilex.gui.services import journal
+
+    previous = journal.library_of(load_source(folder))
     path = Path(folder) / SOURCE_FILENAME
     path.write_text(
         yaml.safe_dump(
@@ -601,6 +619,15 @@ def save_source(folder: Path, source: ZoteroSource) -> Path:
         ),
         encoding="utf-8",
     )
+    current = journal.library_of(source)
+    if current != previous:
+        journal.append(
+            folder,
+            "link",
+            used={"zotero": current},
+            params={"previous": previous},
+            message=f"Zotero library: {source.describe()}.",
+        )
     return path
 
 

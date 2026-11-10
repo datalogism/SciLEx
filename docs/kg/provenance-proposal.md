@@ -135,3 +135,26 @@ sxv:VersionShape a sh:NodeShape ;
 Open points for the profile: is a version IRI under the review's base acceptable (vs.
 `w3id.org/scilex/data/<review>/<version>/…` for every resource)? Should codes become
 `oa:Annotation` (AR3) in the same iteration, which would carry their own time?
+
+## TODO: the workflow journal as PROV-O
+
+The desktop app now records every action on a review in `workflow.jsonl` (see
+`scilex/gui/services/journal.py`): one event per line with `at`, `activity`, `agent`
+(ORCID iD IRI), `used`, `generated`, `params`, `status`, `message`, and `inferred` for
+events reconstructed from older files. This is the data the model above needs. Not
+exported yet: the pinned profile (`scilex/kg/ap`, iteration 3) has no history module,
+and the knowledge graph must stay valid against its shapes. Once `30-history.ttl`
+exists, the export would add, per event:
+
+```
+<review>/activity/<n>  a prov:Activity ;
+    sxv:activityType "<activity>" ;           # or a SKOS concept per activity
+    prov:endedAtTime "<at>"^^xsd:dateTime ;
+    prov:wasAssociatedWith <agent> ;          # omitted when empty
+    prov:used <zotero library IRI> , <profile version IRI> ;
+    prov:generated <review>/v/<timestamp> ;   # for export-kg events
+    sxv:inferred true .                       # reconstructed events
+```
+
+`rename` and `adopt-output` stay local (file layout, not research provenance); job
+events keep only completed ones with their `history_key`.

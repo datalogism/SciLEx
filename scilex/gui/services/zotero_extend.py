@@ -181,5 +181,25 @@ def extend_from_zotero(
         say(75, "Linking the review with this Zotero library…")
         zotero_library.save_source(review.folder, source)
         summary.linked = zotero_sync.link(review)["linked"]
+    from scilex.gui.services import journal
+
+    state = zotero_sync.load_state(review) if link else None
+    journal.append(
+        review.folder,
+        "extend-zotero",
+        used={
+            "zotero": journal.library_of(source),
+            "zotero_library_version": getattr(state, "library_version", None),
+        },
+        params={"link": link},
+        generated={
+            "fetched": summary.fetched,
+            "added": summary.added,
+            "already_there": summary.already_there,
+            "enriched": summary.enriched,
+            "linked": summary.linked,
+        },
+        message=summary.message(),
+    )
     say(100, summary.message())
     return summary

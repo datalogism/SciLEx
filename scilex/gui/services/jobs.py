@@ -24,7 +24,7 @@ from typing import Any
 from scilex.config import SciLExConfig
 from scilex.crawlers.utils import sanitize_secrets
 from scilex.gui.services import extend as extension
-from scilex.gui.services import run_history
+from scilex.gui.services import journal, run_history
 from scilex.gui.services.workspace import Review
 from scilex.pipeline import jobs as job_states
 from scilex.pipeline.jobs import LogLinesHandler, WorkerThreadFilter
@@ -388,6 +388,7 @@ class JobRunner:
             # "last run" chip as soon as it sees the job finished.
             self._remember(job, message)
             self._log_papers(job)
+            journal.record_job(job, message)
             self._finish(job, job_states.COMPLETED, message)
         except BaseException as exc:
             # BaseException too: a SystemExit raised by pipeline code must not
@@ -401,6 +402,7 @@ class JobRunner:
                     "Job %s (%s) failed: %s\n%s", job.id, job.kind, error, trace
                 )
             job.error = error
+            journal.record_job(job, error, failed=True)
             self._finish(job, job_states.FAILED, f"Error: {error}")
         finally:
             root_logger.removeHandler(handler)

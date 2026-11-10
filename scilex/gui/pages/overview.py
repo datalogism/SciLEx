@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 
 from nicegui import run, ui
 
 from scilex.gui.components.errors import show_error
+from scilex.gui.services import consistency, journal
 from scilex.gui.services import overview as service
-from scilex.gui.services.workspace import Review
+from scilex.gui.services.workspace import Review, Workspace, adopt_folder
 from scilex.gui.state import AppContext
 
 # Reference palette of the dataviz method (validated; light mode).
@@ -42,13 +44,19 @@ def _hbar(counts: dict[str, int], total: int | None = None) -> dict:
     return {
         "grid": {"left": 8, "right": 48, "top": 8, "bottom": 8, "containLabel": True},
         "tooltip": {"trigger": "item", "formatter": "{b}: {c}" + suffix},
-        "xAxis": {"type": "value", **_AXIS, "max": total} if total else {"type": "value", **_AXIS},
+        "xAxis": {"type": "value", **_AXIS, "max": total}
+        if total
+        else {"type": "value", **_AXIS},
         "yAxis": {
             "type": "category",
             "data": labels,
             **_AXIS,
             "splitLine": {"show": False},
-            "axisLabel": {"color": TEXT_SECONDARY, "width": 220, "overflow": "truncate"},
+            "axisLabel": {
+                "color": TEXT_SECONDARY,
+                "width": 220,
+                "overflow": "truncate",
+            },
         },
         "series": [
             {
@@ -68,8 +76,12 @@ def _years(by_year: dict[int, int]) -> dict:
     return {
         "grid": {"left": 8, "right": 8, "top": 16, "bottom": 8, "containLabel": True},
         "tooltip": {"trigger": "axis", "axisPointer": {"type": "shadow"}},
-        "xAxis": {"type": "category", "data": [str(y) for y in years], **_AXIS,
-                  "splitLine": {"show": False}},
+        "xAxis": {
+            "type": "category",
+            "data": [str(y) for y in years],
+            **_AXIS,
+            "splitLine": {"show": False},
+        },
         "yAxis": {"type": "value", **_AXIS, "minInterval": 1},
         "series": [
             {
@@ -100,7 +112,11 @@ def _screening(counts: dict[str, int]) -> dict:
                 "stack": "decisions",
                 "data": [value],
                 "barWidth": 28,
-                "itemStyle": {"color": color, "borderColor": "#fcfcfb", "borderWidth": 2},
+                "itemStyle": {
+                    "color": color,
+                    "borderColor": "#fcfcfb",
+                    "borderWidth": 2,
+                },
                 "label": {
                     "show": value / total >= 0.08,
                     "color": TEXT_PRIMARY,
@@ -127,7 +143,11 @@ def _history(history: list[service.Snapshot]) -> dict:
             "lineStyle": {"width": 2, "color": color},
             "itemStyle": {"color": color},
             "symbolSize": 8,
-            "endLabel": {"show": True, "color": TEXT_SECONDARY, "formatter": "{a}: {@[1]}"},
+            "endLabel": {
+                "show": True,
+                "color": TEXT_SECONDARY,
+                "formatter": "{a}: {@[1]}",
+            },
         }
 
     return {
@@ -135,8 +155,13 @@ def _history(history: list[service.Snapshot]) -> dict:
         "legend": {"top": 0, "textStyle": {"color": TEXT_SECONDARY}},
         "tooltip": {"trigger": "axis"},
         "xAxis": {"type": "time", **_AXIS, "splitLine": {"show": False}},
-        "yAxis": {"type": "value", **_AXIS, "minInterval": 1, "name": "papers",
-                  "nameTextStyle": {"color": TEXT_SECONDARY}},
+        "yAxis": {
+            "type": "value",
+            **_AXIS,
+            "minInterval": 1,
+            "name": "papers",
+            "nameTextStyle": {"color": TEXT_SECONDARY},
+        },
         "series": [
             series("Annotated", BLUE, "annotated"),
             series("Still to annotate (DIMENSION:?)", ORANGE, "pending"),
@@ -174,18 +199,115 @@ def render(ctx: AppContext, review: Review) -> None:
 
     async def load() -> None:
         try:
-            data = await run.io_bound(service.compute, review)
+            data, issues, events = await run.io_bound(_gather, review)
         except Exception as exc:
             with body:
                 show_error("Cannot read the review", exc)
             return
         body.clear()
         with body:
+            _issues(review, issues)
             _draw(review, data)
+            _timeline(events)
 
     with body:
         ui.spinner()
     ui.timer(0, load, once=True)
+
+
+def _gather(review: Review):
+    """Overview data, consistency issues and journal events (off the event loop)."""
+    try:
+        main = Workspace.load_config(review).main
+    except Exception:  # an invalid scilex.yml is reported by the other steps
+        main = None
+    journal.backfill(review.folder)
+    return (
+        service.compute(review),
+        consistency.check(review, main),
+        journal.load(review.folder),
+    )
+
+
+def _issues(review: Review, issues: list[consistency.Issue]) -> None:
+    """Banner of what looks inconsistent, each with its fix."""
+    if not issues:
+        return
+    with ui.card().classes("w-full gap-2 bg-amber-50").mark("overview-issues"):
+        ui.label("Things to check").classes("font-bold")
+        for issue in issues:
+            with ui.row().classes("items-center gap-2 w-full no-wrap"):
+                ui.icon("warning").classes("text-warning")
+                ui.label(issue.message).classes("text-sm grow")
+                if issue.adopt:
+
+                    def adopt(_, folder=issue.adopt) -> None:
+                        adopt_folder(
+                            review.folder, Path(folder), "chosen on the Overview"
+                        )
+                        ui.notify(
+                            f"Results folder: {Path(folder).name}", type="positive"
+                        )
+                        ui.navigate.reload()
+
+                    ui.button(
+                        "Use this folder", icon="folder_open", on_click=adopt
+                    ).props("outline dense no-caps").mark(f"issue-{issue.kind}")
+                elif issue.step:
+                    ui.button(
+                        "Open",
+                        icon="arrow_forward",
+                        on_click=lambda _, s=issue.step: ui.navigate.to(
+                            f"/review/{review.id}/{s}"
+                        ),
+                    ).props("outline dense no-caps").mark(f"issue-{issue.kind}")
+
+
+def _event_details(event: dict) -> str:
+    parts = []
+    for section in ("params", "used", "generated"):
+        for key, value in (event.get(section) or {}).items():
+            if value in (None, "", {}, []):
+                continue
+            if isinstance(value, dict):
+                value = ", ".join(
+                    f"{k}: {v}" for k, v in value.items() if v not in (None, "")
+                )
+            parts.append(f"{key}: {value}")
+    return " · ".join(parts)
+
+
+def _timeline(events: list[dict]) -> None:
+    """The review's workflow journal, most recent first."""
+    with ui.card().classes("w-full gap-1").mark("overview-journal"):
+        ui.label(f"History ({len(events)} events)").classes("font-bold")
+        if not events:
+            ui.label("Nothing recorded yet.").classes("text-sm text-gray-600")
+            return
+        with (
+            ui.expansion("Show the history", value=False)
+            .classes("w-full")
+            .props("dense")
+        ):
+            for event in reversed(events):
+                with ui.row().classes("items-start gap-2 w-full no-wrap"):
+                    ui.label(_when(str(event.get("at", "")))).classes(
+                        "text-xs text-gray-500 w-32 shrink-0"
+                    )
+                    with ui.column().classes("gap-0 grow"):
+                        title = journal.label(event)
+                        if event.get("status") not in (None, "completed"):
+                            title += f" ({event['status']})"
+                        if event.get("inferred"):
+                            title += " · reconstructed"
+                        ui.label(title).classes("text-sm font-medium").mark(
+                            "journal-event"
+                        )
+                        text = event.get("message") or _event_details(event)
+                        if text:
+                            ui.label(text).classes("text-xs text-gray-600")
+                        if event.get("agent"):
+                            ui.label(event["agent"]).classes("text-xs text-gray-400")
 
 
 def _draw(review: Review, data: service.Overview) -> None:
@@ -228,7 +350,9 @@ def _draw(review: Review, data: service.Overview) -> None:
                 marker="tile-annotated",
             )
 
-    with ui.grid(columns="repeat(auto-fit, minmax(380px, 1fr))").classes("w-full gap-3"):
+    with ui.grid(columns="repeat(auto-fit, minmax(380px, 1fr))").classes(
+        "w-full gap-3"
+    ):
         if data.by_year:
             _chart_card("Papers per year", _years(data.by_year))
         if data.by_source:
@@ -264,13 +388,17 @@ def _draw(review: Review, data: service.Overview) -> None:
                     columns=[
                         {"name": c, "label": label, "field": c, "align": "left"}
                         for c, label in (
-                            ("at", "When"), ("origin", "Read during"), ("papers", "Papers"),
-                            ("annotated", "Annotated"), ("pending", "Still to annotate"),
+                            ("at", "When"),
+                            ("origin", "Read during"),
+                            ("papers", "Papers"),
+                            ("annotated", "Annotated"),
+                            ("pending", "Still to annotate"),
                             ("values", "Codes"),
                         )
                     ],
                     rows=[
-                        {**s.__dict__, "at": _when(s.at)} for s in reversed(data.history)
+                        {**s.__dict__, "at": _when(s.at)}
+                        for s in reversed(data.history)
                     ],
                     row_key="at",
                 ).props("dense flat").classes("w-full")

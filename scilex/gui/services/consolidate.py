@@ -527,6 +527,15 @@ def classify(review: Review, assignments: dict[int, str]) -> str:
             data.at[index, "zotero_collections"] = ";".join([*paths, role])
     backup(review.results_path)
     write_results(data, review.results_path)
+    from scilex.gui.services import journal
+
+    journal.append(
+        review.folder,
+        "classify",
+        params={"assignments": sorted(set(assignments.values()))},
+        generated={"papers": len(assignments), "updated_in_zotero": updated_in_zotero},
+        status="completed" if not failed else "partial",
+    )
     text = f"{len(assignments)} papers classified"
     if linked:
         text += f" ({updated_in_zotero} added to their collection in Zotero"
@@ -667,6 +676,24 @@ def apply(
         paper_log._save(review.folder, log)
 
     merged_rows = sum(len(group.others) for group in chosen)
+    from scilex.gui.services import journal
+
+    journal.append(
+        review.folder,
+        "consolidate",
+        params={
+            "action": action,
+            "apply_filters": apply_filters,
+            "groups_merged": len(chosen),
+        },
+        generated={
+            "duplicates_merged": merged_rows,
+            "filtered": len(filtered),
+            "decisions_moved": moved,
+            "disagreements": conflicts,
+            "results_rows": len(data),
+        },
+    )
     parts = [f"{merged_rows} duplicates merged into {len(chosen)} papers"]
     if moved or conflicts:
         parts.append(

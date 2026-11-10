@@ -100,6 +100,30 @@ report is built in ④ Annotate, and at each knowledge-graph export. They are ke
 `annotation_history.jsonl` in the review folder (one line per snapshot) and listed under
 the chart.
 
+**History.** Every action on the review is recorded in `workflow.jsonl` (review folder),
+one line per event, never rewritten: creation and imports (Zotero, knowledge graph,
+BibTeX, papers added from Zotero with the library and its version), each save of
+`scilex.yml` (with its SHA-256 fingerprint), renames, changes of Zotero library, every
+job that finished or failed (collections, aggregations, enrichments, analyses…),
+consolidations and classifications, and exports (with the version of the
+scilex-lpwc-ap profile for a knowledge graph). Each event names its agent (your ORCID
+iD), what it used and what it produced; API keys are never written. When a review gets
+its journal, the past is reconstructed once from the files that already exist (marked
+*reconstructed*). The **History** card of the Overview lists the events, most recent
+first.
+
+**Things to check.** On opening, the Overview compares the review with its journal and
+lists what looks inconsistent, each with its fix: results found in another folder
+named after the review (**Use this folder**), a Zotero library other than the one the
+papers came from, a collection that stopped before the end (resume it in ② Collect),
+papers in none of the required sub-corpora (classify them in Consolidate).
+
+**Results folder.** The app records the folder holding a review's results in
+`review_state.yml` (review folder) and keeps it when you rename the review: results
+never move or get lost. A review opened for the first time whose `output/<name>` has
+no results adopts a sibling folder that does when it carries a name the review had
+(its folder name or an earlier name). The command line still uses `output/<name>`.
+
 ## Explore
 
 Browses the papers of the review (once it has some). Filter them with the decision,

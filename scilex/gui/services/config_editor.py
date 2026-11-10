@@ -260,7 +260,11 @@ def to_file_dict(data: dict, explicit: dict | None = None) -> dict:
 
 
 def _atomic_write(target: Path, text: str) -> None:
-    """Write ``text`` to ``target`` through a temporary file, cleaned on failure."""
+    """Write ``text`` to ``target`` through a temporary file, cleaned on failure.
+
+    Each save of a ``scilex.yml`` is journaled with the file's fingerprint (a
+    rename is journaled when the review is next read, see workspace).
+    """
     temporary = target.with_name(target.name + ".tmp")
     try:
         temporary.write_text(text, encoding="utf-8")
@@ -268,6 +272,15 @@ def _atomic_write(target: Path, text: str) -> None:
     except BaseException:
         temporary.unlink(missing_ok=True)
         raise
+    import hashlib
+
+    from scilex.gui.services import journal
+
+    journal.append(
+        target.parent,
+        "configure",
+        generated={"scilex.yml sha256": hashlib.sha256(text.encode("utf-8")).hexdigest()},
+    )
 
 
 def save(review: Review, data: dict) -> Path:
