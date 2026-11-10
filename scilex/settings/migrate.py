@@ -235,6 +235,13 @@ def legacy_to_settings(main_config: dict, advanced_config: dict | None = None) -
         if flag
     ]
     _set_if_different(citations, "citations", "fallbacks", fallbacks, defaults)
+    _set_if_different(
+        citations,
+        "citations",
+        "opencitations",
+        qf.get("use_opencitations", True),
+        defaults,
+    )
     result.update(citations)
 
     ranking: dict = {}

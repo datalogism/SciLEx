@@ -164,12 +164,19 @@ class VPNRotator:
 
             try:
                 logging.warning("[VPN] Disconnecting from current server...")
-                subprocess.run(
+                disc_result = subprocess.run(
                     [self._exe_path, "-d"],
                     timeout=30,
                     check=False,
                     capture_output=True,
+                    text=True,
                 )
+                if disc_result.returncode != 0 or disc_result.stderr.strip():
+                    logging.warning(
+                        f"[VPN] Disconnect exit={disc_result.returncode} "
+                        f"stdout={disc_result.stdout.strip()!r} "
+                        f"stderr={disc_result.stderr.strip()!r}"
+                    )
                 time.sleep(2)
 
                 if self.countries:
@@ -179,7 +186,15 @@ class VPNRotator:
                 else:
                     logging.warning("[VPN] Connecting to new server (quick connect)...")
                     cmd = [self._exe_path, "-c"]
-                subprocess.run(cmd, timeout=60, check=False, capture_output=True)
+                conn_result = subprocess.run(
+                    cmd, timeout=60, check=False, capture_output=True, text=True
+                )
+                if conn_result.returncode != 0 or conn_result.stderr.strip():
+                    logging.warning(
+                        f"[VPN] Connect exit={conn_result.returncode} "
+                        f"stdout={conn_result.stdout.strip()!r} "
+                        f"stderr={conn_result.stderr.strip()!r}"
+                    )
 
                 logging.warning(
                     f"[VPN] Connected — waiting {self.rotation_delay}s for IP to propagate"
@@ -297,3 +312,47 @@ def vpn_config_from_configs(main_config, api_config=None) -> dict:
     except Exception as error:
         logging.debug(f"VPN: could not read config ({error}) - rotation disabled.")
         return {}
+
+
+# ---------------------------------------------------------------------------
+# Checks used by the desktop app (no rotation, no side effect)
+# ---------------------------------------------------------------------------
+
+
+def vpn_status() -> dict:
+    """Describe the local NordVPN setup without changing the connection.
+
+    Returns:
+        ``{"exe_path": str | None, "public_ip": str | None, "platform": str}``:
+        where the NordVPN client was found (None when it is not installed),
+        the current public IP (None when offline) and the OS name.
+    """
+    probe = VPNRotator({})  # disabled: does not look for the client by itself
+    return {
+        "exe_path": probe._find_nordvpn_exe(),
+        "public_ip": VPNRotator._get_public_ip(),
+        "platform": "WSL2" if VPNRotator._is_wsl2() else platform.system(),
+    }
+
+
+def rotate_once(vpn_config: dict | None = None) -> tuple[bool, str | None, str | None]:
+    """Rotate the NordVPN server once, as a collection would after a block.
+
+    Uses a fresh rotator (the session cap of running collections is untouched).
+    Briefly disconnects the VPN.
+
+    Args:
+        vpn_config: The ``vpn`` block (countries, rotation_delay); ``enabled``
+            is forced on.
+
+    Returns:
+        ``(changed, ip_before, ip_after)``.
+    """
+    config = {**_normalize_vpn_config(vpn_config), "enabled": True}
+    config["max_rotations_per_session"] = 1
+    rotator = VPNRotator(config)
+    before = VPNRotator._get_public_ip()
+    if not rotator.enabled:
+        return False, before, before
+    changed = rotator.rotate()
+    return changed, before, VPNRotator._get_public_ip()

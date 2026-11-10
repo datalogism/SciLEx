@@ -108,9 +108,9 @@ def keys_path() -> Path:
     return USER_KEYS_PATH.expanduser()
 
 
-def load_keys() -> dict:
-    """Load the keys file as a plain dict ({} if it does not exist yet)."""
-    path = keys_path()
+def load_keys(path: Path | None = None) -> dict:
+    """Load a keys file (the global one by default) as a dict ({} if absent)."""
+    path = keys_path() if path is None else Path(path)
     if not path.is_file():
         return {}
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -133,14 +133,18 @@ def _backup_previous(path: Path) -> None:
     os.chmod(backup, 0o600)
 
 
-def save_keys(data: dict) -> Path:
+def save_keys(data: dict, path: Path | None = None) -> Path:
     """Validate then write ``data`` atomically with mode 0600.
 
     Callers pass the full dict they loaded (``load_keys``) with their edits,
     so blocks this module does not know about are preserved.
+
+    Args:
+        data: Keys mapping.
+        path: File to write (the global keys file by default).
     """
     validate(data)
-    path = keys_path()
+    path = keys_path() if path is None else Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     text = yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
     if path.is_file():
@@ -301,3 +305,95 @@ def _interpret_status(status: int) -> tuple[bool, str]:
     if status == 429:
         return True, "Key accepted, but the service is rate limiting (HTTP 429)."
     return False, f"Unexpected answer (HTTP {status})."
+
+
+# ---------------------------------------------------------------------------
+# Keys of one review: global keys, overridden field by field
+# ---------------------------------------------------------------------------
+
+REVIEW_KEYS_FILENAME = "review_keys.yml"
+# Blocks of the legacy api.config.yml that are not API keys.
+NON_KEY_BLOCKS = frozenset({"vpn"})
+
+
+def review_keys_path(folder: Path) -> Path:
+    """Return the file holding a review's own keys (overrides of the global ones)."""
+    return Path(folder) / REVIEW_KEYS_FILENAME
+
+
+def merge_keys(base: dict, override: dict) -> dict:
+    """Return ``base`` with each field of ``override`` replacing the same field.
+
+    Blocks merge field by field, so a review can change only its Zotero
+    library id and keep the global Zotero key.
+    """
+    merged = {
+        name: dict(block) if isinstance(block, dict) else block
+        for name, block in base.items()
+    }
+    for name, block in (override or {}).items():
+        if isinstance(block, dict) and isinstance(merged.get(name), dict):
+            merged[name] = {**merged[name], **block}
+        else:
+            merged[name] = block
+    return merged
+
+
+def effective_keys(folder: Path | None) -> dict:
+    """Return the keys a review uses: global keys plus its own overrides."""
+    global_keys = load_keys()
+    if folder is None:
+        return global_keys
+    return merge_keys(global_keys, load_keys(review_keys_path(folder)))
+
+
+def save_review_keys(folder: Path, data: dict) -> Path | None:
+    """Write a review's overrides; remove the file when there is none.
+
+    Returns:
+        The file written, or None when the review now uses the global keys only.
+    """
+    path = review_keys_path(folder)
+    cleaned = {name: block for name, block in data.items() if block}
+    if not cleaned:
+        path.unlink(missing_ok=True)
+        return None
+    return save_keys(cleaned, path)
+
+
+def legacy_keys_path() -> Path:
+    """Return the legacy ``scilex/api.config.yml`` of this installation."""
+    from scilex.settings.loader import LEGACY_KEYS_PATH
+
+    return LEGACY_KEYS_PATH
+
+
+def legacy_blocks_to_import(global_keys: dict) -> dict:
+    """Return the key blocks of the legacy file that the global file lacks.
+
+    Never raises: an unreadable legacy file just offers nothing.
+    """
+    path = legacy_keys_path()
+    try:
+        legacy = load_keys(path) if path.is_file() else {}
+    except (OSError, ValueError, yaml.YAMLError):
+        return {}
+    missing = {}
+    for name, block in legacy.items():
+        if name in NON_KEY_BLOCKS or not block:
+            continue
+        if name == "rate_limits":
+            new = {
+                k: v for k, v in block.items() if k not in (global_keys.get(name) or {})
+            }
+            if new:
+                missing[name] = new
+        elif isinstance(block, dict):
+            new = {
+                k: v
+                for k, v in block.items()
+                if v not in (None, "") and k not in (global_keys.get(name) or {})
+            }
+            if new:
+                missing[name] = new
+    return missing

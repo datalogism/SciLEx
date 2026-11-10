@@ -593,6 +593,7 @@ def fetch_citations_for_dataframe(
     crossref_mailto=None,
     api_config=None,
     cache_dir=None,
+    use_opencitations=True,
 ):
     """Fetch citation counts for every paper of a DataFrame.
 
@@ -611,6 +612,8 @@ def fetch_citations_for_dataframe(
         api_config: Optional API config dict; its CrossRef mailto is used when
             ``crossref_mailto`` is not given.
         cache_dir: Folder of the citation cache database (default: ``./output``).
+        use_opencitations: Run the OpenCitations phase (4) for the papers the
+            earlier sources left unresolved.
 
     Returns:
         tuple: ``(extras, nb_citeds, nb_citations, stats)``. The three lists have
@@ -641,10 +644,17 @@ def fetch_citations_for_dataframe(
     )
     if state.use_cache:
         logging.info("Using citation cache (30-day TTL) — batch mode for phases 1-3")
-    logging.info(f"Using {num_workers} workers for OpenCitations fallback (phase 4)")
-    logging.info(
-        "Phase strategy: Cache → SS → OpenAlex → CrossRef (batch) → OpenCitations (threaded)"
-    )
+    if use_opencitations:
+        logging.info(
+            f"Using {num_workers} workers for OpenCitations fallback (phase 4)"
+        )
+        logging.info(
+            "Phase strategy: Cache → SS → OpenAlex → CrossRef (batch) → OpenCitations (threaded)"
+        )
+    else:
+        logging.info(
+            "Phase strategy: Cache → SS → OpenAlex → CrossRef (batch); OpenCitations disabled"
+        )
 
     with tqdm(
         total=total_papers,
@@ -669,8 +679,13 @@ def fetch_citations_for_dataframe(
                 state, remaining, "OpenAlex", "openalex", _openalex_counts
             ),
             lambda: _phase_crossref(state, remaining, checkpointer, crossref_mailto),
-            lambda: _phase_opencitations(state, remaining, num_workers, checkpointer),
         ]
+        if use_opencitations:
+            phases.append(
+                lambda: _phase_opencitations(
+                    state, remaining, num_workers, checkpointer
+                )
+            )
         _update_pbar_postfix(pbar, state.stats, state.use_cache)
         for run_phase in phases:
             if not remaining:

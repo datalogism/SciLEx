@@ -458,6 +458,7 @@ def to_legacy(
         "use_semantic_scholar_citations": "semantic_scholar"
         in settings.citations.fallbacks,
         "use_openalex_citations": "openalex" in settings.citations.fallbacks,
+        "use_opencitations": settings.citations.opencitations,
         "apply_relevance_ranking": ranking.enabled,
         "relevance_weights": {**DEFAULT_RELEVANCE_WEIGHTS, **ranking.weights},
         "itemtype_relevance_weights": {

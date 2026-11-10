@@ -94,10 +94,46 @@ SemanticScholar:
 # Example: apis: [OpenAlex, Arxiv, HAL, DBLP, PubMed]
 #
 
-# OpenAlex - Free API key recommended (100k credits/day vs 100 without)
-# Get yours at: https://openalex.org/settings/api
+# OpenAlex - Pass your email as api_key to join the polite pool (faster, stable).
+# OpenAlex is free; the email is sent as the mailto= query parameter, NOT for auth.
 # OpenAlex:
-#   api_key: "YOUR_OPENALEX_API_KEY"
+#   api_key: "your.email@institution.org"
+
+# OpenAIRE - Register for a token to raise rate limit from 0.2 → 1.0 req/s (5x).
+# Token is free; register at: https://develop.openaire.eu/
+# Without token: ~5s between requests, 409 throttle errors common on large runs.
+# With token:    ~1 req/s, much more stable for large collections.
+# OpenAIRE:
+#   api_key: "YOUR_OPENAIRE_ACCESS_TOKEN"
+
+# ============================================================================
+# VPN ROTATION (Optional - rotate NordVPN IP when rate-limited)
+# ============================================================================
+#
+# When an API persistently returns 429/409 (rate limit), SciLEx can rotate
+# your NordVPN IP to bypass per-IP blocks instead of giving up on the query.
+#
+# Requirements:
+#   - NordVPN app installed and logged in (Windows/WSL2: GUI app; Linux: CLI)
+#   - pip install nordvpn-switcher  (optional, only needed for Linux native)
+#   - On WSL2: NordVPN Windows app is used directly via the interop path
+#
+# How it works:
+#   1. Persistent 429 detected after all retries are exhausted
+#   2. NordVPN disconnects then quick-connects to a new server
+#   3. Public IP is verified to have changed (rotation_delay seconds wait)
+#   4. Collection retries from the same page with the new IP
+#   5. If rotation fails or limit is reached, query is marked complete and skipped
+#
+# vpn:
+#   enabled: false            # true to enable
+#   provider: nordvpn
+#   rotate_on_rate_limit:     # APIs to enable rotation for (empty = all)
+#     - Arxiv
+#     - DBLP
+#     - OpenAIRE
+#   rotation_delay: 15        # Seconds to wait after connecting (for IP propagation)
+#   max_rotations_per_session: 10   # Safety cap across all APIs for the run
 
 # ============================================================================
 # RATE LIMITS (Optional - uses sensible defaults if not specified)
@@ -121,3 +157,5 @@ SemanticScholar:
 #   DBLP: 1.0                 # 1-2s between requests
 #   Istex: 5.0                # No documented limit
 #   PubMed: 10.0              # 10 req/sec with key (3 without)
+#   OpenAIRE: 0.2             # 5s between requests; 409 Conflict at higher rates
+#   ORKG: 0.5                 # 2s between requests; timeouts at higher rates

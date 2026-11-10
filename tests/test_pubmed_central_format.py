@@ -1,6 +1,5 @@
 """Tests for PubMedCentraltoZoteroFormat in scilex/crawlers/aggregate.py"""
 
-
 from scilex.constants import MISSING_VALUE
 from scilex.crawlers.aggregate import PubMedCentraltoZoteroFormat
 
@@ -131,9 +130,26 @@ class TestPubMedCentraltoZoteroFormat:
 
     def test_all_required_keys_present(self):
         result = PubMedCentraltoZoteroFormat(_minimal_row())
-        required = ["title", "publisher", "itemType", "authors", "language",
-                    "abstract", "archiveID", "archive", "date", "DOI",
-                    "url", "pdf_url", "rights", "pages", "journalAbbreviation",
-                    "volume", "serie", "issue", "tags"]
+        required = [
+            "title",
+            "publisher",
+            "itemType",
+            "authors",
+            "language",
+            "abstract",
+            "archiveID",
+            "archive",
+            "date",
+            "DOI",
+            "url",
+            "pdf_url",
+            "rights",
+            "pages",
+            "journalAbbreviation",
+            "volume",
+            "serie",
+            "issue",
+            "tags",
+        ]
         for key in required:
             assert key in result

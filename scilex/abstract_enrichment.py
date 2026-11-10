@@ -135,13 +135,19 @@ def _query_cache(dir_collect: str, dois: list[str]) -> dict[str, str | None]:
     """
     if not dois:
         return {}
+    # SQLite caps bind variables at 999; chunk to stay under that limit.
+    _CHUNK = 900
+    result: dict[str, str | None] = {}
     with _open_db(dir_collect) as conn:
-        placeholders = ",".join("?" * len(dois))
-        rows = conn.execute(
-            f"SELECT doi, abstract FROM abstract_cache WHERE doi IN ({placeholders})",
-            dois,
-        ).fetchall()
-    return dict(rows)
+        for i in range(0, len(dois), _CHUNK):
+            chunk = dois[i : i + _CHUNK]
+            placeholders = ",".join("?" * len(chunk))
+            rows = conn.execute(
+                f"SELECT doi, abstract FROM abstract_cache WHERE doi IN ({placeholders})",
+                chunk,
+            ).fetchall()
+            result.update(rows)
+    return result
 
 
 def _save_cache_entries(dir_collect: str, entries: dict[str, str | None]) -> None:
@@ -202,6 +208,28 @@ def _abstract_field(api_name: str) -> str:
     return "dc:description" if api_name == "Elsevier" else "abstract"
 
 
+def _extract_year(record: dict, api_name: str) -> int | None:
+    """Extract publication year from a raw API record, mirroring the same
+    fields the Zotero format converters read (prism:coverDate / published_year).
+
+    Returns None when the year is missing or unparseable — callers must treat
+    that as "keep" (conservative), same convention as the aggregation pipeline's
+    own year pre-filter.
+    """
+    try:
+        if api_name == "Elsevier":
+            cover_date = record.get("prism:coverDate")
+            if cover_date:
+                return int(str(cover_date)[:4])
+        elif api_name == "ORKG":
+            year = record.get("publication_info", {}).get("published_year")
+            if year is not None:
+                return int(year)
+    except (ValueError, TypeError):
+        pass
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Fetch helpers
 # ---------------------------------------------------------------------------
@@ -260,7 +288,7 @@ def fetch_abstract_for_doi(
     doi: str,
     session: requests.Session,
     ss_api_key: str | None = None,
-    inter_request_delay: float = 0.35,
+    inter_request_delay: float = 0.1,
 ) -> str | None:
     """Try Semantic Scholar then OpenAlex."""
     abstract = _fetch_ss(doi, session, ss_api_key)
@@ -300,9 +328,18 @@ def _iter_page_files(dir_collect: str):
 
 def _single_pass_scan(
     dir_collect: str,
+    year_range: set[int] | None = None,
 ) -> tuple[list[str], dict[str, tuple[list, str, str]]]:
     """
     Read every ABSTRACT_ABSENT_APIS page file exactly once.
+
+    Args:
+        year_range: If given, records whose extracted year is known and falls
+                    outside this set are skipped entirely — they'll be dropped
+                    by the aggregation pipeline's own year filter anyway, so
+                    fetching their abstract is wasted work. Records with an
+                    unknown/unparseable year are kept (same conservative
+                    convention as the aggregation pre-filter).
 
     Returns:
         all_dois      : deduplicated list of DOIs that are missing abstracts
@@ -316,6 +353,7 @@ def _single_pass_scan(
         str, list[tuple]
     ] = {}  # doi → [(list_ref, record_idx, abs_field)]
     file_data: dict[str, tuple] = {}  # file_path → (data, api_name, abs_field)
+    skipped_out_of_range = 0
 
     for file_path, api_name in _iter_page_files(dir_collect):
         if api_name not in ABSTRACT_ABSENT_APIS:
@@ -333,6 +371,13 @@ def _single_pass_scan(
         for idx, record in enumerate(results):
             if not _is_abstract_missing(record.get(abs_field)):
                 continue
+
+            if year_range:
+                year = _extract_year(record, api_name)
+                if year is not None and year not in year_range:
+                    skipped_out_of_range += 1
+                    continue
+
             doi = _extract_doi(record, api_name)
             if not doi:
                 continue
@@ -343,6 +388,12 @@ def _single_pass_scan(
 
         if file_needs_tracking:
             file_data[file_path] = (data, api_name, abs_field)
+
+    if skipped_out_of_range:
+        logging.info(
+            f"Abstract enrichment: skipped {skipped_out_of_range} records outside "
+            f"configured year range (would be dropped by aggregation anyway)"
+        )
 
     all_dois = list(doi_to_indices.keys())
     return all_dois, doi_to_indices, file_data
@@ -398,6 +449,7 @@ def enrich_collection_abstracts(
     num_workers: int = 4,
     inter_request_delay: float = 0.35,
     cache_only: bool = False,
+    year_range: set[int] | None = None,
 ) -> dict:
     """
     Enrich missing abstracts in a collection directory.
@@ -417,8 +469,14 @@ def enrich_collection_abstracts(
         num_workers: Concurrent fetch threads.
         inter_request_delay: Seconds between SS and OA calls for the same DOI.
         cache_only: If True, only apply already-cached abstracts — skip all
-                    network fetching.  Useful for fast re-aggregations where
+                    network fetching.  Useful for fast re-aggregations when
                     the cache is already warm.
+        year_range: If given, records with a known year outside this set are
+                    skipped before fetching — they'd be dropped by the
+                    aggregation pipeline's own year filter anyway (matters most
+                    for APIs like ORKG that don't support server-side year
+                    filtering, so out-of-range records get collected regardless
+                    of the configured `years` list).
 
     Returns:
         Stats dict: dois_found, enriched, failed, patched_records.
@@ -445,7 +503,9 @@ def enrich_collection_abstracts(
     logging.info("Abstract enrichment: scanning collection for missing abstracts…")
 
     # Single-pass: read every Elsevier/ORKG file once, keep data in memory
-    all_dois, doi_to_indices, file_data = _single_pass_scan(dir_collect)
+    all_dois, doi_to_indices, file_data = _single_pass_scan(
+        dir_collect, year_range=year_range
+    )
 
     if not all_dois:
         logging.info(
@@ -493,10 +553,16 @@ def enrich_collection_abstracts(
                 ss_api_key=ss_api_key,
                 inter_request_delay=inter_request_delay,
             )
-            time.sleep(inter_request_delay)
             return doi, abstract
 
+        # Flush to SQLite every FLUSH_EVERY completions instead of waiting for the
+        # whole batch — otherwise an interrupted run (Ctrl-C, crash, sleep) loses
+        # every abstract fetched so far, since nothing was persisted yet.
+        FLUSH_EVERY = 200
         new_entries: dict[str, str | None] = {}
+        pending: dict[str, str | None] = {}
+        n_ok_total = 0
+        n_fail_total = 0
 
         with ThreadPoolExecutor(max_workers=num_workers) as executor:
             futures = {executor.submit(_fetch, doi): doi for doi in dois_to_fetch}
@@ -508,17 +574,25 @@ def enrich_collection_abstracts(
             ):
                 doi, abstract = future.result()
                 new_entries[doi] = abstract
+                pending[doi] = abstract
                 if abstract:
                     newly_fetched[doi] = abstract
                 else:
                     failed += 1
 
-        # Incremental SQLite save — only new entries, no full-file rewrite
-        _save_cache_entries(dir_collect, new_entries)
-        n_ok = sum(1 for v in new_entries.values() if v)
-        n_fail = len(new_entries) - n_ok
+                if len(pending) >= FLUSH_EVERY:
+                    _save_cache_entries(dir_collect, pending)
+                    n_ok_total += sum(1 for v in pending.values() if v)
+                    n_fail_total += sum(1 for v in pending.values() if not v)
+                    pending = {}
+
+        if pending:
+            _save_cache_entries(dir_collect, pending)
+            n_ok_total += sum(1 for v in pending.values() if v)
+            n_fail_total += sum(1 for v in pending.values() if not v)
+
         logging.info(
-            f"Abstract cache: saved {n_ok} new abstracts + {n_fail} failed DOIs to SQLite"
+            f"Abstract cache: saved {n_ok_total} new abstracts + {n_fail_total} failed DOIs to SQLite"
         )
 
     # Patch source files for newly fetched abstracts

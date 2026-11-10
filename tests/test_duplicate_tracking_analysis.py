@@ -146,10 +146,12 @@ class TestGenerateItemtypeDistributionReport:
         assert "SemanticScholar" in result or "OpenAlex" in result
 
     def test_missing_archive_rows_skipped(self):
-        df = pd.DataFrame([
-            {"archive": "NA", "itemType": "journalArticle"},
-            {"archive": "TestAPI*", "itemType": "conferencePaper"},
-        ])
+        df = pd.DataFrame(
+            [
+                {"archive": "NA", "itemType": "journalArticle"},
+                {"archive": "TestAPI*", "itemType": "conferencePaper"},
+            ]
+        )
         result = generate_itemtype_distribution_report(df)
         assert isinstance(result, str)
 

@@ -275,10 +275,22 @@ class Workspace:
         """
         from scilex.gui.services import keys_editor
 
-        # Keys come only from the file the API keys screen shows (plus the
-        # SCILEX_<API>_<FIELD> overrides): never the legacy api.config.yml.
+        # Keys come only from the files the API keys screens show (global
+        # keys, then the review's own overrides, plus the SCILEX_<API>_<FIELD>
+        # variables): never the legacy api.config.yml.
         chosen = keys_path if keys_path is not None else keys_editor.keys_path()
-        if Path(chosen).is_file():
+        review_keys = keys_editor.review_keys_path(review.folder)
+        if keys_path is None and review_keys.is_file():
+            with tempfile.TemporaryDirectory() as tmp:
+                merged = Path(tmp) / "keys.yml"
+                merged.write_text(
+                    yaml.safe_dump(keys_editor.effective_keys(review.folder)),
+                    encoding="utf-8",
+                )
+                config = SciLExConfig.from_files(
+                    config_path=review.config_path, keys_path=merged
+                )
+        elif Path(chosen).is_file():
             config = SciLExConfig.from_files(
                 config_path=review.config_path, keys_path=chosen
             )

@@ -37,6 +37,7 @@ from scilex.config_defaults import (
     DEFAULT_RECOVER_MISSING_DOIS,
     DEFAULT_RELEVANCE_WEIGHTS,
     DEFAULT_TRACK_DUPLICATE_SOURCES,
+    DEFAULT_USE_OPENCITATIONS,
     DEFAULT_USE_VENUE_RANKING,
     DEFAULT_VALIDATE_YEAR_RANGE,
     MAX_ABSTRACT_WORDS,
@@ -218,6 +219,7 @@ class CitationsSettings(BaseModel):
     fallbacks: list[Literal["semantic_scholar", "openalex"]] = Field(
         default_factory=lambda: ["semantic_scholar", "openalex"]
     )
+    opencitations: bool = DEFAULT_USE_OPENCITATIONS
     discrepancy_threshold: float = Field(
         default=DEFAULT_CANONICAL_CITATION_DISCREPANCY_THRESHOLD, ge=0
     )

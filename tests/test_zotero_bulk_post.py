@@ -114,7 +114,12 @@ class TestRetryWithSmallerBatches:
     def test_partial_success(self):
         api = _make_api()
         # With 30 items: retry_size=25 → 2 batches (25+5). First batch succeeds, rest fail.
-        responses = [_make_response(200), _make_response(500), _make_response(500), _make_response(500)]
+        responses = [
+            _make_response(200),
+            _make_response(500),
+            _make_response(500),
+            _make_response(500),
+        ]
         api._post = MagicMock(side_effect=responses)
         items = [{"title": f"item {i}"} for i in range(30)]
         result = api._retry_with_smaller_batches(items)

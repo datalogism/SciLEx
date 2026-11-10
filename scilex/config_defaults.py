@@ -176,6 +176,10 @@ Improves citation completeness for preprints and recent papers."""
 DEFAULT_USE_OPENALEX_CITATIONS = True
 """Use OpenAlex as citation fallback (read by the aggregation orchestrator)."""
 
+DEFAULT_USE_OPENCITATIONS = True
+"""Query the OpenCitations count API for papers no earlier source resolved
+(last citation phase, 2 requests per DOI at 3 req/s: the slowest one)."""
+
 DEFAULT_APPLY_RELEVANCE_RANKING = True
 """Apply composite relevance scoring to rank papers by importance.
 Papers sorted by relevance_score (higher = more relevant)."""
@@ -279,6 +283,7 @@ QUALITY_FILTER_SCHEMA = {
     "apply_citation_filter": bool,
     "use_semantic_scholar_citations": bool,
     "use_openalex_citations": bool,
+    "use_opencitations": bool,
     "apply_relevance_ranking": bool,
     "relevance_weights": dict,
     "itemtype_relevance_weights": dict,
@@ -310,6 +315,7 @@ def get_default_quality_filters():
             "apply_citation_filter": DEFAULT_APPLY_CITATION_FILTER,
             "use_semantic_scholar_citations": DEFAULT_USE_SEMANTIC_SCHOLAR_CITATIONS,
             "use_openalex_citations": DEFAULT_USE_OPENALEX_CITATIONS,
+            "use_opencitations": DEFAULT_USE_OPENCITATIONS,
             "apply_relevance_ranking": DEFAULT_APPLY_RELEVANCE_RANKING,
             "relevance_weights": DEFAULT_RELEVANCE_WEIGHTS,
             "itemtype_relevance_weights": DEFAULT_ITEMTYPE_RELEVANCE_WEIGHTS,

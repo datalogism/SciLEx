@@ -305,6 +305,9 @@ def _enrich_source_abstracts(ctx: _AggregationContext) -> None:
         ss_api_key=ss_key,
         num_workers=ctx.options.enrich_workers,
         cache_only=ctx.options.cache_only_enrichment,
+        # Skip papers the year pre-filter will drop anyway (matters for ORKG,
+        # which has no server-side year filter).
+        year_range=_year_range_set(ctx),
     )
     if enrich_stats["dois_found"] > 0:
         logging.info(
@@ -314,6 +317,18 @@ def _enrich_source_abstracts(ctx: _AggregationContext) -> None:
             f"{enrich_stats.get('newly_fetched', 0)} newly fetched), "
             f"{enrich_stats['patched_records']} records updated in source files"
         )
+
+
+def _year_range_set(ctx: _AggregationContext) -> set[int] | None:
+    """Years kept by aggregation, shared by abstract enrichment and the pre-filters.
+
+    Derived from the main config's "years" list (same list used during
+    collection); quality_filters.year_range can override it explicitly.
+    """
+    year_list = ctx.quality_filters.get("year_range") or ctx.main_config.get(
+        "years", []
+    )
+    return {int(y) for y in year_list} if year_list else None
 
 
 def _build_pre_filters(ctx: _AggregationContext) -> dict:
@@ -336,11 +351,9 @@ def _build_pre_filters(ctx: _AggregationContext) -> dict:
     ):
         pre_filters["allowed_item_types"] = set(quality_filters["allowed_item_types"])
 
-    # Year range: derived from the main config's "years" list (same list used
-    # during collection); quality_filters.year_range can override explicitly.
-    year_list = quality_filters.get("year_range") or ctx.main_config.get("years", [])
-    if year_list:
-        pre_filters["year_range"] = {int(y) for y in year_list}
+    year_range = _year_range_set(ctx)
+    if year_range:
+        pre_filters["year_range"] = year_range
 
     if pre_filters:
         logging.info(
@@ -723,6 +736,7 @@ def _process_citations(
         crossref_mailto=crossref_mailto,
         # Shared by every collection of the output folder; never cwd-relative.
         cache_dir=os.path.dirname(ctx.dir_collect),
+        use_opencitations=quality_filters.get("use_opencitations", True),
     )
 
     df["extra"] = extras

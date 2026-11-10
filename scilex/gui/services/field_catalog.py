@@ -129,7 +129,11 @@ API_INFO: dict[str, ApiInfo] = {
     "HAL": ApiInfo("HAL", "French open archive, all disciplines."),
     "Istex": ApiInfo("ISTEX", "French national archive of licensed publications."),
     "OpenAIRE": ApiInfo("OpenAIRE", "European open-science graph, all disciplines."),
-    "ORKG": ApiInfo("ORKG", "Open Research Knowledge Graph (structured papers)."),
+    "ORKG": ApiInfo(
+        "ORKG",
+        "Open Research Knowledge Graph: structured papers. No year filter on "
+        "its side: other years are fetched, then dropped.",
+    ),
     "IEEE": ApiInfo(
         "IEEE Xplore", "Engineering and computer science.", "required", "IEEE"
     ),
@@ -167,7 +171,10 @@ SECTIONS: dict[str, SectionMeta] = {
         "Add tasks, methods, benchmarks and code repositories from Papers with Code.",
     ),
     "report": SectionMeta("Reports", "Files written next to the results."),
-    "collect": SectionMeta("Collection", "Rarely needed collection options."),
+    "collect": SectionMeta(
+        "Collection",
+        "Re-run without collecting, and VPN rotation when a source blocks you.",
+    ),
     "llm_screening": SectionMeta(
         "LLM screening",
         "Ask a language model to score each paper against your topic (paid, "
@@ -298,6 +305,11 @@ FIELDS: dict[str, FieldMeta] = {
         ),
         advanced=True,
     ),
+    "citations.opencitations": FieldMeta(
+        "Ask OpenCitations last",
+        "Query the free OpenCitations index (COCI) for papers no other source "
+        "counted. Most complete for DOIs, but the slowest step (3 requests/s).",
+    ),
     "citations.discrepancy_threshold": FieldMeta(
         "Discrepancy warning threshold",
         "Relative gap between two sources above which a count is flagged (0.5 = 50%).",
@@ -391,10 +403,10 @@ FIELDS: dict[str, FieldMeta] = {
         "Turn off to only re-run aggregation on papers already collected.",
     ),
     "collect.vpn": FieldMeta(
-        "VPN rotation (YAML)",
-        "Advanced: rotate VPN servers when a source blocks you. Empty = none.",
-        "provider: mullvad",
-        advanced=True,
+        "VPN rotation (NordVPN)",
+        "Switch NordVPN server when a source keeps blocking this IP (429/409), "
+        "then retry the same page.",
+        "enabled: true",
     ),
     # -- llm screening -------------------------------------------------------
     "llm_screening.enabled": FieldMeta(

@@ -9,11 +9,25 @@ from scilex.quality_validation import (
 )
 
 
-def _paper(doi="10.1/a", abstract="A long enough abstract with sufficient words to pass the check",
-           date="2022", rights="open-access", authors="Smith J;Doe A"):
-    return {"DOI": doi, "abstract": abstract, "date": date, "rights": rights, "authors": authors,
-            "title": "Test paper", "journalAbbreviation": "J.Test", "volume": "1", "issue": "1",
-            "publisher": "Pub"}
+def _paper(
+    doi="10.1/a",
+    abstract="A long enough abstract with sufficient words to pass the check",
+    date="2022",
+    rights="open-access",
+    authors="Smith J;Doe A",
+):
+    return {
+        "DOI": doi,
+        "abstract": abstract,
+        "date": date,
+        "rights": rights,
+        "authors": authors,
+        "title": "Test paper",
+        "journalAbbreviation": "J.Test",
+        "volume": "1",
+        "issue": "1",
+        "publisher": "Pub",
+    }
 
 
 class TestApplyQualityFilters:
@@ -41,7 +55,10 @@ class TestApplyQualityFilters:
 
     def test_min_abstract_words_filter(self):
         short = _paper(abstract="too short")
-        long = _paper(doi="10.2/b", abstract="this is a very long abstract with many words and content")
+        long = _paper(
+            doi="10.2/b",
+            abstract="this is a very long abstract with many words and content",
+        )
         df = pd.DataFrame([short, long])
         result, _ = apply_quality_filters(df, {"min_abstract_words": 5})
         assert len(result) == 1
@@ -55,10 +72,13 @@ class TestApplyQualityFilters:
     def test_validate_year_range_removes_outside(self):
         rows = [_paper(date="2022"), _paper(doi="10.2/b", date="2015")]
         df = pd.DataFrame(rows)
-        result, _ = apply_quality_filters(df, {
-            "validate_year_range": True,
-            "year_range": [2020, 2021, 2022, 2023],
-        })
+        result, _ = apply_quality_filters(
+            df,
+            {
+                "validate_year_range": True,
+                "year_range": [2020, 2021, 2022, 2023],
+            },
+        )
         assert len(result) == 1
 
     def test_require_open_access_filter(self):
@@ -69,7 +89,10 @@ class TestApplyQualityFilters:
         assert len(result) == 1
 
     def test_min_author_count_filter(self):
-        rows = [_paper(authors="Smith J;Doe A;Lee B"), _paper(doi="10.2/b", authors="Smith J")]
+        rows = [
+            _paper(authors="Smith J;Doe A;Lee B"),
+            _paper(doi="10.2/b", authors="Smith J"),
+        ]
         df = pd.DataFrame(rows)
         result, _ = apply_quality_filters(df, {"min_author_count": 2})
         assert len(result) == 1

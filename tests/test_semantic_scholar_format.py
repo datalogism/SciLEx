@@ -1,6 +1,5 @@
 """Tests for SemanticScholartoZoteroFormat in scilex/crawlers/aggregate.py"""
 
-
 from scilex.constants import MISSING_VALUE
 from scilex.crawlers.aggregate import SemanticScholartoZoteroFormat
 
@@ -147,7 +146,12 @@ class TestSemanticScholartoZoteroFormat:
 
     def test_publication_venue_journal(self):
         row = _minimal_row()
-        row["publicationVenue"] = {"type": "journal", "name": "Nature", "publisher": "NPG", "issn": "1234-5678"}
+        row["publicationVenue"] = {
+            "type": "journal",
+            "name": "Nature",
+            "publisher": "NPG",
+            "issn": "1234-5678",
+        }
         result = SemanticScholartoZoteroFormat(row)
         assert result["itemType"] == "journalArticle"
         assert result["journalAbbreviation"] == "Nature"

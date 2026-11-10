@@ -1,6 +1,5 @@
 """Tests for SpringertoZoteroFormat in scilex/crawlers/aggregate.py"""
 
-
 from scilex.constants import MISSING_VALUE
 from scilex.crawlers.aggregate import SpringertoZoteroFormat
 
@@ -12,8 +11,10 @@ def _full_row():
         "abstract": "A survey of deep learning methods.",
         "publicationDate": "2022-05-01",
         "doi": "10.1234/springer.test",
-        "url": [{"format": "html", "value": "https://link.springer.com/article/123"},
-                {"format": "pdf", "value": "https://link.springer.com/article/123.pdf"}],
+        "url": [
+            {"format": "html", "value": "https://link.springer.com/article/123"},
+            {"format": "pdf", "value": "https://link.springer.com/article/123.pdf"},
+        ],
         "openaccess": "open-access",
         "publisher": "Springer",
         "volume": "10",
@@ -156,7 +157,10 @@ class TestSpringertoZoteroFormat:
         row["url"] = [{"format": "pdf", "value": "https://pdf.example.com/paper.pdf"}]
         result = SpringertoZoteroFormat(row)
         # Should fallback to first URL value when no html format
-        assert result["url"] == "https://pdf.example.com/paper.pdf" or result["url"] == MISSING_VALUE
+        assert (
+            result["url"] == "https://pdf.example.com/paper.pdf"
+            or result["url"] == MISSING_VALUE
+        )
 
     def test_all_required_keys_present(self):
         result = SpringertoZoteroFormat(_minimal_row())

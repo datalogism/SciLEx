@@ -100,7 +100,9 @@ def test_llm_scoring_reports_progress(monkeypatch):
     from scilex.llm_relevance import LLMScreeningConfig, score_dataframe
 
     monkeypatch.setattr("scilex.llm_relevance.PROGRESS_EVERY", 2)
-    monkeypatch.setattr("scilex.llm_relevance.request_score", lambda *args, **kwargs: 5.0)
+    monkeypatch.setattr(
+        "scilex.llm_relevance.request_score", lambda *args, **kwargs: 5.0
+    )
     papers = pd.DataFrame(
         {
             "title": list("abcde"),

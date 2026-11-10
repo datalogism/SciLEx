@@ -427,9 +427,19 @@ class TestApiCallDecoratorErrorPaths:
         breaker.record_failure.assert_called_once()
 
     def test_retry_after_is_capped(self):
-        _, _, sleeps = self._run_exhausted(429, headers={"Retry-After": "86400"})
+        _, _, sleeps = self._run_exhausted(429, headers={"Retry-After": "300"})
         assert sleeps
         assert max(sleeps) <= 120
+
+    def test_quota_exhausted_retry_after_gives_up_at_once(self):
+        # A Retry-After beyond 10 min means quota exhaustion: no pointless
+        # retries, so the caller can rotate the VPN IP immediately.
+        collector, breaker, sleeps = self._run_exhausted(
+            429, headers={"Retry-After": "86400"}
+        )
+        assert collector.session.get.call_count == 1
+        assert sleeps == []
+        breaker.record_failure.assert_called_once()
 
 
 class TestLogApiUsageHeaders:

@@ -397,6 +397,24 @@ class API_collector:
     _key_pool = None  # set per instance when api.config.yml gives a list of keys
     RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
     MAX_RETRY_AFTER_SECONDS = 120
+    # A Retry-After longer than this signals quota exhaustion, not a transient
+    # spike: retrying after the capped wait won't help, so give up at once
+    # (which lets the caller rotate the VPN IP right away when enabled).
+    QUOTA_EXHAUSTED_RETRY_AFTER_SECONDS = 600
+
+    def _quota_exhausted_wait(self, response) -> float | None:
+        """The server's Retry-After in seconds when it signals quota exhaustion, else None."""
+        if response is None or response.status_code not in self.THROTTLE_STATUS:
+            return None
+        try:
+            retry_after = float(response.headers.get("Retry-After", ""))
+        except ValueError:
+            return None
+        return (
+            retry_after
+            if retry_after > self.QUOTA_EXHAUSTED_RETRY_AFTER_SECONDS
+            else None
+        )
 
     def _retry_wait(self, attempt, response=None):
         """Seconds to wait before retry number ``attempt + 1``.
@@ -534,6 +552,15 @@ class API_collector:
                 logging.debug(
                     f"{self.api_name} API request failed: {sanitize_secrets(str(e))}"
                 )
+
+            exhausted_wait = self._quota_exhausted_wait(response)
+            if exhausted_wait is not None and not is_last_attempt:
+                logging.warning(
+                    f"{self.api_name} API throttled ({response.status_code}). "
+                    f"Server Retry-After: {exhausted_wait:.0f}s — quota exhausted, "
+                    f"giving up immediately (would need to wait {exhausted_wait / 3600:.1f}h)."
+                )
+                is_last_attempt = True
 
             if is_last_attempt:
                 if (

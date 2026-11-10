@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from scilex.config_defaults import DEFAULT_ITEMTYPE_RELEVANCE_WEIGHTS
 from scilex.gui.components.errors import show_error
+from scilex.gui.components.vpn_editor import render_vpn_editor
 from scilex.gui.services import config_editor as editor
 from scilex.gui.services import field_catalog as catalog
 from scilex.gui.services.keys_editor import load_keys
@@ -486,8 +487,20 @@ def render(ctx: AppContext, review: Review) -> None:
         "yaml": yaml_input,
     }
 
+    def vpn_field(path: tuple[str, ...]) -> None:
+        dotted = ".".join(path)
+        with ui.column().classes("gap-0 w-full"):
+            caption(dotted)
+            render_vpn_editor(
+                get(path), lambda value: put(path, value), editor.API_NAMES
+            )
+            error_slot(path)
+
     def generic_field(path: tuple[str, ...], annotation: Any) -> None:
         dotted = ".".join(path)
+        if dotted == "collect.vpn":
+            vpn_field(path)
+            return
         spec = editor.describe_field(annotation)
         meta = catalog.field_meta(dotted)
         builder = (

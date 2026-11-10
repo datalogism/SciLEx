@@ -1,7 +1,20 @@
-"""API keys screen: edit the global keys.yml without opening it."""
+"""API keys screens.
+
+- Global keys (``/keys``, reached from the home page): one file shared by all
+  reviews, the default of every review.
+- A review's keys (its "API keys" step): the same form, where a filled field
+  overrides the global value for this review only (``review_keys.yml`` in the
+  review folder); an empty field uses the global value.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from pathlib import Path
 
 from nicegui import run, ui
 
+from scilex.gui.components.branding import render_logo
 from scilex.gui.components.errors import show_error
 from scilex.gui.services import keys_editor as editor
 from scilex.gui.services.workspace import Review
@@ -13,11 +26,33 @@ def _show_result(label: ui.label, ok: bool, message: str) -> None:
     label.classes(replace="text-sm " + ("text-positive" if ok else "text-negative"))
 
 
+def _masked(value) -> str:
+    """Show the end of a secret only."""
+    text = str(value or "")
+    return f"…{text[-4:]}" if len(text) > 4 else "set"
+
+
+def _global_hint(inherited: dict | None, block: str, field: str, secret: bool) -> str:
+    """Hint under a review field: the global value it falls back to."""
+    if inherited is None:
+        return ""
+    value = (inherited.get(block) or {}).get(field)
+    if isinstance(value, list):
+        value = value[0] if value else None
+    if isinstance(value, dict):
+        value = next(iter(value.values()), None)
+    if value in (None, ""):
+        return "Empty: no global value either."
+    shown = _masked(value) if secret else str(value)
+    return f"Empty: uses the global value ({shown})."
+
+
 class _KeyRows:
     """The editable list of keys of one API (password inputs, add/remove)."""
 
-    def __init__(self, api: str, initial: list[str]):
+    def __init__(self, api: str, initial: list[str], hint: str = ""):
         self.api = api
+        self.hint = hint
         self.inputs: list[ui.input] = []
         self.container = ui.column().classes("w-full gap-1")
         for key in initial or [""]:
@@ -32,6 +67,8 @@ class _KeyRows:
                 password=True,
                 password_toggle_button=True,
             ).classes("grow")
+            if first and self.hint:
+                field.props["hint"] = self.hint
             field.mark(
                 f"key-{self.api}" if first else f"key-{self.api}-{len(self.inputs)}"
             )
@@ -51,29 +88,20 @@ class _KeyRows:
         return [field.value or "" for field in self.inputs]
 
 
-def render(ctx: AppContext, review: Review) -> None:
-    """Draw the API keys screen."""
-    try:
-        data = editor.load_keys()
-        load_error = None
-    except Exception as exc:
-        data, load_error = {}, exc
+def _keys_form(
+    data: dict,
+    save_data: Callable[[dict], Path | None],
+    inherited: dict | None = None,
+    load_error: Exception | None = None,
+) -> None:
+    """Draw the keys form for ``data``; ``inherited`` (review scope) are the global keys."""
     overrides = editor.env_overrides()
-
-    ui.label("API keys").classes("text-2xl font-bold")
-    ui.label(
-        "Keys are global: they are shared by all your reviews and stored in one file."
-    ).classes("text-gray-500")
-    ui.label(f"File: {editor.keys_path()}").classes("text-sm font-mono")
-    if load_error is not None:
-        ui.label(f"The keys file could not be read: {load_error}").classes(
-            "text-negative"
-        )
-
     rows: dict[str, _KeyRows] = {}
 
     async def test_api(spec: editor.ApiSpec, result: ui.label) -> None:
         keys = [key for key in rows[spec.name].values() if key.strip()]
+        if not keys and inherited is not None:
+            keys = editor.get_keys_list(inherited.get(spec.name), spec.field)
         if not keys:
             _show_result(result, False, "Enter a key first.")
             return
@@ -105,6 +133,7 @@ def render(ctx: AppContext, review: Review) -> None:
             key_rows = rows[spec.name] = _KeyRows(
                 spec.name,
                 editor.get_keys_list(data.get(spec.name), spec.field),
+                _global_hint(inherited, spec.name, spec.field, secret=True),
             )
             with ui.row().classes("items-center gap-2"):
                 ui.button("Add another key", icon="add", on_click=key_rows.add).props(
@@ -119,16 +148,18 @@ def render(ctx: AppContext, review: Review) -> None:
                     ).props("outline dense").mark(f"key-test-{spec.name}")
 
     zotero = data.get("Zotero") or {}
-    with ui.card().classes("w-full"):
+    inherited_zotero = (inherited or {}).get("Zotero") or {}
+    with ui.card().classes("w-full").mark("keys-zotero"):
         with ui.row().classes("items-center gap-2"):
             ui.label("Zotero").classes("text-lg font-bold")
             ui.badge("optional").props("color=grey")
             ui.link("Get a key", editor.ZOTERO_HELP_URL, new_tab=True).classes(
                 "text-sm"
             )
-        ui.label("Needed only to push the results to a Zotero library.").classes(
-            "text-gray-500 text-sm"
-        )
+        ui.label(
+            "Needed to push results to Zotero, to start a review from a Zotero "
+            "collection, and to annotate in Zotero."
+        ).classes("text-gray-500 text-sm")
         zotero_key = (
             ui.input(
                 "API key",
@@ -144,19 +175,32 @@ def render(ctx: AppContext, review: Review) -> None:
             .classes("w-full")
             .mark("zotero-user-id")
         )
+        for widget, field, secret in (
+            (zotero_key, "api_key", True),
+            (zotero_id, "user_id", False),
+        ):
+            hint = _global_hint(inherited, "Zotero", field, secret)
+            if hint:
+                widget.props["hint"] = hint
+        mode_choices = {"user": "user", "group": "group"}
+        if inherited is not None:
+            mode_choices = {
+                "": f"Global ({inherited_zotero.get('user_mode') or 'user'})",
+                **mode_choices,
+            }
         zotero_mode = ui.select(
-            ["user", "group"],
+            mode_choices,
             label="Library type",
-            value=zotero.get("user_mode") or "user",
+            value=zotero.get("user_mode") or ("" if inherited is not None else "user"),
         ).mark("zotero-user-mode")
         zotero_result = ui.label("").classes("text-sm")
 
         async def test_zotero() -> None:
             outcome = await run.io_bound(
                 editor.check_zotero,
-                zotero_key.value or "",
-                zotero_id.value or "",
-                zotero_mode.value,
+                zotero_key.value or inherited_zotero.get("api_key") or "",
+                zotero_id.value or str(inherited_zotero.get("user_id") or ""),
+                zotero_mode.value or inherited_zotero.get("user_mode") or "user",
             )
             _show_result(zotero_result, *outcome)
 
@@ -176,10 +220,14 @@ def render(ctx: AppContext, review: Review) -> None:
                 .classes("w-full")
                 .mark(f"key-{block_name}")
             )
+            hint = _global_hint(inherited, block_name, field_name, secret=False)
+            if hint:
+                email_inputs[block_name].props["hint"] = hint
 
     with ui.expansion("Advanced: rate limits", icon="tune").classes("w-full"):
         ui.label(
-            "Requests per second, per API. Leave empty to keep the defaults."
+            "Requests per second, per API. Leave empty to keep the defaults"
+            + (" (or the global values)." if inherited is not None else ".")
         ).classes("text-gray-500 text-sm")
         limit_inputs = {
             name: ui.number(name, value=value, min=0.01)
@@ -201,8 +249,13 @@ def render(ctx: AppContext, review: Review) -> None:
                 zotero_block[field_name] = text
             else:
                 zotero_block.pop(field_name, None)
+        if zotero_mode.value:
+            zotero_block["user_mode"] = zotero_mode.value
+        else:
+            zotero_block.pop("user_mode", None)
+        if inherited is None and not ({"api_key", "user_id"} & set(zotero_block)):
+            zotero_block = {}  # globally, a library type alone means nothing
         if zotero_block:
-            zotero_block["user_mode"] = zotero_mode.value or "user"
             updated["Zotero"] = zotero_block
         else:
             updated.pop("Zotero", None)
@@ -222,7 +275,7 @@ def render(ctx: AppContext, review: Review) -> None:
     def save() -> None:
         try:
             updated = collect_edits()
-            path = editor.save_keys(updated)
+            path = save_data(updated)
         except ValueError as exc:
             show_error("Invalid keys", exc, expected=True)
             return
@@ -231,9 +284,108 @@ def render(ctx: AppContext, review: Review) -> None:
             return
         data.clear()
         data.update(updated)
-        ui.notify(f"Keys saved to {path}", type="positive")
+        if path is None:
+            ui.notify("This review now uses the global keys only", type="positive")
+        else:
+            ui.notify(f"Keys saved to {path}", type="positive")
 
     save_button = ui.button("Save", icon="save", on_click=save).mark("keys-save")
     if load_error is not None:
         # Saving would replace the unreadable file with a near-empty one.
         save_button.disable()
+
+
+def _legacy_import_card(data: dict) -> None:
+    """Offer the keys of the legacy api.config.yml the global file lacks."""
+    missing = editor.legacy_blocks_to_import(data)
+    if not missing:
+        return
+    legacy = editor.legacy_keys_path()
+    with ui.card().classes("w-full bg-blue-50").mark("keys-legacy-import"):
+        ui.label("Keys found in your previous configuration").classes("font-bold")
+        ui.label(
+            f"{legacy} holds keys the app does not use yet: "
+            f"{', '.join(sorted(missing))}. Import them into the global keys? "
+            "Values already set here are not changed."
+        ).classes("text-sm")
+
+        def import_them() -> None:
+            try:
+                path = editor.save_keys(editor.merge_keys(missing, data))
+            except ValueError as exc:
+                show_error("Cannot import these keys", exc, expected=True)
+                return
+            except Exception as exc:
+                show_error("Cannot import these keys", exc)
+                return
+            ui.notify(f"Keys imported into {path}", type="positive")
+            ui.navigate.reload()
+
+        ui.button("Import", icon="download", on_click=import_them).mark(
+            "keys-legacy-import-button"
+        )
+
+
+def render_global(ctx: AppContext) -> None:
+    """Draw the global keys screen (``/keys``)."""
+    ui.page_title("API keys · SciLEx")
+    try:
+        data = editor.load_keys()
+        load_error = None
+    except Exception as exc:
+        data, load_error = {}, exc
+    with ui.column().classes("w-full max-w-5xl mx-auto p-6 gap-3"):
+        with ui.row().classes("w-full items-center"):
+            render_logo("w-36 cursor-pointer").on("click", lambda: ui.navigate.to("/"))
+            ui.space()
+            ui.button(
+                "My reviews", icon="folder_open", on_click=lambda: ui.navigate.to("/")
+            ).props("flat").mark("keys-back")
+        ui.label("API keys").classes("text-2xl font-bold")
+        ui.label(
+            "Global keys: the default of every review. A review can override any "
+            "of them in its own API keys step."
+        ).classes("text-gray-500")
+        ui.label(f"File: {editor.keys_path()}").classes("text-sm font-mono")
+        if load_error is not None:
+            ui.label(f"The keys file could not be read: {load_error}").classes(
+                "text-negative"
+            )
+        else:
+            _legacy_import_card(data)
+        _keys_form(data, editor.save_keys, load_error=load_error)
+
+
+def render(ctx: AppContext, review: Review) -> None:
+    """Draw a review's API keys step: global defaults plus its own overrides."""
+    try:
+        inherited = editor.load_keys()
+        data = editor.load_keys(editor.review_keys_path(review.folder))
+        load_error = None
+    except Exception as exc:
+        inherited, data, load_error = {}, {}, exc
+
+    ui.label("API keys").classes("text-2xl font-bold")
+    with ui.row().classes("items-center gap-2"):
+        ui.label(
+            "This review uses the global keys. Fill a field below only to use a "
+            "different value for this review; leave it empty to keep the global one."
+        ).classes("text-gray-600")
+        ui.button(
+            "Edit global keys", icon="key", on_click=lambda: ui.navigate.to("/keys")
+        ).props("flat dense no-caps").mark("keys-edit-global")
+    overrides_path = editor.review_keys_path(review.folder)
+    ui.label(
+        f"Overrides: {overrides_path}"
+        + ("" if overrides_path.is_file() else " (none yet)")
+    ).classes("text-sm font-mono")
+    if load_error is not None:
+        ui.label(f"A keys file could not be read: {load_error}").classes(
+            "text-negative"
+        )
+    _keys_form(
+        data,
+        lambda updated: editor.save_review_keys(review.folder, updated),
+        inherited=inherited,
+        load_error=load_error,
+    )

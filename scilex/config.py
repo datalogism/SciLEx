@@ -2,7 +2,7 @@
 
 Provides a single entry point for loading, merging, and saving configuration.
 Replaces the scattered config loading pattern (load_all_configs + advanced merge)
-that was duplicated across run_collection.py, aggregate_collect.py, scilex_api.py,
+that was duplicated across run_collection.py, aggregate_collect.py,
 push_to_zotero.py, export_to_bibtex.py, and enrich_with_hf.py.
 
 Usage:
