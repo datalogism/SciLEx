@@ -75,7 +75,7 @@ def test_apply_merges_moves_decision_and_excludes_filtered(review):
     screening.set_decision(review, bibtex_copy, screening.INCLUDE, "key paper")
 
     plan = consolidate.plan(review, CONFIG)
-    message = consolidate.apply(review, plan)
+    message = consolidate.apply(review, plan, action=consolidate.EXCLUDE_IN_SCREEN)
     assert "1 duplicates merged into 1 papers" in message
 
     data = read_results(review.results_path)
@@ -137,3 +137,16 @@ async def test_page_previews_and_applies(ctx, tmp_path):
             await asyncio.sleep(0.05)
         assert job.status == "completed", job.error
         assert len(read_results(review.results_path)) == 1
+
+
+def test_default_action_discards_with_a_filter_tag(review):
+    plan = consolidate.plan(review, CONFIG)
+    message = consolidate.apply(review, plan, merge=[])
+    assert "2 filtered papers discarded" in message
+    data = read_results(review.results_path)
+    tags = {str(t)[:8]: str(row) for t, row in zip(data["title"], data["tags"])}
+    assert tags["An old c"] == "DELETED_BY:filter:year 2015 outside 2019-2022"
+    assert tags["A confer"] == "DELETED_BY:filter:no abstract"
+    assert screening.load_decisions(review) == {}  # screening left alone
+    # A second preview no longer lists them.
+    assert consolidate.plan(review, CONFIG).filtered == []

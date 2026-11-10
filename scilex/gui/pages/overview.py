@@ -451,6 +451,20 @@ def _draw(review: Review, data: service.Overview) -> None:
                 f"{latest.pending} still to annotate · {_when(latest.at)}",
                 marker="tile-annotated",
             )
+            if latest.validated or latest.assigned:
+                _tile(
+                    "validated papers",
+                    f"{latest.validated} / {latest.papers}",
+                    f"{latest.assigned} assigned to an annotator (ANNOT_VALID_BY / ANNOT tags)",
+                    marker="tile-validated",
+                )
+            if latest.discarded:
+                _tile(
+                    "discarded papers",
+                    f"{latest.discarded}",
+                    "DELETED_BY tag: kept in the corpus, left out of the counts and analyses",
+                    marker="tile-discarded",
+                )
 
     with ui.grid(columns="repeat(auto-fit, minmax(380px, 1fr))").classes(
         "w-full gap-3"

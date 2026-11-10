@@ -34,6 +34,7 @@ CITATION_SOURCES = {
     "auto": "Semantic Scholar, then CrossRef, then OpenCitations",
     "crossref": "CrossRef (references) + OpenCitations",
     "opencitations": "OpenCitations only (open data, no key)",
+    "zotero": "Zotero snapshot (frozen: the citation notes of the review's library)",
 }
 
 
@@ -287,6 +288,8 @@ def _render_analysis(
                 kwargs["row_filter"] = kept_papers_filter(review)
             if name == "tags":
                 kwargs["review_folder"] = review.folder
+            if name == "citations":
+                kwargs["review"] = review
 
             def body(job: Job) -> str:
                 def progress(percent: int, message: str) -> None:
@@ -372,6 +375,8 @@ def _render_options(name: str) -> dict:
             )
         elif name in ("crossref", "lpwc", "orkg"):
             number("limit", "Max papers (0 = all)", 0, min=0, precision=0)
+        elif name == "metrics":
+            checkbox("tags", "Also as tags (CITATIONS:10^2, PAGERANK:top5%…)", True)
         elif name == "citations":
             select("source", "Source", CITATION_SOURCES, "auto")
             number("limit", "Max papers (0 = all)", 0, min=0, precision=0)

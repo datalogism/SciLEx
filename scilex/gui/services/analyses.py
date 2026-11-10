@@ -190,6 +190,19 @@ ANALYSES = (
         "Stops between papers; what was fetched is cached and written.",
         group="enrich",
     ),
+    AnalysisInfo(
+        "metrics",
+        "Citation metrics",
+        "Compute once, from the citation network (Citations tab, ideally the frozen "
+        "Zotero snapshot), each paper's citations, references, citations per year, "
+        "citations from inside the corpus and PageRank, plus its quality score and "
+        "venue rank: metric_* columns and DIMENSION:value tags (CITATIONS:10^2, "
+        "PAGERANK:top5%…) that the Zotero sync shares. Earlier metric tags are "
+        "replaced; discarded papers are left out.",
+        "citations",
+        "Runs in a few seconds; nothing is written when cancelled.",
+        group="enrich",
+    ),
 )
 
 
@@ -215,6 +228,7 @@ RESULTS_MODE = {
     "lpwc": "write",
     "orkg": "write",
     "search_keywords": "write",
+    "metrics": "write",
 }
 
 
@@ -229,7 +243,38 @@ def results_mode(name: str, options: dict | None = None) -> str:
 
 
 # Analyses that can be limited to the papers kept in screening.
-SCOPED = ("citations", "enrich", "crossref", "lpwc", "orkg", "tags", "search_keywords")
+SCOPED = (
+    "citations",
+    "enrich",
+    "crossref",
+    "lpwc",
+    "orkg",
+    "tags",
+    "search_keywords",
+    "metrics",
+)
+
+
+def without_discarded(df: pd.DataFrame) -> pd.DataFrame:
+    """The papers not tagged ``DELETED_BY:`` (discarded papers leave the analyses)."""
+    from scilex import review_tags
+
+    if df is None or "tags" not in df.columns:
+        return df
+    keep = [not review_tags.workflow(value).deleted for value in df["tags"]]
+    return df[keep]
+
+
+def _active(
+    row_filter: Callable[[pd.DataFrame], pd.DataFrame] | None,
+) -> Callable[[pd.DataFrame], pd.DataFrame]:
+    """``row_filter`` applied after leaving out the discarded papers."""
+
+    def apply(df: pd.DataFrame) -> pd.DataFrame:
+        df = without_discarded(df)
+        return row_filter(df) if row_filter is not None else df
+
+    return apply
 
 
 def collect_dir_of(config: SciLExConfig) -> Path:
@@ -335,7 +380,7 @@ def run_report(
 
     collect_dir = collect_dir_of(config)
     try:
-        df = charts.load_data(collect_dir)
+        df = without_discarded(charts.load_data(collect_dir))
     except FileNotFoundError as exc:
         raise AnalysisError(str(exc)) from exc
     out_dir = collect_dir / CHARTS_DIRNAME
@@ -368,6 +413,7 @@ def run_tags(
     similarity: float = 88,
 ) -> AnalysisResult:
     """Analyse the annotation tags (see ``scilex.gui.services.tag_review``)."""
+    row_filter = _active(row_filter)  # discarded papers left out
     from scilex.gui.services import tag_review
 
     try:
@@ -530,6 +576,7 @@ def run_enrich(
     ``row_filter`` limits the papers looked up (e.g. to those kept in screening);
     the other rows are written back unchanged.
     """
+    row_filter = _active(row_filter)  # discarded papers left out
     from scilex.gui.services import results_store
     from scilex.pipeline.enrichment_pwc import EnrichmentOptions, run_enrichment
 
@@ -576,8 +623,13 @@ def run_citations(
     source: str = "auto",
     row_filter: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     cancel_event: CancelEvent = None,
+    review=None,
 ) -> AnalysisResult:
     """Fetch references and citers of the corpus (``scilex-enrich-citations``).
+
+    ``source`` ``zotero`` reads instead the frozen snapshot of the citation
+    notes of the review's Zotero library (``review`` required), see
+    :mod:`scilex.gui.services.zotero_citations`.
 
     ``source``: ``auto`` (Semantic Scholar, then CrossRef, then OpenCitations),
     ``crossref`` (CrossRef then OpenCitations; citers from OpenCitations) or
@@ -589,6 +641,9 @@ def run_citations(
     directory (what Snowball and Graph read). A cancellation is honoured before
     each paper and between fallback sources; the caches are reused on rerun.
     """
+    row_filter = _active(row_filter)  # discarded papers left out
+    if source == "zotero":
+        return _citations_from_zotero(review, progress)
     from scilex.citations.reference_fetcher import (
         fetch_citers_batch,
         fetch_references_batch,
@@ -697,6 +752,77 @@ def run_citations(
     return AnalysisResult(message, files)
 
 
+def _citations_from_zotero(review, progress: ProgressFn) -> AnalysisResult:
+    """The Citations tab with the Zotero snapshot as source."""
+    from scilex.gui.services import zotero_citations
+
+    if review is None:
+        raise AnalysisError("The Zotero snapshot needs the review.")
+    progress(10, "Reading the citation notes of the Zotero library…")
+    try:
+        report = zotero_citations.import_snapshot(review)
+    except (ValueError, ConnectionError) as exc:
+        raise AnalysisError(str(exc)) from exc
+    folder = review.collection_dir
+    files = [
+        folder / zotero_citations.SNAPSHOT_FILENAME,
+        folder / zotero_citations.REFERENCES_CACHE,
+        folder / zotero_citations.CITERS_CACHE,
+    ]
+    return AnalysisResult(report.message(), files)
+
+
+def run_metrics(
+    config: SciLExConfig,
+    progress: ProgressFn,
+    *,
+    tags: bool = True,
+    row_filter: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
+    cancel_event: CancelEvent = None,
+) -> AnalysisResult:
+    """Citation and quality metrics of each paper (see :mod:`scilex.citation_metrics`).
+
+    Written as cell changes, so enrichers running meanwhile keep their work.
+    """
+    from scilex import citation_metrics
+    from scilex.graph_analysis.loader import load_citation_caches
+    from scilex.gui.services.extend import read_results
+    from scilex.gui.services.results_store import write_changes
+    from scilex.io_utils import resolve_aggregate_path
+
+    row_filter = _active(row_filter)
+    collect_dir = collect_dir_of(config)
+    path = Path(resolve_aggregate_path(config.main))
+    try:
+        data = read_results(path)
+        references, citers = load_citation_caches(str(collect_dir))
+    except (FileNotFoundError, ValueError) as exc:
+        raise AnalysisError(str(exc)) from exc
+    if data is None:
+        raise AnalysisError("No aggregated results yet.")
+    progress(20, "Computing the metrics…")
+    before = row_filter(data).copy()
+    after = before.copy()
+    if tags:
+        tagged = citation_metrics.annotate(after, references, citers)
+    else:
+        metrics = citation_metrics.compute(after, references, citers)
+        for column in metrics.columns:
+            if not column.startswith("_"):
+                after[column] = metrics[column].astype(object)
+        tagged = 0
+    if _cancelled(cancel_event):
+        return AnalysisResult("Cancelled; nothing was written.")
+    written = write_changes(path, before, after)
+    known = int(after["metric_citations"].notna().sum())
+    message = (
+        f"Metrics computed for {len(after)} papers ({known} with citation data); "
+        f"{written} rows updated" + (f", {tagged} tagged." if tags else ".")
+    )
+    progress(100, message)
+    return AnalysisResult(message, [path])
+
+
 def run_snowball(
     config: SciLExConfig,
     progress: ProgressFn,
@@ -801,6 +927,7 @@ def run_linked(
     See :mod:`scilex.linked_enrichment`. Results already fetched are written even
     when the run is cancelled (they are also cached for the next run).
     """
+    row_filter = _active(row_filter)  # discarded papers left out
     from scilex import linked_enrichment
     from scilex.gui.services import results_store
 
@@ -842,6 +969,7 @@ def run_search_keywords(
 
     See :mod:`scilex.keyword_annotation`.
     """
+    row_filter = _active(row_filter)  # discarded papers left out
     from scilex import keyword_annotation
     from scilex.gui.services import results_store
 
@@ -886,7 +1014,7 @@ def run_graph(
     collect_dir = collect_dir_of(config)
     analysis_dir = graph_dir_of(collect_dir)
     try:
-        df = load_aggregated_data(config.main)
+        df = without_discarded(load_aggregated_data(config.main))
         references, citers = load_citation_caches(str(collect_dir))
     except (FileNotFoundError, ValueError) as exc:
         raise AnalysisError(str(exc)) from exc
@@ -993,6 +1121,7 @@ OPTION_CASTS: dict[str, dict[str, Callable]] = {
     "lpwc": {"limit": int},
     "orkg": {"limit": int},
     "search_keywords": {},
+    "metrics": {"tags": bool},
 }
 
 
@@ -1024,4 +1153,5 @@ RUNNERS: dict[str, Callable[..., AnalysisResult]] = {
     "lpwc": lambda config, progress, **kw: run_linked(config, progress, "lpwc", **kw),
     "orkg": lambda config, progress, **kw: run_linked(config, progress, "orkg", **kw),
     "search_keywords": run_search_keywords,
+    "metrics": run_metrics,
 }

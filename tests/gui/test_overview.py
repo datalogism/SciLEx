@@ -68,3 +68,19 @@ async def test_overview_of_an_empty_review(ctx, tmp_path):
     async with user_simulation(build_root(ctx)) as user:
         await user.open(f"/review/{review.id}")
         await user.should_see(marker="overview-empty", retries=50)
+
+
+def test_snapshot_reads_workflow_tags():
+    from scilex.gui.services.overview import snapshot_of
+
+    snap = snapshot_of(
+        [
+            ["TASK:RE", "ANNOT:ann", "ANNOT_VALID_BY:ann"],
+            ["TASK:?", "ANNOT:bob"],
+            ["TASK:NER", "DELETED_BY:filter:year 2015"],
+        ],
+        "test",
+    )
+    assert (snap.papers, snap.annotated, snap.pending) == (2, 1, 1)
+    assert (snap.validated, snap.assigned, snap.discarded) == (1, 2, 1)
+    assert snap.by_dimension == {"TASK": 1}  # workflow tags are not dimensions

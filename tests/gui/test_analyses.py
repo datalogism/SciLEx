@@ -477,6 +477,7 @@ def test_tabs_follow_prerequisites():
         "lpwc",
         "search_keywords",
         "orkg",
+        "metrics",
     ]
 
 

@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from scilex import review_tags
 from scilex.constants import extract_year, is_valid
 from scilex.tagging.grid import PLACEHOLDER, is_automation_tag
 
@@ -43,7 +44,13 @@ class Snapshot:
     annotated: int  # papers with at least one DIMENSION:value
     pending: int  # papers with at least one DIMENSION:? left
     values: int  # DIMENSION:value tags
-    by_dimension: dict[str, int] = field(default_factory=dict)  # papers coded per dimension
+    by_dimension: dict[str, int] = field(
+        default_factory=dict
+    )  # papers coded per dimension
+    # Workflow tags (scilex.review_tags); 0 in snapshots recorded before them.
+    validated: int = 0  # papers with ANNOT_VALID_BY:<id>
+    assigned: int = 0  # papers with ANNOT:<id>
+    discarded: int = 0  # papers with DELETED_BY:<who> (left out of the counts above)
 
 
 @dataclass
@@ -68,7 +75,7 @@ def _annotation_tags(tags: Iterable[str]) -> list[tuple[str, str]]:
     found = []
     for tag in tags:
         tag = str(tag).strip()
-        if not tag or is_automation_tag(tag):
+        if not tag or is_automation_tag(tag) or review_tags.is_workflow_tag(tag):
             continue
         dimension, sep, value = tag.partition(":")
         dimension = dimension.strip().upper()
@@ -80,8 +87,16 @@ def _annotation_tags(tags: Iterable[str]) -> list[tuple[str, str]]:
 def snapshot_of(papers_tags: Iterable[Iterable[str]], origin: str) -> Snapshot:
     """Summarize the annotation tags of each paper (one tag list per paper)."""
     papers = annotated = pending = values = 0
+    validated = assigned = discarded = 0
     by_dimension: Counter = Counter()
     for tags in papers_tags:
+        tags = list(tags)
+        state = review_tags.workflow(tags)
+        if state.deleted:
+            discarded += 1
+            continue
+        validated += state.validated
+        assigned += bool(state.assigned)
         papers += 1
         pairs = _annotation_tags(tags)
         coded = {d for d, v in pairs if v and v != PLACEHOLDER}
@@ -97,6 +112,9 @@ def snapshot_of(papers_tags: Iterable[Iterable[str]], origin: str) -> Snapshot:
         pending=pending,
         values=values,
         by_dimension=dict(by_dimension),
+        validated=validated,
+        assigned=assigned,
+        discarded=discarded,
     )
 
 
@@ -111,7 +129,9 @@ def zotero_tags(items: Iterable[dict]) -> list[list[str]]:
     ]
 
 
-def record_snapshot(folder: Path, papers_tags: Iterable[Iterable[str]], origin: str) -> Snapshot | None:
+def record_snapshot(
+    folder: Path, papers_tags: Iterable[Iterable[str]], origin: str
+) -> Snapshot | None:
     """Append a snapshot to the review's history; never fails the caller."""
     try:
         snapshot = snapshot_of(papers_tags, origin)
@@ -163,12 +183,16 @@ def compute(review) -> Overview:
     )
     overview.by_year = dict(sorted(years.items()))
     overview.by_source = dict(
-        Counter(str(r.get("archive")) for r in rows if _filled(r.get("archive"))).most_common()
+        Counter(
+            str(r.get("archive")) for r in rows if _filled(r.get("archive"))
+        ).most_common()
     )
     collections: Counter = Counter()
     for row in rows:
         if _filled(row.get("zotero_collections")):
-            collections.update(p for p in str(row["zotero_collections"]).split(";") if p)
+            collections.update(
+                p for p in str(row["zotero_collections"]).split(";") if p
+            )
     overview.by_collection = dict(collections.most_common())
 
     decisions = screening.load_decisions(review)

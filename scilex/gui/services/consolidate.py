@@ -50,6 +50,7 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
+from scilex import review_tags
 from scilex.constants import extract_year, is_valid, normalize_doi
 from scilex.gui.services.workspace import Review
 
@@ -64,6 +65,8 @@ NOTE_PREFIX = "Consolidate:"
 IMPORTED = {"Zotero import", "BibTeX import", "Knowledge graph import"}
 
 EXCLUDE_IN_SCREEN, REMOVE = "exclude", "remove"
+# Tag DELETED_BY:filter:<reason>: kept in the corpus, left out of the analyses.
+DISCARD = "discard"
 PAST = {"include": "included", "exclude": "excluded", "maybe": "marked maybe"}
 
 
@@ -573,6 +576,8 @@ def plan(
     for index, record in zip(data.index, data.to_dict("records"), strict=True):
         if index in merged_away:
             continue
+        if review_tags.workflow(record.get("tags")).deleted:
+            continue  # already discarded
         key = screening.paper_key(record)
         origin = (log.get(key) or {}).get("origin") or paper_log.origin_of(record)
         if origin in IMPORTED and not filter_imported:
@@ -605,7 +610,7 @@ def apply(
     *,
     merge: list[int] | None = None,
     apply_filters: bool = True,
-    action: str = EXCLUDE_IN_SCREEN,
+    action: str = DISCARD,
 ) -> str:
     """Merge the chosen duplicate groups and apply the filters; return a summary.
 
@@ -616,7 +621,7 @@ def apply(
     from scilex.gui.services import paper_log, screening
     from scilex.gui.services.extend import backup, read_results, write_results
 
-    if action not in (EXCLUDE_IN_SCREEN, REMOVE):
+    if action not in (DISCARD, EXCLUDE_IN_SCREEN, REMOVE):
         raise ValueError(f"Unknown action {action!r}")
     data = read_results(review.results_path)
     if data is None or len(data) != the_plan.papers:
@@ -674,6 +679,15 @@ def apply(
         if action == REMOVE:
             removed.add(paper.index)
             screening.set_decision(review, paper.paper_key, None)
+        elif action == DISCARD:
+            if "tags" not in data.columns:
+                data["tags"] = ""
+            data["tags"] = data["tags"].astype(object)
+            data.at[paper.index, "tags"] = review_tags.with_tags(
+                data.at[paper.index, "tags"],
+                [review_tags.filter_tag(reason) for reason in paper.reasons],
+            )
+            excluded += 1
         else:
             screening.set_decision(review, paper.paper_key, screening.EXCLUDE, note)
             excluded += 1
@@ -711,6 +725,8 @@ def apply(
         parts.append("filters not applied")
     elif action == REMOVE:
         parts.append(f"{len(filtered)} filtered papers removed")
+    elif action == DISCARD:
+        parts.append(f"{excluded} filtered papers discarded (DELETED_BY:filter:…)")
     else:
         parts.append(f"{excluded} filtered papers excluded in ③ Screen")
     return "; ".join(parts) + f". {len(data)} papers left."

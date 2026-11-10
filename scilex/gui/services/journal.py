@@ -616,31 +616,20 @@ def annotation_state(papers_tags) -> dict:
     the papers validated against the grid (``ANNOT_VALID_BY:<id>`` tags) and
     who validated them.
     """
+    from scilex import review_tags
     from scilex.gui.services.overview import snapshot_of
 
-    # TODO(after merging main a618f403): read the workflow tags (ANNOT,
-    # ANNOT_VALID_BY, DELETED_BY) with scilex.review_tags.workflow instead of the
-    # VALIDATED_PREFIX match below, and count ANNOT / DELETED_BY the same way.
     tag_lists = [list(tags) for tags in papers_tags]
-    # Validation marks are not codes of the grid: counted apart below.
-    snap = snapshot_of(
-        [
-            [t for t in tags if not str(t).startswith(VALIDATED_PREFIX)]
-            for tags in tag_lists
-        ],
-        "journal",
-    )
+    # Workflow tags are read by snapshot_of: not codes; discarded papers left out.
+    snap = snapshot_of(tag_lists, "journal")
     validators: dict[str, int] = {}
-    validated = 0
     for tags in tag_lists:
-        ids = {
-            t[len(VALIDATED_PREFIX) :]
-            for t in tags
-            if str(t).startswith(VALIDATED_PREFIX)
-        }
-        validated += bool(ids)
-        for who in ids:
+        state = review_tags.workflow(tags)
+        if state.deleted:
+            continue
+        for who in state.validated_by:
             validators[who] = validators.get(who, 0) + 1
+    validated = snap.validated
     return {
         "papers": snap.papers,
         "annotated": snap.annotated,
@@ -649,6 +638,8 @@ def annotation_state(papers_tags) -> dict:
         "by_dimension": snap.by_dimension,
         "validated": validated,
         "validated_by": validators,
+        "assigned": snap.assigned,
+        "discarded": snap.discarded,
     }
 
 

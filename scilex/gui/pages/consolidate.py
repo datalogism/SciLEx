@@ -169,12 +169,14 @@ class ConsolidatePage:
         self.action = (
             ui.radio(
                 {
+                    service.DISCARD: "Discard them: DELETED_BY:filter:<reason> tag, "
+                    "kept in the corpus, left out of the analyses (reversible)",
                     service.EXCLUDE_IN_SCREEN: "Exclude them in ③ Screen (reversible)",
                     service.REMOVE: "Remove them from the results",
                 },
-                value=service.EXCLUDE_IN_SCREEN,
+                value=service.DISCARD,
             )
-            .props("inline dense")
+            .props("dense")
             .mark("consolidate-action")
         )
         if not plan.filtered:
