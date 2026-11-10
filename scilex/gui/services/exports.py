@@ -155,27 +155,42 @@ def zotero_settings(config: SciLExConfig) -> ZoteroSettings | None:
 def push_to_zotero(
     review: Review, config: SciLExConfig, scope: str, zotero_api=None
 ) -> dict[str, int]:
-    """Push the papers of ``scope`` to a Zotero collection named after the review.
+    """Push the papers of ``scope`` to the review's Zotero library and collection.
+
+    The review's own choice (``zotero_source.yml``: a user or group library and
+    a collection) wins; without one, or with a whole library chosen, the papers
+    go to a collection named after the review (created if needed) in that
+    library, else in the library of keys.yml.
 
     ``zotero_api`` is injectable for tests. Returns the exporter's counts
     (``success``, ``failed``, ``skipped``, ``skipped_for_incompatibility``).
     """
+    from scilex.gui.services.zotero_library import load_source
     from scilex.push_to_zotero import prefetch_templates, push_new_items_to_zotero
 
+    source = load_source(review.folder)
     if zotero_api is None:
         settings = zotero_settings(config)
         if settings is None:
             raise ValueError("Zotero settings are missing in keys.yml.")
         from scilex.Zotero.zotero_api import ZoteroAPI
 
-        zotero_api = ZoteroAPI(settings.user_id, settings.user_mode, settings.api_key)
+        library_id, library_type = (
+            (source.library_id, source.library_type)
+            if source is not None
+            else (settings.user_id, settings.user_mode)
+        )
+        zotero_api = ZoteroAPI(library_id, library_type, settings.api_key)
     data = _plain(select_papers(review, scope))
     if data.empty:
         raise ValueError("There is no paper to export for this scope.")
-    collection = zotero_api.get_or_create_collection(review.name)
-    if not collection:
-        raise RuntimeError(f"Could not get or create the collection {review.name!r}.")
-    key = collection["data"]["key"]
+    if source is not None and source.collection_key:
+        key = source.collection_key
+    else:
+        collection = zotero_api.get_or_create_collection(review.name)
+        if not collection:
+            raise RuntimeError(f"Could not get or create the collection {review.name!r}.")
+        key = collection["data"]["key"]
     existing_urls = zotero_api.get_existing_item_urls(key)
     templates = prefetch_templates(data)
     push_config = {

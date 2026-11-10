@@ -326,6 +326,106 @@ class ZoteroAPI:
         logging.info(f"Found {len(items)} items in collection")
         return items
 
+    def get_top_items(self, collection_key: str | None = None) -> list[dict] | None:
+        """
+        Get the top-level items (papers, not attachments or notes), all pages.
+
+        Args:
+            collection_key: A collection's key, or None for the whole library.
+
+        Returns:
+            List of item dictionaries, or None if a request failed
+        """
+        path = (
+            f"/collections/{collection_key}/items/top"
+            if collection_key
+            else "/items/top"
+        )
+        return self._get_paginated(path)
+
+    def get_groups(self) -> list[dict] | None:
+        """Return the groups the key's user belongs to (only for a user library client).
+
+        Returns:
+            Group dictionaries (``data.id``, ``data.name``), or None if the request failed.
+        """
+        if self.user_role != "user":
+            return []
+        return self._get_paginated("/groups")
+
+    def export_top_items(
+        self,
+        collection_key: str | None,
+        export_format: str = "biblatex",
+        limit: int = PAGE_SIZE,
+    ) -> str | None:
+        """Export top-level items in a Zotero export format.
+
+        Zotero's own translator does the conversion (e.g. ``biblatex``: tags in
+        ``keywords``, Extra in ``note``), page by page.
+
+        Args:
+            collection_key: The collection's key, or None for the whole library.
+            export_format: A Zotero export format (``biblatex``, ``bibtex``, ``ris``...).
+            limit: Items per page.
+
+        Returns:
+            The concatenated export, or None if a page request failed.
+        """
+        path = (
+            f"/collections/{collection_key}/items/top" if collection_key else "/items/top"
+        )
+        chunks: list[str] = []
+        start = 0
+        while True:
+            response = self._get(
+                path, params={"format": export_format, "limit": limit, "start": start}
+            )
+            if not response:
+                return None
+            response.encoding = "utf-8"
+            chunks.append(response.text)
+            try:
+                total = int(response.headers.get("Total-Results"))
+            except (TypeError, ValueError):
+                total = None
+            start += limit
+            if total is None or start >= total:
+                break
+        return "\n".join(chunks)
+
+    def update_item_tags(
+        self, updates: dict[str, tuple[int, list[str]]], batch_size: int = 50
+    ) -> dict[str, int]:
+        """
+        Replace the tags of existing items, ``batch_size`` items per request.
+
+        Each item is sent with the version it was read at: Zotero rejects the
+        change (counted as failed) if someone edited the item in between.
+
+        Args:
+            updates: ``{item key: (item version, new tag list)}``.
+            batch_size: Items per request (Zotero accepts at most 50).
+
+        Returns:
+            ``{"success": n, "failed": m}``
+        """
+        payload = [
+            {"key": key, "version": version, "tags": [{"tag": tag} for tag in tags]}
+            for key, (version, tags) in updates.items()
+        ]
+        totals = {"success": 0, "failed": 0}
+        for start in range(0, len(payload), batch_size):
+            batch = payload[start : start + batch_size]
+            response = self._post("/items", batch)
+            if response is None:
+                totals["failed"] += len(batch)
+                continue
+            outcome = self._count_outcome(response, batch)
+            totals["success"] += outcome["success"]
+            totals["failed"] += outcome["failed"]
+        return totals
+
     def get_existing_item_urls(self, collection_key: str) -> set:
         """
         Get URLs of all existing items in a collection.

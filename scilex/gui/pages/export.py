@@ -7,7 +7,8 @@ from nicegui import run, ui
 from scilex.gui.components.dialogs import one_shot_dialog
 from scilex.gui.components.errors import show_error
 from scilex.gui.components.job_panel import BusyNotice, JobPanel
-from scilex.gui.services import exports
+from scilex.gui.components.zotero_picker import ZoteroPicker
+from scilex.gui.services import exports, kg_export, zotero_library
 from scilex.gui.services.jobs import Job, JobConflictError
 from scilex.gui.services.screening import ReviewFileError
 from scilex.gui.services.workspace import Review, Workspace
@@ -15,6 +16,7 @@ from scilex.gui.state import AppContext
 from scilex.settings.schema import SettingsError
 
 KIND = "export"
+KG = "kg"
 
 FORMATS = (
     (
@@ -35,10 +37,32 @@ FORMATS = (
     (
         exports.ZOTERO,
         "Zotero",
-        "Pushes the papers into a Zotero collection named after the review; "
-        "papers already there are skipped.",
+        "Pushes the papers into the review's Zotero collection (above), or a "
+        "collection named after the review; papers already there are skipped.",
+    ),
+    (
+        KG,
+        "Knowledge graph (scilex-lpwc-ap)",
+        "Maps the review's Zotero papers, citations and annotations with the "
+        "scilex-lpwc-ap application profile (OpenCitations/SPAR + Linked Papers "
+        "With Code), with you (ORCID) as creator, and checks it with SHACL. "
+        "Uses every paper of the Zotero source, whatever the choice above.",
     ),
 )
+
+
+def kg_summary(result) -> str:
+    """Human-readable result of a knowledge-graph export."""
+    report = result.report
+    shacl = {
+        True: "conforms to the profile",
+        False: "has SHACL violations (see the .shacl.txt report)",
+        None: "not validated",
+    }[report.conforms]
+    return (
+        f"{report.papers} papers -> {report.triples} triples in {result.turtle}; "
+        f"the graph {shacl}."
+    )
 
 
 def zotero_summary(counts: dict[str, int]) -> str:
@@ -51,10 +75,58 @@ def zotero_summary(counts: dict[str, int]) -> str:
     )
 
 
+def _zotero_target_card(review: Review) -> None:
+    """Show, and let the user change, the review's own Zotero library and collection."""
+    with ui.card().classes("w-full").mark("zotero-target"):
+        ui.label("Zotero library of this review").classes("font-bold")
+
+        @ui.refreshable
+        def current() -> None:
+            source = zotero_library.load_source(review.folder)
+            ui.label(
+                source.describe()
+                if source
+                else f"Not chosen: the library of your API keys, collection "
+                f"'{review.name}' (created when pushing)."
+            ).classes("text-sm").mark("zotero-target-current")
+
+        current()
+
+        def change() -> None:
+            with one_shot_dialog() as dialog, ui.card().classes("w-[36rem]"):
+                ui.label("Zotero library and collection of this review").classes(
+                    "text-lg font-bold"
+                )
+                ui.label(
+                    "Each review can use its own library (yours or a group) and "
+                    "collection, or a whole library."
+                ).classes("text-sm text-gray-500")
+                picker = ZoteroPicker(zotero_library.load_source(review.folder))
+
+                def save() -> None:
+                    source = picker.source()
+                    if source is None:
+                        ui.notify("Load the libraries and choose one", type="warning")
+                        return
+                    zotero_library.save_source(review.folder, source)
+                    dialog.close()
+                    current.refresh()
+
+                with ui.row().classes("w-full justify-end"):
+                    ui.button("Cancel", on_click=dialog.close).props("flat")
+                    ui.button("Save", on_click=save).mark("zotero-target-save")
+            dialog.open()
+
+        ui.button("Change", icon="edit", on_click=change).props("outline dense").mark(
+            "zotero-target-change"
+        )
+
+
 def render(ctx: AppContext, review: Review) -> None:
     """Draw the Export screen of ``review``."""
     ui.label("Export").classes("text-2xl font-bold")
     ui.label("Choose which papers to export, then a format.").classes("text-gray-500")
+    _zotero_target_card(review)
 
     scope = ui.radio(
         {
@@ -95,7 +167,7 @@ def render(ctx: AppContext, review: Review) -> None:
             with scope_note:
                 ui.label(
                     "Included papers only is unavailable: no paper is included yet "
-                    "(mark papers as included in ③ Screen)."
+                    "(mark papers as included in ④ Screen)."
                 ).classes("text-sm text-gray-500")
 
     scope.on_value_change(refuse_empty_scope)
@@ -109,6 +181,7 @@ def render(ctx: AppContext, review: Review) -> None:
     except (SettingsError, FileNotFoundError) as exc:
         config_error = exc
 
+    kg_problem = kg_export.missing_dependencies()
     buttons = {}
     with ui.column().classes("gap-3 w-full"):
         for fmt, label, text in FORMATS:
@@ -120,6 +193,11 @@ def render(ctx: AppContext, review: Review) -> None:
                     f"Export {label}",
                     icon="cloud_upload" if fmt == exports.ZOTERO else "download",
                 ).mark(f"export-{fmt}")
+                if fmt == KG and kg_problem:
+                    ui.label(kg_problem).classes("text-sm text-negative").mark(
+                        "export-kg-missing"
+                    )
+                    buttons[fmt].set_enabled(False)
                 if fmt == exports.ZOTERO and not zotero_ready:
                     ui.label(
                         str(config_error)
@@ -142,6 +220,8 @@ def render(ctx: AppContext, review: Review) -> None:
         for fmt, button in buttons.items():
             if fmt == exports.ZOTERO and not zotero_ready:
                 continue
+            if fmt == KG and kg_problem:
+                continue
             button.set_enabled(not busy)
 
     def show_history() -> None:
@@ -163,6 +243,16 @@ def render(ctx: AppContext, review: Review) -> None:
                 ui.label(zotero_summary(job.result)).classes("font-bold").mark(
                     "export-result"
                 )
+            elif isinstance(job.result, kg_export.KgExport):
+                result = job.result
+                ui.label(kg_summary(result)).classes("font-bold break-all").mark(
+                    "export-result"
+                )
+                ui.button(
+                    "Reveal in folder",
+                    icon="folder_open",
+                    on_click=lambda: exports.reveal_in_folder(result.turtle),
+                ).props("outline").mark("export-reveal")
             else:
                 path = job.result
                 ui.label(f"Exported to {path}").classes("font-bold break-all").mark(
@@ -226,6 +316,20 @@ def render(ctx: AppContext, review: Review) -> None:
 
         def body(job: Job) -> str:
             job.progress = 10
+            if fmt == KG:
+
+                def progress(percent: int, message: str) -> None:
+                    job.progress, job.message = percent, message
+
+                job.result = kg_export.export_knowledge_graph(
+                    keys=Workspace.load_config(review).api,
+                    folder=review.folder,
+                    review_name=review.name,
+                    output_dir=review.collection_dir / kg_export.KG_DIRNAME,
+                    creator=ctx.profile.orcid_uri,
+                    progress=progress,
+                )
+                return kg_summary(job.result)
             if fmt == exports.ZOTERO:
                 job.message = "Pushing to Zotero…"
                 job.result = exports.push_to_zotero(
