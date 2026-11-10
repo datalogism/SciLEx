@@ -193,6 +193,9 @@ FACETS = {
     "collection": "Zotero collection",
     "collect_keywords": "Collect keywords",
     "tags": "Tags",
+    "status": "Annotation status",
+    "assigned": "Assigned to",
+    "validated_by": "Validated by",
     "lpwc_tasks": "Tasks (LPWC)",
     "lpwc_datasets": "Datasets (LPWC)",
     "orkg_problems": "Research problems (ORKG)",
@@ -246,6 +249,14 @@ def _facet_values(record: dict, logged: dict | None) -> dict[str, set[str]]:
     }
     for facet, column in _LIST_COLUMNS.items():
         values[facet] = _split(record.get(column))
+    # Workflow tags (ANNOT:, ANNOT_VALID_BY:, DELETED_BY:) are not annotation codes.
+    from scilex import review_tags
+
+    state = review_tags.workflow(record.get("tags"))
+    values["tags"] = {t for t in values["tags"] if not review_tags.is_workflow_tag(t)}
+    values["status"] = {state.status}
+    values["assigned"] = set(state.assigned)
+    values["validated_by"] = set(state.validated_by)
     return {facet: found or {NONE_VALUE} for facet, found in values.items()}
 
 
@@ -359,6 +370,17 @@ class ScreeningSession:
     def record(self, key: str) -> dict:
         """Every column of one paper, as in ``aggregated_results.csv``."""
         return self._records[key]
+
+    def set_tags(self, key: str, tags: str) -> None:
+        """Adopt the new ``tags`` cell of one paper (filters and notice follow)."""
+        record = self._records[key]
+        record["tags"] = tags
+        self._details[key]["tags"] = tags
+        old = self._facets[key]
+        fresh = _facet_values(record, None)
+        for kept in ("origin", "imported"):  # from the paper log, unchanged
+            fresh[kept] = old[kept]
+        self._facets[key] = fresh
 
     def facets_of(self, key: str) -> dict[str, set[str]]:
         """Facet values of one paper (see :data:`FACETS`)."""

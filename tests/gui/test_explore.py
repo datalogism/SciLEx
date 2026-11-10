@@ -61,3 +61,21 @@ async def test_filters_chart_and_notice(ctx, review):
 
         user.find(marker="explore-clear").click()
         assert len(grid.options["rowData"]) == 3
+
+
+async def test_notice_discards_and_validates_with_the_users_orcid(ctx, review):
+    from scilex.gui.services.extend import read_results
+
+    orcid = ctx.profile.orcid
+    async with user_simulation(build_root(ctx)) as user:
+        await user.open(f"/review/{review.id}/explore")
+        await user.should_see(marker="explore-notice", retries=20)
+        user.find(marker="explore-discard").click()
+        await user.should_see("discarded by " + orcid, retries=20)
+        user.find(marker="explore-validate").click()
+        await user.should_see("validated by " + orcid, retries=20)
+        status = user.find(marker="explore-status").elements.pop()
+        assert status.text == "deleted"  # discarding wins over validation
+
+        tags = ";".join(str(t) for t in read_results(review.results_path)["tags"])
+        assert f"DELETED_BY:{orcid}" in tags and f"ANNOT_VALID_BY:{orcid}" in tags

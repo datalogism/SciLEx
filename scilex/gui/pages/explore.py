@@ -1,6 +1,8 @@
 """Explore screen: browse the corpus, filter it, and read the notice of each paper.
 
-Read-only: decisions are taken in ③ Screen. The filters are those of Screen
+Screening decisions are taken in ③ Screen; a notice can mark the paper as
+validated against the grid or discard it (``ANNOT_VALID_BY`` / ``DELETED_BY``
+tags with the user's ORCID iD, see :mod:`scilex.review_tags`). The filters are those of Screen
 (document type, origin, import date, source, Zotero collection, keywords,
 tags, LPWC and ORKG terms); a bar chart breaks the selection down by any of
 them, and clicking a bar (or a value in a notice) filters on it.
@@ -14,9 +16,11 @@ from datetime import datetime
 import pandas as pd
 from nicegui import events, run, ui
 
+from scilex import review_tags
 from scilex.constants import doi_to_url, is_valid
 from scilex.gui.components.errors import show_error
 from scilex.gui.pages.overview import _hbar
+from scilex.gui.services import members
 from scilex.gui.services.screening import (
     DECISION_LABELS,
     EXCLUDE,
@@ -122,7 +126,7 @@ def render(ctx: AppContext, review: Review) -> None:
             return
         loading.delete()
         with container:
-            ExplorePage(review, session).build()
+            ExplorePage(review, session, ctx.profile).build()
 
     ui.timer(0, load, once=True)
 
@@ -136,9 +140,10 @@ def _split_tag(tag: str) -> tuple[str, str]:
 class ExplorePage:
     """UI state of the Explore screen."""
 
-    def __init__(self, review: Review, session: ScreeningSession):
-        """Bind the page to the papers of ``review``."""
+    def __init__(self, review: Review, session: ScreeningSession, profile=None):
+        """Bind the page to the papers of ``review``; ``profile``: the app user."""
         self.review = review
+        self.me = getattr(profile, "orcid", "") or ""
         self.session = session
         self.options = session.facet_options()
         self.decision_filter = FILTER_ALL
@@ -296,6 +301,7 @@ class ExplorePage:
                 f", imported on {detail['imported']}" if detail["imported"] else ""
             )
             ui.label(f"Origin: {origin}").classes("text-xs text-gray-500")
+            self._workflow_row(key, record.get("tags"))
             counts = [
                 f"{label}: {int(float(record[column]))}"
                 for label, column in NOTICE_COUNTS
@@ -316,6 +322,60 @@ class ExplorePage:
                 self._tag_table(tags)
             if decision and decision.note:
                 ui.label(f"Screening note: {decision.note}").classes("text-sm italic")
+
+    def _workflow_row(self, key: str, tags) -> None:
+        """Who annotates / validated / discarded the paper, and the user's actions."""
+        state = review_tags.workflow(tags)
+        with ui.row().classes("items-center gap-2").mark("explore-workflow"):
+            ui.badge(state.status).props("outline").mark("explore-status")
+            parts = []
+            if state.assigned:
+                parts.append("assigned to " + ", ".join(state.assigned))
+            if state.validated_by:
+                parts.append("validated by " + ", ".join(state.validated_by))
+            if state.deleted_by:
+                parts.append("discarded by " + ", ".join(state.deleted_by))
+            if parts:
+                ui.label("; ".join(parts)).classes("text-xs text-gray-600")
+            if not self.me:
+                return
+            mine_valid = review_tags.tag(review_tags.VALIDATED, self.me)
+            mine_deleted = review_tags.tag(review_tags.DELETED, self.me)
+            validated = self.me in state.validated_by
+            ui.button(
+                "Unvalidate" if validated else "Validated by me",
+                icon="task_alt",
+                on_click=lambda: self.change_tags(
+                    key,
+                    [] if validated else [mine_valid],
+                    [mine_valid] if validated else [],
+                ),
+            ).props("flat dense no-caps").mark("explore-validate")
+            deleted = self.me in state.deleted_by
+            ui.button(
+                "Restore" if deleted else "Discard",
+                icon="restore_from_trash" if deleted else "delete_outline",
+                on_click=lambda: self.change_tags(
+                    key,
+                    [] if deleted else [mine_deleted],
+                    [mine_deleted] if deleted else [],
+                ),
+            ).props("flat dense no-caps").tooltip(
+                "Discarded papers stay in the corpus but leave the analyses (DELETED_BY tag)"
+            ).mark("explore-discard")
+
+    async def change_tags(self, key: str, add: list[str], remove: list[str]) -> None:
+        """Write workflow tags of one paper (pushed to Zotero by the sync)."""
+        try:
+            new = await run.io_bound(
+                members.apply_tags_by_key, self.review, {key: (add, remove)}
+            )
+        except Exception as exc:
+            show_error("Cannot change the tags", exc)
+            return
+        if key in new:
+            self.session.set_tags(key, new[key])
+        self.notice.refresh()
 
     def _chips(self, label: str, facet: str, values: list[str]) -> None:
         with ui.column().classes("gap-0"):

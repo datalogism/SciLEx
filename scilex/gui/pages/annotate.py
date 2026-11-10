@@ -71,6 +71,10 @@ def render(ctx: AppContext, review: Review) -> None:
     _grid_card(state, collection)
     _apply_card(ctx, review, state, collection)
     _report_card(review, collection)
+    if review.has_results:
+        from scilex.gui.components.annotators import AnnotatorsCard
+
+        AnnotatorsCard(review)
 
 
 class _GridState:
