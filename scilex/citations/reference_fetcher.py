@@ -420,6 +420,8 @@ def fetch_references_batch(
     mailto: str | None = None,
     should_stop: StopFn = None,
     on_progress: ProgressFn = None,
+    use_semantic_scholar: bool = True,
+    use_crossref: bool = True,
 ) -> dict[str, list[str]]:
     """Fetch reference DOI lists for many papers with cache and three-tier fallback.
 
@@ -441,6 +443,9 @@ def fetch_references_batch(
             fallback tiers; when it returns True, fetching stops and the papers
             done so far are cached. Unfetched DOIs are absent from the result.
         on_progress: Optional callable receiving (papers done, papers to fetch).
+        use_semantic_scholar: False skips tier 1 (e.g. OpenCitations or
+            CrossRef chosen as the source).
+        use_crossref: False skips tier 2.
 
     Returns:
         Dict mapping each fetched or cached DOI to its list of cited DOIs.
@@ -462,11 +467,15 @@ def fetch_references_batch(
         f"Fetching references: {len(dois)} DOIs total, "
         f"{len(cache)} cached, {len(pending)} to fetch"
     )
-    ss_answers = _ss_batch_lookup(
-        [d for d in dict.fromkeys(_clean(d) for d in pending) if d],
-        "references",
-        api_key=api_key,
-        should_stop=should_stop,
+    ss_answers = (
+        _ss_batch_lookup(
+            [d for d in dict.fromkeys(_clean(d) for d in pending) if d],
+            "references",
+            api_key=api_key,
+            should_stop=should_stop,
+        )
+        if use_semantic_scholar
+        else {}
     )
     ss_single = _SSSingleBreaker(fetch_references_ss, api_key)
 
@@ -479,7 +488,9 @@ def fetch_references_batch(
             continue
 
         # Tier 1: SemanticScholar (batch answer, else one request)
-        if clean_doi in ss_answers:
+        if not use_semantic_scholar:
+            refs = []
+        elif clean_doi in ss_answers:
             refs = ss_answers[clean_doi]
         else:
             refs = ss_single.fetch(clean_doi)
@@ -487,7 +498,7 @@ def fetch_references_batch(
             break
 
         # Tier 2: CrossRef (when SS returned nothing)
-        if not refs:
+        if not refs and use_crossref:
             logger.debug(f"SS empty for {clean_doi}, trying CrossRef...")
             try:
                 refs = _fetch_references_crossref(clean_doi, mailto=mailto) or []
@@ -673,6 +684,7 @@ def fetch_citers_batch(
     fallback_opencitations: bool = True,
     should_stop: StopFn = None,
     on_progress: ProgressFn = None,
+    use_semantic_scholar: bool = True,
 ) -> dict[str, list[str]]:
     """Fetch citing-paper DOI lists for many papers with cache and fallback.
 
@@ -713,11 +725,15 @@ def fetch_citers_batch(
         f"Fetching citers: {len(dois)} DOIs total, "
         f"{len(cache)} cached, {len(pending)} to fetch"
     )
-    ss_answers = _ss_batch_lookup(
-        [d for d in dict.fromkeys(_clean(d) for d in pending) if d],
-        "citations",
-        api_key=api_key,
-        should_stop=should_stop,
+    ss_answers = (
+        _ss_batch_lookup(
+            [d for d in dict.fromkeys(_clean(d) for d in pending) if d],
+            "citations",
+            api_key=api_key,
+            should_stop=should_stop,
+        )
+        if use_semantic_scholar
+        else {}
     )
     ss_single = _SSSingleBreaker(fetch_citers_ss, api_key)
 
@@ -730,7 +746,9 @@ def fetch_citers_batch(
             continue
 
         # Tier 1: SemanticScholar (batch answer, else one request)
-        if clean_doi in ss_answers:
+        if not use_semantic_scholar:
+            citers = []
+        elif clean_doi in ss_answers:
             citers = ss_answers[clean_doi]
         else:
             citers = ss_single.fetch(clean_doi)

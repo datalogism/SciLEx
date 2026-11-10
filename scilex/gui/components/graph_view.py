@@ -47,14 +47,14 @@ def _render_view(graph_dir: Path, name: str) -> None:
     ).classes("font-bold").mark("graph-stats")
     if view.linked_papers == 0:
         ui.label(
-            "No links: fetch citations for more papers in the Citations tab, "
+            "No links: fetch citations for more papers in ③ Enrich (Citations tab), "
             "lower Min edge weight, or try the other graph type."
         ).classes("text-orange-700")
         return
     if view.linked_papers < view.total_papers / 10:
         ui.label(
             "Few papers are linked, so most are left out of the drawing. Fetching "
-            "references and citing papers for more of the corpus (Citations tab) "
+            "references and citing papers for more of the corpus (③ Enrich, Citations tab) "
             "links more of them; the other graph type may also link more."
         ).classes("text-sm text-orange-700")
     if view.shown_papers < view.linked_papers:

@@ -60,7 +60,7 @@ class AnalysisResult:
 
 NO_EDGES_WARNING = (
     "Warning: no links found in the {graphs} graph: fetch citations for more "
-    "papers in the Citations tab, then run the graph again."
+    "papers in ③ Enrich (Citations tab), then run the graph again."
 )
 SNOWBALL_NO_METADATA = (
     "No metadata could be fetched for the {count} candidates: Semantic Scholar "
@@ -82,6 +82,7 @@ class AnalysisInfo:
     description: str
     needs: str  # "results", "citations" or "clusters"
     cancel_note: str = "Stops at the next step."
+    group: str = "analyse"  # step showing it: "enrich", "extend" or "analyse"
 
 
 ANALYSES = (
@@ -95,10 +96,12 @@ ANALYSES = (
     AnalysisInfo(
         "citations",
         "Citations",
-        "Fetch the references and citing papers of the corpus (like scilex-enrich-citations). "
+        "Fetch the references and citing papers of the corpus (like scilex-enrich-citations), "
+        "from Semantic Scholar with OpenCitations as fallback. "
         "Needed by Snowball and Graph; slow without a Semantic Scholar key.",
         "results",
         "Stops after the current paper; fetched data is kept and reused next time.",
+        group="enrich",
     ),
     AnalysisInfo(
         "snowball",
@@ -106,6 +109,7 @@ ANALYSES = (
         "Find papers outside the corpus that are often cited by, or cite, the corpus papers.",
         "citations",
         "Cannot stop while candidate metadata is being fetched; stops right after.",
+        group="extend",
     ),
     AnalysisInfo(
         "graph",
@@ -115,10 +119,21 @@ ANALYSES = (
         "Stops between graphs; the graph being built finishes first.",
     ),
     AnalysisInfo(
+        "tags",
+        "Annotations",
+        "Analyse the DIMENSION:value annotation tags: coverage of each dimension, "
+        "frequent values per year, close spellings to merge, and dimensions crossed "
+        "two by two (empty cells are gaps of the corpus). Accept merges, cross the "
+        "dimensions you choose and clean the spellings in Zotero.",
+        "results",
+        "Stops between charts.",
+    ),
+    AnalysisInfo(
         "keywords",
         "Keywords",
-        "Suggest new search keywords from frequent terms in the paper clusters (run Graph first).",
+        "Suggest new search keywords from frequent terms in the paper clusters (run Graph in ⑤ Analyses first).",
         "clusters",
+        group="extend",
     ),
     AnalysisInfo(
         "summaries",
@@ -132,8 +147,47 @@ ANALYSES = (
         "Add Papers with Code tasks, methods, benchmarks and GitHub repositories to the aggregated papers.",
         "results",
         "Stops between papers; nothing is written when cancelled.",
+        group="enrich",
+    ),
+    AnalysisInfo(
+        "crossref",
+        "Crossref",
+        "Fill empty abstracts, venues, volumes, pages, dates, publishers, licences and "
+        "ISSNs from Crossref (by DOI), and add the Crossref type, citation count and "
+        "funders. Existing values are never overwritten.",
+        "results",
+        "Stops between papers; what was fetched is cached and written.",
+        group="enrich",
+    ),
+    AnalysisInfo(
+        "lpwc",
+        "Linked Papers With Code",
+        "Add the tasks, methods, datasets, repositories and conference of each paper "
+        "from Linked Papers With Code (by arXiv id, else exact title): the terms the "
+        "knowledge graph links to.",
+        "results",
+        "Stops between batches; what was fetched is cached and written.",
+        group="enrich",
+    ),
+    AnalysisInfo(
+        "orkg",
+        "ORKG",
+        "Add the Open Research Knowledge Graph paper, research fields and research "
+        "problems of each paper (by DOI, else exact title).",
+        "results",
+        "Stops between papers; what was fetched is cached and written.",
+        group="enrich",
     ),
 )
+
+
+def in_group(group: str) -> tuple[AnalysisInfo, ...]:
+    """Return the analyses shown by the step ``group`` (``enrich``, ``extend``, ``analyse``)."""
+    return tuple(info for info in ANALYSES if info.group == group)
+
+
+# Analyses that can be limited to the papers kept in screening.
+SCOPED = ("citations", "enrich", "crossref", "lpwc", "orkg", "tags")
 
 
 def collect_dir_of(config: SciLExConfig) -> Path:
@@ -161,6 +215,7 @@ def existing_outputs(collect_dir: Path, name: str) -> list[Path]:
         ),
         "graph": (graph_dir, ["clusters_*.csv", "*_graph.gexf", "*_graph.graphml"]),
         "summaries": (graph_dir, ["summary_report.md"]),
+        "tags": (collect_dir / "annotation_analysis", ["annotation_report.md", "*.png"]),
     }
     if name not in patterns:
         return []
@@ -174,6 +229,7 @@ STALE_INPUTS: dict[str, tuple[str, ...]] = {
     "graph": ("aggregated_results.csv", "citations_cache.json", "citers_cache.json"),
     "keywords": (f"{GRAPH_DIRNAME}/clusters_*.csv",),
     "summaries": (f"{GRAPH_DIRNAME}/clusters_*.csv",),
+    "tags": ("aggregated_results.csv",),
 }
 # Writes within the same second as the outputs are not a change.
 STALE_TOLERANCE_SECONDS = 1.0
@@ -214,12 +270,12 @@ def missing_prerequisite(collect_dir: Path, needs: str) -> str | None:
             (collect_dir / name).is_file()
             for name in ("citations_cache.json", "citers_cache.json")
         ):
-            return "No citation data yet. Fetch the citations in the Citations tab."
+            return "No citation data yet. Fetch the citations in ③ Enrich (Citations)."
     elif needs == "clusters":
         try:
             find_clusters_csv(str(graph_dir_of(collect_dir)))
         except FileNotFoundError:
-            return "No clusters yet. Run the Graph analysis first."
+            return "No clusters yet. Run Graph in ⑤ Analyses first."
     return None
 
 
@@ -253,6 +309,38 @@ def run_report(
         plot(df, out_dir)
     files = existing_outputs(collect_dir, "report")
     return AnalysisResult(f"{len(files)} charts for {len(df)} papers.", files)
+
+
+def run_tags(
+    config: SciLExConfig,
+    progress: ProgressFn,
+    *,
+    cancel_event: CancelEvent = None,
+    row_filter: Callable | None = None,
+    review_folder: Path | None = None,
+    from_zotero: bool = False,
+    max_dimensions: int = 5,
+    similarity: float = 88,
+) -> AnalysisResult:
+    """Analyse the annotation tags (see ``scilex.gui.services.tag_review``)."""
+    from scilex.gui.services import tag_review
+
+    try:
+        message, files = tag_review.run(
+            collect_dir_of(config),
+            review_folder,
+            progress,
+            from_zotero=from_zotero,
+            row_filter=row_filter,
+            max_dimensions=max_dimensions,
+            similarity=similarity,
+            cancelled=lambda: _cancelled(cancel_event),
+        )
+    except tag_review.TagReviewError as exc:
+        raise AnalysisError(str(exc)) from exc
+    if _cancelled(cancel_event):
+        return AnalysisResult("Cancelled.", files)
+    return AnalysisResult(message, files)
 
 
 def read_result_csv(path: str | Path, nrows: int | None = None) -> pd.DataFrame:
@@ -389,14 +477,22 @@ def run_enrich(
     dry_run: bool = False,
     limit: int | None = None,
     threshold: int | None = None,
+    row_filter: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     cancel_event: CancelEvent = None,
 ) -> AnalysisResult:
-    """Enrich the aggregated CSV with Papers with Code metadata (``scilex-enrich``)."""
+    """Enrich the aggregated CSV with Papers with Code metadata (``scilex-enrich``).
+
+    ``row_filter`` limits the papers looked up (e.g. to those kept in screening);
+    the other rows are written back unchanged.
+    """
     from scilex.pipeline.enrichment_pwc import EnrichmentOptions, run_enrichment
 
     _prepare_enrichment_config(config)
     options = EnrichmentOptions(
-        dry_run=dry_run, limit=limit or None, threshold=threshold or None
+        dry_run=dry_run,
+        limit=limit or None,
+        threshold=threshold or None,
+        row_filter=row_filter,
     )
 
     def on_progress(processed: int, total: int, stats: dict) -> None:
@@ -427,9 +523,17 @@ def run_citations(
     limit: int | None = None,
     skip_citers: bool = False,
     no_fallback: bool = False,
+    source: str = "auto",
+    row_filter: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     cancel_event: CancelEvent = None,
 ) -> AnalysisResult:
     """Fetch references and citers of the corpus (``scilex-enrich-citations``).
+
+    ``source``: ``auto`` (Semantic Scholar, then CrossRef, then OpenCitations),
+    ``crossref`` (CrossRef then OpenCitations; citers from OpenCitations) or
+    ``opencitations`` (OpenCitations only).
+
+    ``row_filter`` limits the papers fetched (e.g. to those kept in screening).
 
     Writes ``citations_cache.json`` and ``citers_cache.json`` in the collection
     directory (what Snowball and Graph read). A cancellation is honoured before
@@ -448,6 +552,8 @@ def run_citations(
         data = load_aggregated_data(config.main)
     except (FileNotFoundError, ValueError) as exc:
         raise AnalysisError(str(exc)) from exc
+    if row_filter is not None:
+        data = row_filter(data)
     if limit:
         data = data.head(limit)
     dois = [
@@ -456,7 +562,11 @@ def run_citations(
         if is_valid(doi) and str(doi).strip()
     ]
     if not dois:
-        raise AnalysisError("No paper with a DOI in the aggregated results.")
+        raise AnalysisError(
+            "No paper with a DOI among the papers kept in screening."
+            if row_filter is not None
+            else "No paper with a DOI in the aggregated results."
+        )
     api_key = first_key(config.api.get("SemanticScholar", {}).get("api_key"))
     mailto = config.api.get("CrossRef", {}).get("mailto")
     collect_dir.mkdir(parents=True, exist_ok=True)
@@ -472,7 +582,9 @@ def run_citations(
                 dois,
                 api_key=api_key,
                 cache_path=str(cache),
-                fallback_opencitations=not no_fallback,
+                fallback_opencitations=not no_fallback or source == "opencitations",
+                use_semantic_scholar=source == "auto",
+                use_crossref=source != "opencitations",
                 mailto=mailto,
                 should_stop=should_stop,
                 on_progress=on_progress,
@@ -488,7 +600,8 @@ def run_citations(
                     dois,
                     api_key=api_key,
                     cache_path=str(cache),
-                    fallback_opencitations=not no_fallback,
+                    fallback_opencitations=not no_fallback or source != "auto",
+                    use_semantic_scholar=source == "auto",
                     should_stop=should_stop,
                     on_progress=on_progress,
                 ),
@@ -609,6 +722,51 @@ def run_snowball(
     )
 
 
+def run_linked(
+    config: SciLExConfig,
+    progress: ProgressFn,
+    source: str,
+    *,
+    limit: int | None = None,
+    row_filter: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
+    cancel_event: CancelEvent = None,
+) -> AnalysisResult:
+    """Enrich the aggregated CSV from Crossref, Linked Papers With Code or ORKG.
+
+    See :mod:`scilex.linked_enrichment`. Results already fetched are written even
+    when the run is cancelled (they are also cached for the next run).
+    """
+    from scilex import linked_enrichment
+    from scilex.gui.services.extend import write_results
+    from scilex.io_utils import load_aggregated_data, resolve_aggregate_path
+
+    collect_dir = collect_dir_of(config)
+    try:
+        data = load_aggregated_data(config.main, preserve_missing_marker=True)
+    except (FileNotFoundError, ValueError) as exc:
+        raise AnalysisError(str(exc)) from exc
+    kwargs = {}
+    if source == "crossref":
+        kwargs["mailto"] = config.api.get("CrossRef", {}).get("mailto")
+    try:
+        report = linked_enrichment.ENRICHERS[source](
+            data,
+            collect_dir / f"{source}_cache.json",
+            row_filter=row_filter,
+            limit=limit or None,
+            progress=progress,
+            cancel=cancel_event,
+            **kwargs,
+        )
+    except linked_enrichment.Cancelled:
+        return AnalysisResult("Cancelled; what was fetched is cached for the next run.")
+    path = Path(resolve_aggregate_path(config.main))
+    write_results(data, path)
+    if report.looked_up == 0 and report.failed:
+        raise AnalysisError(f"{report.source} could not be reached: check your connection.")
+    return AnalysisResult(report.message(), [path])
+
+
 def run_graph(
     config: SciLExConfig,
     progress: ProgressFn,
@@ -700,7 +858,7 @@ def run_summaries(
         # A graph without edges leaves every paper alone in its own community.
         return AnalysisResult(
             f"No links found in the {graph_label} graph: fetch citations for more papers in the "
-            "Citations tab. A summary of one-paper communities would be meaningless."
+            "Citations tab of ③ Enrich. A summary of one-paper communities would be meaningless."
         )
     report_path = analysis_dir / "summary_report.md"
     generate_report(stats, str(report_path), collect_name=config.main["collect_name"])
@@ -719,7 +877,7 @@ OPTION_CASTS: dict[str, dict[str, Callable]] = {
     "report": {},
     "keywords": {"top_k": int, "min_freq": int, "clusters": str},
     "enrich": {"dry_run": bool, "limit": int, "threshold": int},
-    "citations": {"limit": int, "skip_citers": bool, "no_fallback": bool},
+    "citations": {"limit": int, "skip_citers": bool, "no_fallback": bool, "source": str},
     "snowball": {
         "direction": str,
         "top_k": int,
@@ -729,6 +887,10 @@ OPTION_CASTS: dict[str, dict[str, Callable]] = {
     },
     "graph": {"graph_type": str, "resolution": float, "min_weight": int, "fmt": str},
     "summaries": {"clusters": str},
+    "tags": {"max_dimensions": int, "similarity": float, "from_zotero": bool},
+    "crossref": {"limit": int},
+    "lpwc": {"limit": int},
+    "orkg": {"limit": int},
 }
 
 
@@ -753,4 +915,8 @@ RUNNERS: dict[str, Callable[..., AnalysisResult]] = {
     "snowball": run_snowball,
     "graph": run_graph,
     "summaries": run_summaries,
+    "tags": run_tags,
+    "crossref": lambda config, progress, **kw: run_linked(config, progress, "crossref", **kw),
+    "lpwc": lambda config, progress, **kw: run_linked(config, progress, "lpwc", **kw),
+    "orkg": lambda config, progress, **kw: run_linked(config, progress, "orkg", **kw),
 }

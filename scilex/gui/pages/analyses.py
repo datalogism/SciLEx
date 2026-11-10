@@ -11,7 +11,9 @@ from nicegui import ui
 from scilex.gui.components.errors import show_error
 from scilex.gui.components.graph_view import render_graph_results
 from scilex.gui.components.job_panel import JobPanel
+from scilex.gui.components.tag_tools import render_tag_tools
 from scilex.gui.services import analyses as service
+from scilex.gui.services import screening
 from scilex.gui.services.jobs import Job, JobConflictError
 from scilex.gui.services.workspace import Review, Workspace
 from scilex.gui.state import AppContext
@@ -24,6 +26,37 @@ DIRECTIONS = {
     "backward": "References only (cited by the corpus)",
     "forward": "Citing papers only",
 }
+
+
+ONLY_KEPT = "only_kept"
+CITATION_SOURCES = {
+    "auto": "Semantic Scholar, then CrossRef, then OpenCitations",
+    "crossref": "CrossRef (references) + OpenCitations",
+    "opencitations": "OpenCitations only (open data, no key)",
+}
+
+
+def kept_papers_filter(review: Review) -> Callable:
+    """Row filter keeping the papers included (or maybe) in screening.
+
+    Raises:
+        service.AnalysisError: If no paper is kept yet.
+    """
+    kept = {
+        key
+        for key, decision in screening.load_decisions(review).items()
+        if decision.decision in (screening.INCLUDE, screening.MAYBE)
+    }
+    if not kept:
+        raise service.AnalysisError(
+            "No paper is kept in ④ Screen yet: untick \"Only the papers kept\" "
+            "or screen first."
+        )
+
+    def keep(data):
+        return data[data.apply(screening.paper_key, axis=1).isin(kept)]
+
+    return keep
 
 
 def kind_of(name: str) -> str:
@@ -44,15 +77,26 @@ def _job_label(job: Job) -> str:
 def render(ctx: AppContext, review: Review) -> None:
     """Draw the Analyses screen of ``review``."""
     ui.label("Analyses").classes("text-2xl font-bold")
+    ui.label(
+        "Explore the corpus: charts, citation graph and communities. "
+        "Citation data comes from ③ Enrich."
+    ).classes("text-gray-500")
+    render_tabs(ctx, review, service.in_group("analyse"))
+
+
+def render_tabs(
+    ctx: AppContext, review: Review, analyses: tuple[service.AnalysisInfo, ...]
+) -> None:
+    """Draw one tab per analysis of ``analyses`` (shared by Enrich, Extend and Analyses)."""
     with ui.tabs().classes("w-full").props("mobile-arrows outside-arrows") as tabs:
-        for info in service.ANALYSES:
+        for info in analyses:
             ui.tab(info.name, label=info.title).mark(f"analysis-tab-{info.name}")
     # Finishing one analysis (e.g. Citations) can lift another tab's warning.
     problem_refreshers: list[Callable[[], None]] = []
-    infos = {info.name: info for info in service.ANALYSES}
+    infos = {info.name: info for info in analyses}
     tab_containers: dict[str, ui.tab_panel] = {}
     panels: dict[str, JobPanel] = {}
-    first = service.ANALYSES[0].name
+    first = analyses[0].name
     with ui.tab_panels(tabs, value=first).classes("w-full min-w-0") as tab_panels:
         for name in infos:
             tab_containers[name] = ui.tab_panel(name)
@@ -132,6 +176,8 @@ def _render_analysis(
                 return
             for path in files:
                 _render_file(path)
+            if name == "tags":
+                render_tag_tools(ctx, review, collect_dir)
 
     def show_existing() -> None:
         files = service.existing_outputs(collect_dir, name)
@@ -197,6 +243,10 @@ def _render_analysis(
             kwargs = service.normalize_options(
                 name, {key: widget.value for key, widget in options.items()}
             )
+            if name in service.SCOPED and options[ONLY_KEPT].value:
+                kwargs["row_filter"] = kept_papers_filter(review)
+            if name == "tags":
+                kwargs["review_folder"] = review.folder
 
             def body(job: Job) -> str:
                 def progress(percent: int, message: str) -> None:
@@ -245,6 +295,8 @@ def _render_options(name: str) -> dict:
             f"analysis-opt-{name}-{key}"
         )
 
+    if name in service.SCOPED:
+        checkbox(ONLY_KEPT, "Only the papers kept in ④ Screen (included or maybe)")
     with ui.row().classes("items-center gap-4"):
         if name in ("keywords", "summaries"):
             select("clusters", "Clusters", service.CLUSTER_CHOICES, "auto")
@@ -255,10 +307,20 @@ def _render_options(name: str) -> dict:
             checkbox("dry_run", "Dry run (do not write the CSV)")
             number("limit", "Max papers (0 = all)", 0, min=0, precision=0)
             number("threshold", "Title match threshold (0-100)", 85, min=0, max=100)
+        elif name == "tags":
+            checkbox("from_zotero", "Read the tags from Zotero now (else: as of the last import)")
+            number("max_dimensions", "Dimensions to cross", 5, min=2, max=12, precision=0)
+            number("similarity", "Merge suggestions: min similarity (0-100)", 88, min=50, max=100)
+        elif name in ("crossref", "lpwc", "orkg"):
+            number("limit", "Max papers (0 = all)", 0, min=0, precision=0)
         elif name == "citations":
+            select("source", "Source", CITATION_SOURCES, "auto")
             number("limit", "Max papers (0 = all)", 0, min=0, precision=0)
             checkbox("skip_citers", "Skip citing papers (references only)")
-            checkbox("no_fallback", "No OpenCitations fallback")
+            checkbox(
+                "no_fallback",
+                "Semantic Scholar only (skip the OpenCitations fallback)",
+            )
         elif name == "snowball":
             select("direction", "Direction", DIRECTIONS, "both")
             number("top_k", "Max candidates", 200, min=1, precision=0)

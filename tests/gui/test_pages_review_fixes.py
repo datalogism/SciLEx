@@ -50,9 +50,9 @@ async def test_analysis_tabs_are_drawn_when_opened(ctx, tmp_path):
     async with user_simulation(build_root(ctx)) as user:
         await user.open(f"/review/{review.id}/analyses")
         await user.should_see(marker="analysis-run-report")
-        await user.should_not_see(marker="analysis-run-enrich")
-        user.find(marker="analysis-tab-enrich").click()
-        await user.should_see(marker="analysis-run-enrich")
+        await user.should_not_see(marker="analysis-run-graph")
+        user.find(marker="analysis-tab-graph").click()
+        await user.should_see(marker="analysis-run-graph")
 
 
 def test_renaming_the_review_is_detected(ctx, tmp_path):
