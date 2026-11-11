@@ -74,7 +74,7 @@ async def test_page_zotero_push_requires_confirmation(
         await user.open(f"/review/{review.id}/export")
         user.find(marker="export-zotero").click()
         await user.should_see(marker="zotero-confirm")
-        await user.should_see("Push 2 papers to the Zotero group library 42")
+        await user.should_see('Push 2 papers to Zotero: group library 42 (collection "')
         pushed.assert_not_called()
         user.find(marker="zotero-push").click()
         await user.should_see(marker="export-result", retries=50)

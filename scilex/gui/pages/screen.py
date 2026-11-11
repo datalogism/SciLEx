@@ -6,6 +6,7 @@ import json
 from nicegui import events, run, ui
 
 from scilex.constants import doi_to_url
+from scilex.gui.components import criteria_panel
 from scilex.gui.components.errors import show_error
 from scilex.gui.services.screening import (
     EXCLUDE,
@@ -14,6 +15,7 @@ from scilex.gui.services.screening import (
     FILTER_UNDECIDED,
     INCLUDE,
     MAYBE,
+    NONE_VALUE,
     ReviewFileError,
     ScreeningSession,
 )
@@ -30,6 +32,7 @@ FILTER_OPTIONS = {
 DECISION_COLOURS = {INCLUDE: "positive", EXCLUDE: "negative", MAYBE: "warning"}
 KEY_DECISIONS = {"i": INCLUDE, "e": EXCLUDE, "m": MAYBE}
 
+COLLECTION = "collection"  # facet with its own toolbar selector
 COLUMN_DEFS = [
     {
         "field": "title",
@@ -135,9 +138,11 @@ class ScreenPage:
         self.query = ""
         self.facet_filters: dict[str, set[str]] = {}
         self.facet_selects: dict[str, ui.select] = {}
+        self.facet_box: ui.expansion | None = None
         self._clearing = False
         self.current: str | None = None
         self.order: list[str] = []  # keys in the grid's displayed order
+        self.criteria = criteria_panel.load_criteria(session.review)
 
     # -- layout ---------------------------------------------------------
 
@@ -153,6 +158,7 @@ class ScreenPage:
                 "popup-hide",
                 js_handler="() => document.activeElement?.blur()",
             )
+            self.collection_filter()
             ui.input(
                 placeholder="Search title or abstract",
                 on_change=self.on_search,
@@ -202,9 +208,41 @@ class ScreenPage:
         if self.order:
             self.select(self.order[0])
 
+    def collection_filter(self) -> None:
+        """Zotero collection selector of the toolbar (a parent takes its subtree)."""
+        options = self.session.collection_options()
+        if not options:
+            return
+        labels = {
+            path: ("No collection" if path == NONE_VALUE else path.replace("/", " › "))
+            + f" ({count})"
+            for path, count in options
+        }
+        select = (
+            ui.select(
+                labels,
+                multiple=True,
+                label="Zotero collection",
+                with_input=True,
+                clearable=True,
+                on_change=lambda e: self.on_facet(COLLECTION, e.value),
+            )
+            .props("dense outlined use-chips")
+            .classes("w-72")
+            .tooltip("A collection includes its subcollections")
+            .mark("collection-filter")
+        )
+        select.on("popup-hide", js_handler="() => document.activeElement?.blur()")
+        self.facet_selects[COLLECTION] = select
+
     def facet_panel(self) -> None:
         """Filters on paper properties: type, origin, import date, keywords, tags…"""
-        options = self.session.facet_options()
+        # Collections have their own selector in the toolbar.
+        options = {
+            facet: values
+            for facet, values in self.session.facet_options().items()
+            if facet != COLLECTION
+        }
         if not options:
             return
         with (
@@ -272,6 +310,21 @@ class ScreenPage:
             ui.label(detail["abstract"] or "No abstract.").classes(
                 "text-sm whitespace-pre-wrap max-h-48 overflow-auto"
             )
+            if self.criteria:
+                key = self.current
+
+                async def change(add: list[str], remove: list[str]) -> None:
+                    if await criteria_panel.write_tags(
+                        self.session.review, self.session, key, add, remove
+                    ):
+                        self.detail_panel.refresh()
+
+                criteria_panel.render_criteria(
+                    self.session.record(key),
+                    self.criteria,
+                    change,
+                    included=bool(decision and decision.decision == INCLUDE),
+                )
             with ui.row().classes("items-center gap-2"):
                 for label, value, marker in (
                     ("Include (I)", INCLUDE, "decide-include"),
@@ -445,8 +498,13 @@ class ScreenPage:
     def on_facet(self, facet: str, value) -> None:
         """A facet filter changed."""
         self.facet_filters[facet] = set(value or [])
-        active = sum(1 for chosen in self.facet_filters.values() if chosen)
-        self.facet_box.text = f"Filters ({active} active)" if active else "Filters"
+        active = sum(
+            1
+            for name, chosen in self.facet_filters.items()
+            if chosen and name != COLLECTION
+        )
+        if self.facet_box is not None:
+            self.facet_box.text = f"Filters ({active} active)" if active else "Filters"
         if not self._clearing:
             self.refill()
 

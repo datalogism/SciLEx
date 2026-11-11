@@ -6,14 +6,26 @@ from pathlib import Path
 
 from nicegui import ui
 
+from scilex.gui.components import paper_details
 from scilex.gui.services import exports
 from scilex.gui.services import graph_view as service
 
 PAPER_ROWS_SHOWN = 300
 
 
-def render_graph_results(graph_dir: Path) -> None:
-    """Draw the results of the Graph analysis found in ``graph_dir``."""
+def render_graph_results(graph_dir: Path, review=None) -> None:
+    """Draw the results of the Graph analysis found in ``graph_dir``.
+
+    ``review``: gives the Zotero links of the papers (its Zotero library).
+    """
+    source = None
+    if review is not None:
+        from scilex.gui.services import zotero_library
+
+        try:
+            source = zotero_library.load_source(review.folder)
+        except Exception:  # an unreadable zotero_source.yml: no Zotero links
+            source = None
     names = service.available_graphs(graph_dir)
     if not names:
         return
@@ -22,7 +34,7 @@ def render_graph_results(graph_dir: Path) -> None:
     def show(name: str) -> None:
         container.clear()
         with container:
-            _render_view(graph_dir, name)
+            _render_view(graph_dir, name, source)
 
     if len(names) > 1:
         ui.toggle(
@@ -32,7 +44,7 @@ def render_graph_results(graph_dir: Path) -> None:
     show(names[0])
 
 
-def _render_view(graph_dir: Path, name: str) -> None:
+def _render_view(graph_dir: Path, name: str, source=None) -> None:
     try:
         view = service.build_graph_view(graph_dir, name)
     except (FileNotFoundError, ValueError) as exc:
@@ -62,7 +74,7 @@ def _render_view(graph_dir: Path, name: str) -> None:
             "text-sm text-gray-500"
         )
 
-    _render_network(view)
+    _render_network(view, source)
     _render_communities(real_communities)
     _render_papers(view)
     if view.graph_file is not None:
@@ -78,7 +90,7 @@ def _render_view(graph_dir: Path, name: str) -> None:
             ).props("flat dense size=sm").mark("graph-reveal")
 
 
-def _render_network(view: service.GraphView) -> None:
+def _render_network(view: service.GraphView, source=None) -> None:
     choices = {0: "All communities"} | {
         community.cluster_id + 1: f"Community {community.cluster_id} "
         f"({community.size} papers)"
@@ -86,8 +98,14 @@ def _render_network(view: service.GraphView) -> None:
         if community.size > 1
     }
     # Select values are shifted by one: 0 stands for "all".
-    community_select = ui.select(choices, value=0, label="Show").classes("w-64")
-    community_select.mark("graph-community")
+    with ui.row().classes("items-center gap-3"):
+        community_select = ui.select(choices, value=0, label="Show").classes("w-64")
+        community_select.mark("graph-community")
+        color_select = (
+            ui.select(service.COLOR_BY, value=service.COMMUNITY, label="Colour by")
+            .classes("w-56")
+            .mark("graph-color-by")
+        )
     chart = (
         ui.echart(service.chart_options(view))
         .classes("w-full border rounded")
@@ -96,17 +114,64 @@ def _render_network(view: service.GraphView) -> None:
     )
     details = ui.column().classes("w-full gap-0").mark("graph-details")
 
-    def filter_community(event) -> None:
-        cluster = None if not event.value else event.value - 1
+    @ui.refreshable
+    def legend() -> None:
+        color_by = color_select.value
+        if color_by == service.COMMUNITY:
+            return
+        palette = view.palettes.get(color_by) or {}
+        with ui.row().classes("gap-3 items-center").mark("graph-legend"):
+            for value, color in palette.items():
+                with ui.row().classes("items-center gap-1 no-wrap"):
+                    ui.element("span").style(
+                        "display:inline-block;width:10px;height:10px;"
+                        f"border-radius:50%;background:{color}"
+                    )
+                    ui.label(value).classes("text-xs")
+        table = service.compare_groups(view, color_by)
+        if not table.empty:
+            ui.table(
+                columns=[
+                    {"name": c, "label": c, "field": c, "align": "left"}
+                    for c in table.columns
+                ],
+                rows=table.astype(str).to_dict("records"),
+            ).props("dense flat").classes("w-full").mark("graph-compare")
+
+    legend()
+
+    def redraw() -> None:
+        value = community_select.value
+        cluster = None if not value else value - 1
         chart.options.clear()
-        chart.options.update(service.chart_options(view, cluster))
+        chart.options.update(service.chart_options(view, cluster, color_select.value))
         chart.update()
+
+    def filter_community(_event) -> None:
+        redraw()
+
+    def change_colors(_event) -> None:
+        redraw()
+        legend.refresh()
+
+    color_select.on_value_change(change_colors)
 
     def show_details(event) -> None:
         if event.data_type != "node" or not isinstance(event.data, dict):
             return
         node = event.data
         details.clear()
+        record = view.records.get(node.get("id", ""))
+        if record is not None:
+            # The full notice: badges, Zotero links, abstract, annotations.
+            with details, ui.card().classes("w-full gap-1").mark("graph-paper"):
+                ui.label(
+                    f"Community {node.get('cluster')} · "
+                    f"{node.get(service.PAPER_TYPE, '')} · "
+                    f"{node.get(service.COLLECTION, '')}"
+                ).classes("text-xs text-gray-500")
+                paper_details.render_paper(record, source)
+            return
         with details:
             ui.label(node.get("title", "")).classes("font-bold")
             meta = " · ".join(
@@ -115,6 +180,8 @@ def _render_network(view: service.GraphView) -> None:
                     node.get("authors", "").replace(";", ", "),
                     node.get("year", ""),
                     f"community {node.get('cluster')}",
+                    node.get(service.PAPER_TYPE, ""),
+                    node.get(service.COLLECTION, ""),
                 )
                 if part
             )
@@ -128,7 +195,8 @@ def _render_network(view: service.GraphView) -> None:
     community_select.on_value_change(filter_community)
     chart.on_point_click(show_details)
     ui.label(
-        "Node size: centrality (PageRank). Colour: community. Scroll to zoom, "
+        "Node size: centrality (PageRank). Colour: community, paper type or Zotero "
+        "collection (Colour by). Scroll to zoom, "
         "drag to move, click a paper for details."
     ).classes("text-xs text-gray-500")
 

@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Python 3.13+
+- Python 3.10+ (3.12 or 3.13 recommended); the desktop app builds need no Python
 - uv package manager (or pip)
 - 4GB RAM minimum
 
@@ -103,7 +103,7 @@ uv run scilex-collect
 ## Common Issues
 
 ### Python Version Error
-Install Python 3.13+ from [python.org](https://www.python.org)
+Install Python 3.10+ from [python.org](https://www.python.org)
 
 ### Module Not Found
 ```bash

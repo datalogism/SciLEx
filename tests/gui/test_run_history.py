@@ -65,7 +65,9 @@ def test_broken_history_is_ignored(tmp_path):
 
 def test_last_run_inferred_from_files(ctx, tmp_path):
     review = _review(ctx, tmp_path)
-    assert run_history.last_run(review, "analysis-crossref") is None  # in-place, no file
+    assert (
+        run_history.last_run(review, "analysis-crossref") is None
+    )  # in-place, no file
     assert run_history.last_run(review, "analysis-citations") is None
     (review.collection_dir / "citations_cache.json").write_text("{}")
     inferred = run_history.last_run(review, "analysis-citations")
@@ -102,7 +104,9 @@ def test_failed_and_dry_runs_are_not_recorded(ctx, tmp_path):
         raise RuntimeError("boom")
 
     _wait(ctx.runner.start_task(review, "analysis-crossref", fail))
-    _wait(ctx.runner.start_task(review, "analysis-enrich", lambda j: "x", history_key=""))
+    _wait(
+        ctx.runner.start_task(review, "analysis-enrich", lambda j: "x", history_key="")
+    )
     assert run_history.load(review.folder) == {}
 
 
@@ -158,9 +162,10 @@ async def test_running_an_analysis_turns_it_green(ctx, tmp_path, monkeypatch):
 async def test_collect_extend_and_export_show_chips(ctx, tmp_path):
     review = _review(ctx, tmp_path)
     async with user_simulation(build_root(ctx)) as user:
+        # A review with papers: Collect is Extend > New collect.
         await user.open(f"/review/{review.id}/collect")
+        await user.should_see(marker="extend-title")
         await user.should_see(marker=f"run-status-{run_history.PIPELINE}")
-        await user.should_see(marker=f"run-status-{run_history.AGGREGATE}")
         await user.open(f"/review/{review.id}/extend")
         await user.should_see(marker=f"run-status-{run_history.EXTEND_ADD}")
         await user.should_see(marker=f"run-status-{run_history.EXTEND_REAGGREGATE}")

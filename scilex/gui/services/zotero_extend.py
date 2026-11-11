@@ -175,6 +175,9 @@ def extend_from_zotero(
     else:
         review.collection_dir.mkdir(parents=True, exist_ok=True)
     write_results(merged, review.results_path)
+    from scilex.gui.services.paper_enrich import tag_types
+
+    tag_types(review.results_path)
     try:
         paper_log.update(review.folder, merged, when=dt.date.today())
     except OSError:

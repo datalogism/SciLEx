@@ -21,7 +21,11 @@ pytestmark = pytest.mark.anyio
 
 @pytest.mark.parametrize(
     "text",
-    ["0000-0002-1825-0097", "https://orcid.org/0000-0002-1825-0097", "0000000218250097"],
+    [
+        "0000-0002-1825-0097",
+        "https://orcid.org/0000-0002-1825-0097",
+        "0000000218250097",
+    ],
 )
 def test_normalize_orcid_accepts_the_usual_forms(text):
     assert normalize_orcid(text) == "0000-0002-1825-0097"
@@ -68,8 +72,18 @@ async def test_app_is_locked_without_orcid(ctx, tmp_path):
 
 def test_step_order():
     assert [step.key for step in PIPELINE_STEPS] == [
-        "overview", "explore", "configure", "collect", "screen", "annotate", "extend",
-        "consolidate", "enrich", "analyses", "export",
+        "overview",
+        "explore",
+        "configure",
+        "collect",
+        "criteria",
+        "screen",
+        "annotate",
+        "extend",
+        "consolidate",
+        "enrich",
+        "analyses",
+        "export",
     ]
 
 
@@ -94,23 +108,53 @@ async def test_extend_collect_page(ctx, tmp_path):
         await user.should_see(marker="extend-title")
         await user.should_see(marker="extend-add")
         await user.should_see(marker="extend-reaggregate")
-        await user.should_see(marker="analysis-tab-snowball")
+        for tab in ("new-collect", "snowball", "keywords", "bibtex", "zotero"):
+            await user.should_see(marker=f"extend-tab-{tab}")
+        await user.should_see(marker="extend-no-group")  # no Zotero group yet
+        # Collect is part of Extend once the review has papers.
+        await user.should_not_see(marker="step-collect")
+        await user.open(f"/review/{review.id}/collect")
+        await user.should_see(marker="extend-title")
+
+
+async def test_extend_target_defaults_to_a_new_collection(ctx, tmp_path):
+    from scilex.gui.services import extension_collection as ec
+    from scilex.gui.services import zotero_library as zl
+
+    review = ctx.workspace.create_review(tmp_path / "r", name="r")
+    review.collection_dir.mkdir(parents=True)
+    review.results_path.write_text("title\nA\n")
+    zl.save_source(review.folder, zl.ZoteroSource("42", "group", None, ""))
+    # A choice left from an earlier visit does not carry over.
+    ec.save_target(review, ec.Target(key="OLD", path="Old"))
+    async with user_simulation(build_root(ctx)) as user:
+        await user.open(f"/review/{review.id}/extend")
+        await user.should_see(marker="extend-target")
+        mode = user.find(marker="extend-target-mode").elements.pop()
+        assert mode.value == "new"
+        assert ec.load_target(review).is_new
+        user.find(marker="extend-target-name").type("Seeds")
+        assert ec.load_target(review) == ec.Target(name="Seeds")
 
 
 # --- extension merges ------------------------------------------------------------
 
 
 def _frame(rows):
-    return pd.DataFrame(rows, columns=["title", "DOI", "date", "archive", "relevance_score"])
+    return pd.DataFrame(
+        rows, columns=["title", "DOI", "date", "archive", "relevance_score"]
+    )
 
 
 def test_add_new_only_keeps_existing_rows_and_appends_the_others():
     previous = _frame([["Old A", "10.1/a", "2020", "OpenAlex", "9"]])
-    current = _frame([
-        ["Old A (re-ranked)", "10.1/A", "2020", "OpenAlex", "1"],  # same DOI
-        ["New B", "10.1/b", "2024", "OpenAlex", "5"],
-        ["New B", "10.1/b", "2024", "Arxiv", "5"],  # duplicate in the new batch
-    ])
+    current = _frame(
+        [
+            ["Old A (re-ranked)", "10.1/A", "2020", "OpenAlex", "1"],  # same DOI
+            ["New B", "10.1/b", "2024", "OpenAlex", "5"],
+            ["New B", "10.1/b", "2024", "Arxiv", "5"],  # duplicate in the new batch
+        ]
+    )
     merged, added = extend.add_new_only(previous, current, origin="query test")
     assert added == 1
     assert merged["title"].tolist() == ["Old A", "New B"]
@@ -121,13 +165,20 @@ def test_add_new_only_keeps_existing_rows_and_appends_the_others():
 def test_reaggregate_keeps_imported_and_snowballed_papers():
     previous = pd.DataFrame(
         {
-            "title": ["From collect", "From Zotero", "From snowball", "Dropped by filter"],
+            "title": [
+                "From collect",
+                "From Zotero",
+                "From snowball",
+                "Dropped by filter",
+            ],
             "DOI": ["10.1/c", "10.1/z", "10.1/s", "10.1/d"],
             "archive": ["OpenAlex", "Zotero", "SemanticScholar", "OpenAlex"],
             "snowball_depth": ["0", "0", "1", "0"],
         }
     )
-    current = pd.DataFrame({"title": ["From collect"], "DOI": ["10.1/c"], "archive": ["OpenAlex"]})
+    current = pd.DataFrame(
+        {"title": ["From collect"], "DOI": ["10.1/c"], "archive": ["OpenAlex"]}
+    )
     merged, carried = extend.keep_outside_rows(previous, current)
     assert carried == 2
     assert sorted(merged["title"]) == ["From Zotero", "From collect", "From snowball"]
@@ -152,4 +203,6 @@ def test_pipeline_extension_adds_to_existing_results(ctx, tmp_path):
     data = extend.read_results(review.results_path)
     assert sorted(data["title"]) == ["Existing paper", "Graph RAG for metabolomics"]
     assert "1 new papers added" in job.message
-    assert (review.collection_dir / extend.BACKUP_DIRNAME / extend.BACKUP_FILENAME).is_file()
+    assert (
+        review.collection_dir / extend.BACKUP_DIRNAME / extend.BACKUP_FILENAME
+    ).is_file()

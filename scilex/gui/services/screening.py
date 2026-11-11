@@ -9,6 +9,7 @@ from the results are kept and reported as orphans.
 from __future__ import annotations
 
 import csv
+import json
 import logging
 import re
 from dataclasses import dataclass
@@ -224,6 +225,19 @@ def _split(value) -> set[str]:
     return {part.strip() for part in _text(value).split(";") if part.strip()}
 
 
+def _collection_parts(path: str) -> list[str]:
+    """``"Corpus / Included"`` -> ``["Corpus", "Included"]``."""
+    return [part.strip() for part in path.split("/") if part.strip()]
+
+
+def _in_collection(path: str, chosen: set[str]) -> bool:
+    """Whether collection ``path`` is one of ``chosen`` or below one of them."""
+    if path in chosen:
+        return True
+    parts = _collection_parts(path)
+    return any("/".join(parts[:depth]) in chosen for depth in range(1, len(parts) + 1))
+
+
 def item_type_label(item_type: str) -> str:
     """Readable Zotero item type: ``journalArticle`` gives "Journal article"."""
     words = re.sub(r"(?<!^)(?=[A-Z])", " ", item_type).lower()
@@ -282,6 +296,72 @@ def _number(value) -> float | None:
     return None if pd.isna(number) else float(number)
 
 
+# Citation network written by ⑥ Enrich -> Citations (scilex-enrich-citations).
+REFERENCES_CACHE = "citations_cache.json"  # {doi: [dois it cites]}
+CITERS_CACHE = "citers_cache.json"  # {doi: [dois citing it]}
+
+
+def _load_doi_map(path: Path) -> dict[str, set[str]]:
+    """``{doi: [dois]}`` JSON file with normalised DOIs; empty if absent or damaged."""
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError) as exc:
+        logger.warning("Cannot read the citation network %s: %s", path, exc)
+        return {}
+    mapping: dict[str, set[str]] = {}
+    if not isinstance(raw, dict):
+        return mapping
+    for key, linked in raw.items():
+        doi = normalize_doi(key)
+        if not doi:
+            continue
+        linked = linked if isinstance(linked, list) else []
+        mapping.setdefault(doi, set()).update(
+            d for d in map(normalize_doi, linked) if d
+        )
+    return mapping
+
+
+@dataclass
+class CitationNetwork:
+    """References and citers fetched for the review, keyed by normalised DOI."""
+
+    references: dict[str, set[str]]
+    citers: dict[str, set[str]]
+
+    @classmethod
+    def load(cls, review: Review) -> CitationNetwork:
+        """Read the review's citation caches (empty network if never fetched)."""
+        folder = review.collection_dir
+        return cls(
+            _load_doi_map(folder / REFERENCES_CACHE),
+            _load_doi_map(folder / CITERS_CACHE),
+        )
+
+    def __bool__(self) -> bool:
+        return bool(self.references or self.citers)
+
+
+def _cited_by_index(network: CitationNetwork, corpus: set[str]) -> dict[str, set[str]]:
+    """``{doi: corpus dois citing it}``, from both caches.
+
+    The references of the corpus papers count too, so citations from inside
+    the corpus are found even when the citers were not fetched.
+    """
+    index: dict[str, set[str]] = {}
+    for doi in corpus:
+        for ref in network.references.get(doi, ()):
+            if ref != doi:
+                index.setdefault(ref, set()).add(doi)
+    for doi, citers in network.citers.items():
+        inside = (citers & corpus) - {doi}
+        if inside:
+            index.setdefault(doi, set()).update(inside)
+    return index
+
+
 class ScreeningSession:
     """Results and decisions of a review, kept in memory while screening.
 
@@ -305,6 +385,12 @@ class ScreeningSession:
         self._records: dict[str, dict] = {}  # raw results rows (Explore notice)
         self.rows: list[dict] = []
         log = _paper_log(review, results)
+        network = CitationNetwork.load(review)
+        self.has_network = bool(network)
+        corpus = {k[4:] for k in present if k.startswith("doi:")}
+        cited_by = _cited_by_index(network, corpus) if network else {}
+        # Counts from the network, per paper key (Explore notice).
+        self._network: dict[str, dict[str, int]] = {}
         for record in results.to_dict("records"):
             key = record["paper_key"]
             self._records[key] = record
@@ -314,6 +400,19 @@ class ScreeningSession:
             citations = _number(record.get("nb_citation"))
             if citations is None:
                 citations = _number(record.get("canonical_citation_count"))
+            in_corpus = None
+            if network and key.startswith("doi:"):
+                doi = key[4:]
+                counts = {"cited_in_corpus": len(cited_by.get(doi, ()))}
+                in_corpus = counts["cited_in_corpus"]
+                if doi in network.citers:
+                    counts["network_citers"] = len(network.citers[doi])
+                    # The network may be more recent than the Collect count.
+                    if citations is None or counts["network_citers"] > citations:
+                        citations = counts["network_citers"]
+                if doi in network.references:
+                    counts["network_references"] = len(network.references[doi])
+                self._network[key] = counts
             year = (
                 extract_year(record["date"]) if is_valid(record.get("date")) else None
             )
@@ -332,6 +431,7 @@ class ScreeningSession:
                     "venue": venue,
                     "score": None if score is None else round(score, 2),
                     "citations": None if citations is None else int(citations),
+                    "cited_in_corpus": in_corpus,
                     "item_type": item_type,
                     "imported": imported,
                     "decision": self._label(key),
@@ -370,6 +470,11 @@ class ScreeningSession:
     def record(self, key: str) -> dict:
         """Every column of one paper, as in ``aggregated_results.csv``."""
         return self._records[key]
+
+    def network_counts(self, key: str) -> dict[str, int]:
+        """Citation network counts of one paper (``cited_in_corpus``,
+        ``network_citers``, ``network_references``); only those known."""
+        return self._network.get(key, {})
 
     def set_tags(self, key: str, tags: str) -> None:
         """Adopt the new ``tags`` cell of one paper (filters and notice follow)."""
@@ -454,6 +559,38 @@ class ScreeningSession:
             options[facet] = ordered
         return options
 
+    def collection_options(self) -> list[tuple[str, int]]:
+        """Zotero collections with their paper counts, parents before children.
+
+        Each parent collection is listed, counting the papers of its whole
+        subtree (choosing it selects them all); ``(none)`` comes last. Empty
+        when filtering on collections would change nothing.
+        """
+        counts: dict[str, int] = {}
+        for values in self._facets.values():
+            nodes = set()
+            for path in values["collection"]:
+                if path == NONE_VALUE:
+                    nodes.add(NONE_VALUE)
+                    continue
+                parts = _collection_parts(path)
+                nodes.update(
+                    "/".join(parts[:depth]) for depth in range(1, len(parts) + 1)
+                )
+            for node in nodes:
+                counts[node] = counts.get(node, 0) + 1
+        total = len(self._facets)
+        # No collection at all, or every paper in every collection listed.
+        if not any(c < total for n, c in counts.items() if n != NONE_VALUE):
+            return []
+        ordered = sorted(
+            (n for n in counts if n != NONE_VALUE),
+            key=lambda n: [part.lower() for part in _collection_parts(n)],
+        )
+        if NONE_VALUE in counts:
+            ordered.append(NONE_VALUE)
+        return [(node, counts[node]) for node in ordered]
+
     def visible_rows(
         self,
         decision_filter: str = FILTER_ALL,
@@ -465,11 +602,16 @@ class ScreeningSession:
         active = {
             facet: set(chosen) for facet, chosen in (facets or {}).items() if chosen
         }
+        collections = active.pop("collection", None)
         selected = []
         for row in self.rows:
             key = row["paper_key"]
             values = self._facets[key]
             if any(not values[facet] & chosen for facet, chosen in active.items()):
+                continue
+            if collections and not any(
+                _in_collection(path, collections) for path in values["collection"]
+            ):
                 continue
             decision = self.decisions.get(key)
             if decision_filter == FILTER_UNDECIDED:

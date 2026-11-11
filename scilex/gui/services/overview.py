@@ -61,6 +61,10 @@ class Overview:
     by_year: dict[int, int] = field(default_factory=dict)
     by_source: dict[str, int] = field(default_factory=dict)
     by_collection: dict[str, int] = field(default_factory=dict)
+    # Paper types (PAPER_TYPE tag, else the default type), to compare them.
+    by_type: dict[str, int] = field(default_factory=dict)
+    type_by_year: dict[str, dict[int, int]] = field(default_factory=dict)
+    type_by_collection: dict[str, dict[str, int]] = field(default_factory=dict)
     screening: dict[str, int] = field(default_factory=dict)
     enrichment: dict[str, int] = field(default_factory=dict)
     history: list[Snapshot] = field(default_factory=list)
@@ -194,6 +198,24 @@ def compute(review) -> Overview:
                 p for p in str(row["zotero_collections"]).split(";") if p
             )
     overview.by_collection = dict(collections.most_common())
+
+    from scilex import review_tags
+    from scilex.paper_types import TYPES, effective_type
+
+    types = [effective_type(row) for row in rows]
+    order = {t: i for i, t in enumerate(TYPES)}
+    counted = Counter(types)
+    overview.by_type = dict(
+        sorted(counted.items(), key=lambda kv: (order.get(kv[0], len(TYPES)), kv[0]))
+    )
+    for row, kind in zip(rows, types, strict=True):
+        year = extract_year(row.get("date"))
+        if year is not None:
+            per_year = overview.type_by_year.setdefault(kind, {})
+            per_year[year] = per_year.get(year, 0) + 1
+        for path in review_tags.split_tags(row.get("zotero_collections")):
+            per_type = overview.type_by_collection.setdefault(path, {})
+            per_type[kind] = per_type.get(kind, 0) + 1
 
     decisions = screening.load_decisions(review)
     counts = Counter(

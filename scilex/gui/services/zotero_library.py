@@ -122,21 +122,156 @@ class ImportSummary:
 # ---------------------------------------------------------------------------
 
 
+ZOTERO_API = "https://api.zotero.org"
+KEY_INFO_TIMEOUT_SECONDS = 15
+
+
+@dataclass(frozen=True)
+class ZoteroKeyInfo:
+    """What a Zotero API key gives access to (``GET /keys/current``).
+
+    The key itself is never kept here.
+    """
+
+    user_id: str
+    username: str = ""
+    user_library: bool = False  # the owner's personal library can be read
+    user_write: bool = False
+    all_groups: str = ""  # "", "read" or "write": access to every group
+    groups: dict[str, str] = field(default_factory=dict)  # group id -> read/write
+
+    def group_access(self, group_id: str) -> str:
+        """``"write"``, ``"read"`` or ``""`` for one group."""
+        return self.groups.get(str(group_id)) or self.all_groups
+
+    def describe(self) -> str:
+        """Human summary of the key's owner and rights."""
+        who = (
+            f"{self.username} (user {self.user_id})"
+            if self.username
+            else f"user {self.user_id}"
+        )
+        parts = []
+        if self.user_library:
+            parts.append(
+                "personal library " + ("read/write" if self.user_write else "read only")
+            )
+        if self.all_groups:
+            parts.append(
+                "all groups "
+                + ("read/write" if self.all_groups == "write" else "read only")
+            )
+        elif self.groups:
+            parts.append(f"{len(self.groups)} chosen group(s)")
+        else:
+            parts.append("no group (give the key access to your groups)")
+        return f"Key of {who}: " + "; ".join(parts) + "."
+
+
+def parse_key_info(body: dict) -> ZoteroKeyInfo:
+    """Read the answer of ``GET /keys/current`` (its ``key`` field is dropped)."""
+    access = body.get("access") or {}
+    user = access.get("user") or {}
+    group_rights = access.get("groups") or {}
+
+    def level(rights) -> str:
+        if not isinstance(rights, dict) or not rights.get("library"):
+            return ""
+        return "write" if rights.get("write") else "read"
+
+    return ZoteroKeyInfo(
+        user_id=str(body.get("userID") or ""),
+        username=str(body.get("username") or ""),
+        user_library=bool(user.get("library")),
+        user_write=bool(user.get("write")),
+        all_groups=level(group_rights.get("all")),
+        groups={
+            str(group_id): level(rights)
+            for group_id, rights in group_rights.items()
+            if group_id != "all" and level(rights)
+        },
+    )
+
+
+_KEY_INFO_CACHE: dict[str, ZoteroKeyInfo] = {}
+
+
+def key_info(api_key: str, refresh: bool = False) -> ZoteroKeyInfo:
+    """Ask Zotero who owns ``api_key`` and what it can reach (cached per key).
+
+    Raises:
+        ZoteroNotConfiguredError: If the key is empty or refused.
+        ConnectionError: If Zotero cannot be reached.
+    """
+    import requests
+
+    api_key = (api_key or "").strip()
+    if not api_key:
+        raise ZoteroNotConfiguredError(NOT_CONFIGURED)
+    if not refresh and api_key in _KEY_INFO_CACHE:
+        return _KEY_INFO_CACHE[api_key]
+    try:
+        response = requests.get(
+            f"{ZOTERO_API}/keys/current",
+            headers={"Zotero-API-Key": api_key, "Zotero-API-Version": "3"},
+            timeout=KEY_INFO_TIMEOUT_SECONDS,
+        )
+    except requests.RequestException as exc:
+        raise ConnectionError(
+            f"Zotero cannot be reached ({type(exc).__name__})."
+        ) from None
+    if response.status_code in (403, 404):
+        raise ZoteroNotConfiguredError(
+            f"Zotero refused the key (HTTP {response.status_code}): check it on "
+            "the API keys page."
+        )
+    if not 200 <= response.status_code < 300:
+        raise ConnectionError(
+            f"Unexpected Zotero answer (HTTP {response.status_code})."
+        )
+    info = parse_key_info(response.json())
+    if not info.user_id:
+        raise ConnectionError("Zotero did not say whose key this is.")
+    _KEY_INFO_CACHE[api_key] = info
+    return info
+
+
+NOT_CONFIGURED = (
+    "Zotero is not configured: set the global Zotero key on the API keys page."
+)
+
+
+def zotero_api_key(keys: dict) -> str:
+    """Return the Zotero key of the keys file content ("" if none)."""
+    block = keys.get("Zotero") or keys.get("zotero") or {}
+    api_key = block.get("api_key")
+    if isinstance(api_key, list):
+        api_key = api_key[0] if api_key else None
+    return str(api_key or "")
+
+
+def zotero_configured(keys: dict) -> bool:
+    """True when a Zotero key is set (Zotero is not asked)."""
+    return bool(zotero_api_key(keys))
+
+
 def zotero_credentials(keys: dict) -> tuple[str, str, str]:
     """Return ``(api_key, library_id, library_type)`` from the keys file content.
 
+    The global key is enough: without a library id, the library of the key's
+    owner (asked to Zotero, see :func:`key_info`) is the default one.
+
     Raises:
-        ZoteroNotConfiguredError: If the key or the library id is missing.
+        ZoteroNotConfiguredError: If the key is missing or refused.
+        ConnectionError: If the library id must be asked to an unreachable Zotero.
     """
     block = keys.get("Zotero") or keys.get("zotero") or {}
-    api_key, library_id = block.get("api_key"), block.get("user_id")
-    if isinstance(api_key, list):
-        api_key = api_key[0] if api_key else None
-    if not api_key or not library_id:
-        raise ZoteroNotConfiguredError(
-            "Zotero is not configured: set its key and library id on the API keys page."
-        )
-    return str(api_key), str(library_id), str(block.get("user_mode") or "user")
+    api_key, library_id = zotero_api_key(keys), block.get("user_id")
+    if not api_key:
+        raise ZoteroNotConfiguredError(NOT_CONFIGURED)
+    if not library_id:
+        return api_key, key_info(api_key).user_id, "user"
+    return api_key, str(library_id), str(block.get("user_mode") or "user")
 
 
 def client(
@@ -146,39 +281,141 @@ def client(
     from scilex.gui.services import keys_editor
     from scilex.Zotero.zotero_api import ZoteroAPI
 
-    api_key, library_id, library_type = zotero_credentials(
-        keys if keys is not None else keys_editor.load_keys()
-    )
+    keys = keys if keys is not None else keys_editor.load_keys()
     if library is not None:
-        library_id, library_type = library.library_id, library.library_type
+        api_key = zotero_api_key(keys)
+        if not api_key:
+            raise ZoteroNotConfiguredError(NOT_CONFIGURED)
+        return ZoteroAPI(
+            user_id=library.library_id, user_role=library.library_type, api_key=api_key
+        )
+    api_key, library_id, library_type = zotero_credentials(keys)
     return ZoteroAPI(user_id=library_id, user_role=library_type, api_key=api_key)
 
 
-def list_libraries(keys: dict | None = None) -> list[ZoteroLibrary]:
-    """Return the libraries the key can read: the one of the keys file, then its groups.
+def list_libraries(
+    keys: dict | None = None, groups_only: bool = False
+) -> list[ZoteroLibrary]:
+    """Return the libraries the global key can read: its owner's, then the groups.
+
+    The groups are those of the key's owner that the key may read (a Zotero
+    key can be limited to some groups). ``groups_only`` leaves out the
+    personal library: the library of a review is a dedicated group.
 
     Raises:
-        ZoteroNotConfiguredError: If the key or the library id is missing.
-        ConnectionError: If the groups cannot be listed.
+        ZoteroNotConfiguredError: If the key is missing or refused.
+        ConnectionError: If Zotero cannot be reached or the groups listed.
     """
-    api = client(keys)
-    own = ZoteroLibrary(
-        api.user_role,
-        str(api.user_id),
-        "My library" if api.user_role == "user" else f"Group {api.user_id}",
+    from scilex.gui.services import keys_editor
+
+    keys = keys if keys is not None else keys_editor.load_keys()
+    info = key_info(zotero_api_key(keys))
+    owner = ZoteroLibrary(
+        "user",
+        info.user_id,
+        f"My library ({info.username})" if info.username else "My library",
     )
-    groups = api.get_groups()
+    groups = client(keys, library=owner).get_groups()
     if groups is None:
         raise ConnectionError("Cannot list the Zotero groups (check the key).")
-    found = [
-        ZoteroLibrary(
-            "group",
-            str(group.get("id") or group.get("data", {}).get("id")),
-            f"Group: {group.get('data', {}).get('name', group.get('id'))}",
+    found = []
+    for group in groups:
+        group_id = str(group.get("id") or group.get("data", {}).get("id"))
+        if not info.group_access(group_id):
+            continue  # the key may not read this group
+        name = group.get("data", {}).get("name", group_id)
+        found.append(ZoteroLibrary("group", group_id, f"Group: {name}"))
+    found.sort(key=lambda lib: lib.name.lower())
+    if groups_only or not info.user_library:
+        return found
+    return [owner, *found]
+
+
+@dataclass(frozen=True)
+class ZoteroGroup:
+    """Details of a Zotero group (``GET /groups/<id>``)."""
+
+    group_id: str
+    name: str
+    description: str = ""
+    group_type: str = ""  # Private, PublicClosed, PublicOpen
+    url: str = ""
+    owner: str = ""
+    admins: tuple[str, ...] = ()
+    members: tuple[str, ...] = ()
+    library_reading: str = ""  # all, members
+    library_editing: str = ""  # members, admins
+    file_editing: str = ""  # none, members, admins
+    num_items: int = 0
+    created: str = ""
+    last_modified: str = ""
+
+    @property
+    def web_url(self) -> str:
+        """The group's page on zotero.org."""
+        return f"https://www.zotero.org/groups/{self.group_id}"
+
+    def role_of(self, user_id: str) -> str:
+        """``owner``, ``admin``, ``member`` or ``""`` for a Zotero user id."""
+        user_id = str(user_id)
+        if user_id and user_id == self.owner:
+            return "owner"
+        if user_id in self.admins:
+            return "admin"
+        if user_id in self.members:
+            return "member"
+        return ""
+
+    @property
+    def people(self) -> int:
+        """Number of people in the group (owner, admins and members)."""
+        return len({self.owner, *self.admins, *self.members} - {""})
+
+
+_HTML_TAG = re.compile(r"<[^>]+>")
+
+
+def parse_group(body: dict) -> ZoteroGroup:
+    """Read the answer of ``GET /groups/<id>``."""
+    data = body.get("data", body)
+    meta = body.get("meta") or {}
+
+    def ids(values) -> tuple[str, ...]:
+        return tuple(str(v) for v in values or [] if v)
+
+    return ZoteroGroup(
+        group_id=str(data.get("id") or body.get("id") or ""),
+        name=str(data.get("name") or ""),
+        description=_HTML_TAG.sub("", str(data.get("description") or "")).strip(),
+        group_type=str(data.get("type") or ""),
+        url=str(data.get("url") or ""),
+        owner=str(data.get("owner") or ""),
+        admins=ids(data.get("admins")),
+        members=ids(data.get("members")),
+        library_reading=str(data.get("libraryReading") or ""),
+        library_editing=str(data.get("libraryEditing") or ""),
+        file_editing=str(data.get("fileEditing") or ""),
+        num_items=int(meta.get("numItems") or 0),
+        created=str(meta.get("created") or ""),
+        last_modified=str(meta.get("lastModified") or ""),
+    )
+
+
+def group_details(source: ZoteroSource, keys: dict | None = None) -> ZoteroGroup:
+    """Return the details of the review's Zotero group.
+
+    Raises:
+        ValueError: If ``source`` is not a group library.
+        ZoteroNotConfiguredError, ConnectionError: If Zotero cannot be read.
+    """
+    if source.library_type != "group":
+        raise ValueError("The review's library is not a Zotero group.")
+    response = client(keys, library=source)._get("")
+    if response is None:
+        raise ConnectionError(
+            "Zotero cannot be reached (offline, or the key may not read this group)."
         )
-        for group in groups
-    ]
-    return [own, *sorted(found, key=lambda lib: lib.name.lower())]
+    return parse_group(response.json())
 
 
 def descendant_keys(collections: list[ZoteroCollection], key: str) -> list[str]:
@@ -336,7 +573,7 @@ def list_collections(api) -> list[ZoteroCollection]:
     raw = api.get_collections()
     if raw is None:
         raise ConnectionError(
-            "Cannot list the Zotero collections (check the key and library id)."
+            "Cannot list the Zotero collections (check the key's access to this library)."
         )
     by_key = {c["data"]["key"]: c for c in raw}
 
@@ -621,6 +858,9 @@ def create_review_from_items(
             quoting=csv.QUOTE_NONNUMERIC,
         )
         from scilex.gui.services import paper_log
+        from scilex.gui.services.paper_enrich import tag_types
+
+        tag_types(review.results_path)  # every paper gets its default type
 
         paper_log.update(folder, results, when=dt.date.today(), fresh=True)
         grid = deduce_grid(papers)
@@ -670,6 +910,9 @@ def save_source(folder: Path, source: ZoteroSource) -> Path:
 
     previous = journal.library_of(load_source(folder))
     path = Path(folder) / SOURCE_FILENAME
+    from scilex.gui.services import file_cache
+
+    file_cache.forget(path)
     path.write_text(
         yaml.safe_dump(
             {
@@ -685,6 +928,7 @@ def save_source(folder: Path, source: ZoteroSource) -> Path:
         ),
         encoding="utf-8",
     )
+    file_cache.forget(path)  # even within the same timestamp tick
     current = journal.library_of(source)
     if current != previous:
         journal.append(
@@ -698,21 +942,50 @@ def save_source(folder: Path, source: ZoteroSource) -> Path:
 
 
 def load_source(folder: Path) -> ZoteroSource | None:
-    """Return the Zotero library and collection of a review, if it has chosen one."""
+    """Return the Zotero library and collection of a review, if it has chosen one.
+
+    Read once per version of the file (see :mod:`file_cache`).
+    """
+    from scilex.gui.services import file_cache
+
     path = Path(folder) / SOURCE_FILENAME
-    if not path.is_file():
-        return None
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        return ZoteroSource(
-            library_id=str(data["library_id"]),
-            library_type=str(data.get("library_type") or "user"),
-            collection_key=data.get("collection_key") or None,
-            collection_name=str(data.get("collection_name") or ""),
-            # Files written before sub-collections were supported: one collection.
-            include_subcollections=bool(data.get("include_subcollections", False)),
-            library_name=str(data.get("library_name") or ""),
-        )
+        return file_cache.load(path, _read_source)
     except (OSError, yaml.YAMLError, KeyError, TypeError) as exc:
         logger.warning("Ignoring unreadable %s: %s", path, exc)
         return None
+
+
+def _read_source(path: Path) -> ZoteroSource:
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return ZoteroSource(
+        library_id=str(data["library_id"]),
+        library_type=str(data.get("library_type") or "user"),
+        collection_key=data.get("collection_key") or None,
+        collection_name=str(data.get("collection_name") or ""),
+        # Files written before sub-collections were supported: one collection.
+        include_subcollections=bool(data.get("include_subcollections", False)),
+        library_name=str(data.get("library_name") or ""),
+    )
+
+
+def item_links(source: ZoteroSource | None, item_key: str) -> list[tuple[str, str]]:
+    """Links to one Zotero item: the Zotero app, and zotero.org for a group.
+
+    Returns ``[(label, url)]`` (empty without an item key or a library).
+    """
+    item_key = (item_key or "").strip()
+    if source is None or not item_key or item_key.upper() in ("NA", "NAN"):
+        return []
+    if source.library_type == "group":
+        return [
+            (
+                "Open in Zotero",
+                f"zotero://select/groups/{source.library_id}/items/{item_key}",
+            ),
+            (
+                "zotero.org",
+                f"https://www.zotero.org/groups/{source.library_id}/items/{item_key}",
+            ),
+        ]
+    return [("Open in Zotero", f"zotero://select/library/items/{item_key}")]

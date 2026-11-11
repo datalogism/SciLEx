@@ -104,6 +104,9 @@ All options are listed in the [Configuration Reference](../reference/configurati
 
 ## Next Steps
 
+- [Modules](../modules/index.md) - Every step of a review, from screening to the knowledge graph
+- [Desktop application](../user-guides/gui.md) - The same workflow without the command line
+
 - [Configuration Guide](configuration.md) - Setting up `scilex.yml` and `keys.yml`
 - [Configuration Reference](../reference/configuration.md) - Every option
 - [Basic Workflow](../user-guides/basic-workflow.md) - Detailed workflow

@@ -16,6 +16,7 @@ from nicegui import run, ui
 
 from scilex.gui.components.branding import render_logo
 from scilex.gui.components.errors import show_error
+from scilex.gui.components.review_group import review_group_card
 from scilex.gui.services import keys_editor as editor
 from scilex.gui.services.workspace import Review
 from scilex.gui.state import AppContext
@@ -93,8 +94,10 @@ def _keys_form(
     save_data: Callable[[dict], Path | None],
     inherited: dict | None = None,
     load_error: Exception | None = None,
+    review: Review | None = None,
 ) -> None:
     """Draw the keys form for ``data``; ``inherited`` (review scope) are the global keys."""
+    review_folder = review.folder if review is not None else None
     overrides = editor.env_overrides()
     rows: dict[str, _KeyRows] = {}
 
@@ -149,6 +152,8 @@ def _keys_form(
 
     zotero = data.get("Zotero") or {}
     inherited_zotero = (inherited or {}).get("Zotero") or {}
+    saved_key = str(zotero.get("api_key") or "")
+    detected: dict[str, str] = {}  # user id of the key, asked to Zotero
     with ui.card().classes("w-full").mark("keys-zotero"):
         with ui.row().classes("items-center gap-2"):
             ui.label("Zotero").classes("text-lg font-bold")
@@ -156,57 +161,74 @@ def _keys_form(
             ui.link("Get a key", editor.ZOTERO_HELP_URL, new_tab=True).classes(
                 "text-sm"
             )
-        ui.label(
-            "Needed to push results to Zotero, to start a review from a Zotero "
-            "collection, and to annotate in Zotero."
-        ).classes("text-gray-500 text-sm")
+        if inherited is None:
+            ui.label(
+                "One global access key for the whole app: on zotero.org, create it "
+                'with "Allow library access" and, under Groups, "Read/Write" '
+                "access to all groups. Each review then gets its own dedicated "
+                "group, chosen among the groups this key reaches."
+            ).classes("text-gray-500 text-sm")
+        else:
+            ui.label(
+                "The review uses the global Zotero key in its own Zotero group. "
+                "Fill the key only if this review needs a different one."
+            ).classes("text-gray-500 text-sm")
         zotero_key = (
             ui.input(
-                "API key",
-                value=str(zotero.get("api_key") or ""),
+                "Global access key" if inherited is None else "API key",
+                value=saved_key,
                 password=True,
                 password_toggle_button=True,
             )
             .classes("w-full")
             .mark("key-Zotero")
         )
-        zotero_id = (
-            ui.input("Library id", value=str(zotero.get("user_id") or ""))
-            .classes("w-full")
-            .mark("zotero-user-id")
-        )
-        for widget, field, secret in (
-            (zotero_key, "api_key", True),
-            (zotero_id, "user_id", False),
-        ):
-            hint = _global_hint(inherited, "Zotero", field, secret)
-            if hint:
-                widget.props["hint"] = hint
-        mode_choices = {"user": "user", "group": "group"}
-        if inherited is not None:
-            mode_choices = {
-                "": f"Global ({inherited_zotero.get('user_mode') or 'user'})",
-                **mode_choices,
-            }
-        zotero_mode = ui.select(
-            mode_choices,
-            label="Library type",
-            value=zotero.get("user_mode") or ("" if inherited is not None else "user"),
-        ).mark("zotero-user-mode")
+        hint = _global_hint(inherited, "Zotero", "api_key", True)
+        if hint:
+            zotero_key.props["hint"] = hint
+        identity = ui.label("").classes("text-sm text-gray-500").mark("zotero-identity")
+        if inherited is None:
+            if zotero.get("user_id"):
+                identity.set_text(
+                    f"Default library: {zotero.get('user_mode') or 'user'} "
+                    f"{zotero.get('user_id')}"
+                )
+            elif saved_key:
+                identity.set_text("Owner of the key: not checked yet (Test).")
         zotero_result = ui.label("").classes("text-sm")
 
         async def test_zotero() -> None:
-            outcome = await run.io_bound(
-                editor.check_zotero,
-                zotero_key.value or inherited_zotero.get("api_key") or "",
-                zotero_id.value or str(inherited_zotero.get("user_id") or ""),
-                zotero_mode.value or inherited_zotero.get("user_mode") or "user",
+            key = (
+                zotero_key.value
+                or (editor.get_keys_list(inherited_zotero, "api_key") or [""])[0]
             )
-            _show_result(zotero_result, *outcome)
+            source = None
+            if review_folder is not None:
+                from scilex.gui.services import zotero_library
+
+                source = zotero_library.load_source(review_folder)
+            if source is not None and source.library_type == "group":
+                ok, message = await run.io_bound(
+                    editor.check_zotero, key, source.library_id, "group"
+                )
+                _show_result(
+                    zotero_result,
+                    ok,
+                    f"Group {source.library_name or source.library_id}: {message}",
+                )
+                return
+            ok, message, info = await run.io_bound(editor.check_zotero_key, key)
+            _show_result(zotero_result, ok, message)
+            if ok and inherited is None:
+                detected["user_id"] = info.user_id
+                detected["key"] = key
+                identity.set_text(f"Default library: user {info.user_id}")
 
         ui.button("Test", icon="network_check", on_click=test_zotero).props(
             "outline dense"
         ).mark("key-test-Zotero")
+    if review is not None:
+        review_group_card(review)
 
     email_inputs: dict[str, ui.input] = {}
     with ui.card().classes("w-full"):
@@ -243,18 +265,20 @@ def _keys_form(
                 updated, spec.name, rows[spec.name].values(), spec.field
             )
         zotero_block = dict(updated.get("Zotero") or {})
-        for field_name, widget in (("api_key", zotero_key), ("user_id", zotero_id)):
-            text = (widget.value or "").strip()
-            if text:
-                zotero_block[field_name] = text
-            else:
-                zotero_block.pop(field_name, None)
-        if zotero_mode.value:
-            zotero_block["user_mode"] = zotero_mode.value
+        key = (zotero_key.value or "").strip()
+        if key:
+            zotero_block["api_key"] = key
         else:
-            zotero_block.pop("user_mode", None)
-        if inherited is None and not ({"api_key", "user_id"} & set(zotero_block)):
-            zotero_block = {}  # globally, a library type alone means nothing
+            zotero_block.pop("api_key", None)
+        if inherited is None:
+            if key != saved_key:  # another key: another owner
+                zotero_block.pop("user_id", None)
+                zotero_block.pop("user_mode", None)
+            if detected.get("key") == key and detected.get("user_id"):
+                zotero_block["user_id"] = detected["user_id"]
+                zotero_block["user_mode"] = "user"
+            if "api_key" not in zotero_block:
+                zotero_block = {}  # globally, a library alone means nothing
         if zotero_block:
             updated["Zotero"] = zotero_block
         else:
@@ -272,7 +296,18 @@ def _keys_form(
             updated.pop("rate_limits", None)
         return updated
 
-    def save() -> None:
+    async def save() -> None:
+        key = (zotero_key.value or "").strip()
+        if (
+            inherited is None
+            and key
+            and detected.get("key") != key
+            and (key != saved_key or not zotero.get("user_id"))
+        ):
+            # Best effort: without it, the owner is asked to Zotero when needed.
+            ok, _, info = await run.io_bound(editor.check_zotero_key, key)
+            if ok:
+                detected.update(key=key, user_id=info.user_id)
         try:
             updated = collect_edits()
             path = save_data(updated)
@@ -388,4 +423,5 @@ def render(ctx: AppContext, review: Review) -> None:
         lambda updated: editor.save_review_keys(review.folder, updated),
         inherited=inherited,
         load_error=load_error,
+        review=review,
     )

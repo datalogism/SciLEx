@@ -18,9 +18,10 @@ from nicegui import events, run, ui
 
 from scilex import review_tags
 from scilex.constants import doi_to_url, is_valid
+from scilex.gui.components import criteria_panel, paper_details
 from scilex.gui.components.errors import show_error
 from scilex.gui.pages.overview import _hbar
-from scilex.gui.services import members
+from scilex.gui.services import members, paper_enrich, zotero_library
 from scilex.gui.services.screening import (
     DECISION_LABELS,
     EXCLUDE,
@@ -64,6 +65,16 @@ COLUMN_DEFS = [
         "headerName": "Cited",
         "width": 90,
         "filter": "agNumberColumnFilter",
+        "headerTooltip": "Citation count from Collect, or from the citation network "
+        "fetched in ⑥ Enrich when it is higher",
+    },
+    {
+        "field": "cited_in_corpus",
+        "headerName": "In corpus",
+        "width": 100,
+        "filter": "agNumberColumnFilter",
+        "headerTooltip": "Papers of this review citing it (citation network "
+        "fetched in ⑥ Enrich)",
     },
     {"field": "decision", "headerName": "Decision", "width": 110},
 ]
@@ -91,6 +102,12 @@ NOTICE_COUNTS = (
     ("Semantic Scholar citations", "ss_citation_count"),
     ("Crossref citations", "crossref_cited_by"),
     ("References", "ss_reference_count"),
+)
+# Notice counts from the citation network: (label, key of network_counts).
+NETWORK_COUNTS = (
+    ("Citing papers (network)", "network_citers"),
+    ("Cited in corpus", "cited_in_corpus"),
+    ("References (network)", "network_references"),
 )
 SELECTION_FILENAME = "explore_selection.csv"
 
@@ -126,7 +143,7 @@ def render(ctx: AppContext, review: Review) -> None:
             return
         loading.delete()
         with container:
-            ExplorePage(review, session, ctx.profile).build()
+            ExplorePage(review, session, ctx.profile, ctx=ctx).build()
 
     ui.timer(0, load, once=True)
 
@@ -140,9 +157,19 @@ def _split_tag(tag: str) -> tuple[str, str]:
 class ExplorePage:
     """UI state of the Explore screen."""
 
-    def __init__(self, review: Review, session: ScreeningSession, profile=None):
+    def __init__(
+        self, review: Review, session: ScreeningSession, profile=None, ctx=None
+    ):
         """Bind the page to the papers of ``review``; ``profile``: the app user."""
         self.review = review
+        self.ctx = ctx  # runs the enrichment of one paper (None: not offered)
+        self.criteria = criteria_panel.load_criteria(review)
+        from scilex.gui.services import zotero_library
+
+        try:
+            self.zotero_source = zotero_library.load_source(review.folder)
+        except Exception:  # an unreadable zotero_source.yml: no Zotero links
+            self.zotero_source = None
         self.me = getattr(profile, "orcid", "") or ""
         self.session = session
         self.options = session.facet_options()
@@ -272,6 +299,8 @@ class ExplorePage:
                 ui.space()
                 if decision:
                     ui.badge(DECISION_LABELS[decision.decision]).props("outline")
+                if self.ctx is not None:
+                    self._enrich_menu(key)
             ui.label(detail["title"] or "(no title)").classes("text-lg font-bold")
             if detail["authors"]:
                 ui.label(detail["authors"]).classes("text-sm")
@@ -283,7 +312,14 @@ class ExplorePage:
             ui.label(" · ".join(m for m in meta if m and m != NONE_VALUE)).classes(
                 "text-sm text-gray-600"
             )
+            paper_details.render_badges(record)
             with ui.row().classes("gap-3"):
+                for label, link in zotero_library.item_links(
+                    self.zotero_source, str(record.get("zotero_key") or "")
+                ):
+                    ui.link(
+                        label, link, new_tab=not link.startswith("zotero:")
+                    ).classes("text-sm").mark("explore-zotero-link")
                 if detail["doi"] and doi_to_url(detail["doi"]):
                     ui.link(
                         detail["doi"], doi_to_url(detail["doi"]), new_tab=True
@@ -302,10 +338,27 @@ class ExplorePage:
             )
             ui.label(f"Origin: {origin}").classes("text-xs text-gray-500")
             self._workflow_row(key, record.get("tags"))
+            if self.criteria:
+
+                async def change(add: list[str], remove: list[str]) -> None:
+                    await self.change_tags(key, add, remove)
+
+                criteria_panel.render_criteria(
+                    record,
+                    self.criteria,
+                    change,
+                    included=bool(decision and decision.decision == "include"),
+                )
             counts = [
                 f"{label}: {int(float(record[column]))}"
                 for label, column in NOTICE_COUNTS
                 if is_valid(record.get(column)) and _is_number(record[column])
+            ]
+            network = self.session.network_counts(key)
+            counts += [
+                f"{label}: {network[name]}"
+                for label, name in NETWORK_COUNTS
+                if name in network
             ]
             if counts:
                 ui.label(" · ".join(counts)).classes("text-xs text-gray-500")
@@ -388,26 +441,77 @@ class ExplorePage:
                     ).props("dense outline clickable").tooltip("Filter on this value")
 
     def _tag_table(self, tags: list[str]) -> None:
-        """Tags grouped by annotation dimension (``DIMENSION:value``)."""
-        grouped: dict[str, list[str]] = {}
-        for tag in tags:
-            dimension, _ = _split_tag(tag)
-            grouped.setdefault(dimension, []).append(tag)
+        """Annotations grouped by dimension (pending values highlighted), other tags."""
+        paper_details.render_annotations(
+            ";".join(tags), on_click=lambda tag: self.add_filter("tags", tag)
+        )
+
+    def _enrich_menu(self, key: str) -> None:
+        """Run one enricher of ⑥ Enrich on this paper only."""
         with (
-            ui.expansion(f"Tags ({len(tags)})", value=True)
-            .classes("w-full")
-            .props("dense")
+            ui.button("Enrich", icon="auto_awesome")
+            .props("flat dense no-caps")
+            .mark("explore-enrich"),
+            ui.menu(),
         ):
-            for dimension in sorted(grouped, key=lambda d: (d == "", d)):
-                with ui.row().classes("items-center gap-1"):
-                    ui.label(dimension or "Other").classes(
-                        "text-xs font-medium text-gray-600 w-40"
-                    )
-                    for tag in grouped[dimension]:
-                        ui.chip(
-                            _split_tag(tag)[1],
-                            on_click=lambda _, t=tag: self.add_filter("tags", t),
-                        ).props("dense outline clickable").tooltip(tag)
+            for source, label in paper_enrich.SOURCES.items():
+                ui.menu_item(
+                    label,
+                    on_click=lambda _, s=source: self.enrich(key, s),
+                ).mark(f"explore-enrich-{source}")
+
+    async def enrich(self, key: str, source: str) -> None:
+        """Enrich the paper ``key`` from ``source``, then show what changed."""
+        from scilex.gui.services import analyses
+        from scilex.gui.services.jobs import (
+            JobConflictError,
+            results_resource,
+            wait_for,
+        )
+
+        def body(job) -> str:
+            def progress(percent: int, message: str) -> None:
+                job.progress, job.message = percent, message
+
+            return paper_enrich.enrich_paper(
+                self.review, key, source, progress, job.cancel_event
+            )
+
+        try:
+            job = self.ctx.runner.start_task(
+                self.review,
+                f"paper-{source}",
+                body,
+                history_key="",  # one paper: not a run of the whole corpus
+                resources=[
+                    results_resource(self.review.id, analyses.results_mode(source))
+                ],
+            )
+        except JobConflictError as exc:
+            show_error("Cannot enrich this paper now", exc, expected=True)
+            return
+        waiting = ui.notification(
+            f"Enriching from {paper_enrich.SOURCES[source].split(' (')[0]}…",
+            spinner=True,
+            timeout=None,
+        )
+        job = await wait_for(job)
+        waiting.dismiss()
+        if job.error:
+            show_error(
+                "Cannot enrich this paper", RuntimeError(job.error), expected=True
+            )
+            return
+        fresh = await run.io_bound(paper_enrich.fresh_record, self.review, key)
+        if fresh is not None:
+            self.session.record(key).update(fresh)
+            detail = self.session.detail(key)
+            if is_valid(fresh.get("abstract")) and not detail.get("abstract"):
+                detail["abstract"] = str(fresh["abstract"])
+            tags = fresh.get("tags")
+            self.session.set_tags(key, str(tags) if is_valid(tags) else "")
+        ui.notify(job.message or "Done", type="positive", multi_line=True)
+        self.notice.refresh()
 
     # -- filters --------------------------------------------------------
 

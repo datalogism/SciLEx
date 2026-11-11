@@ -32,23 +32,26 @@ async def test_review_keys_override_global_ones(ctx, tmp_path, isolated_scilex_e
     async with user_simulation(build_root(ctx)) as user:
         await user.open(f"/review/{review.id}/keys")
         await user.should_see("This review uses the global keys")
-        user.find(marker="zotero-user-id").type("999")
+        await user.should_see(marker="zotero-target")  # the review's group
+        user.find(marker="key-Zotero").type("review-key")
         user.find(marker="keys-save").click()
         await user.should_see("Keys saved", retries=20)
 
     # The global file is untouched; the review stores only what differs.
-    assert yaml.safe_load(isolated_scilex_env.read_text())["Zotero"]["user_id"] == "1"
+    assert (
+        yaml.safe_load(isolated_scilex_env.read_text())["Zotero"]["api_key"] == "zkey"
+    )
     own = yaml.safe_load(keys_editor.review_keys_path(review.folder).read_text())
-    assert own == {"Zotero": {"user_id": "999"}}
+    assert own == {"Zotero": {"api_key": "review-key"}}
     effective = keys_editor.effective_keys(review.folder)
     assert effective["Zotero"] == {
-        "api_key": "zkey",
-        "user_id": "999",
+        "api_key": "review-key",
+        "user_id": "1",
         "user_mode": "user",
     }
     assert effective["IEEE"]["api_key"] == "global-ieee"
     config = Workspace.load_config(review)
-    assert config.api["Zotero"]["user_id"] == "999"
+    assert config.api["Zotero"]["api_key"] == "review-key"
     assert config.api["IEEE"]["api_key"] == "global-ieee"
 
     # Emptying every field brings the review back to the global keys only.

@@ -1,258 +1,149 @@
-# Architecture Overview
+# Architecture
 
-SciLEx architecture and core components.
-
-## System Overview
-
-```
-scilex.yml (review) + keys.yml (API keys)
-    ↓ scilex/settings (validate, presets, defaults)
-
-Collection System → APIs → JSON Storage
-    ↓
-Aggregation Pipeline → Filtering
-    ↓
-CSV Output / Zotero Export
-```
-
-## Core Components
-
-### 1. Collection System
-
-**Location**: `scilex/crawlers/collector_collection.py`
-
-Orchestrates parallel API collection:
-- Creates jobs from config (keywords × years × APIs)
-- Runs collectors in parallel (multiprocessing)
-- Tracks progress and handles errors
-- Skips completed queries (idempotent)
-
-**API Collectors** (`scilex/crawlers/collectors/`, one module per API):
-- Base class: `API_collector`
-- 11 active implementations: SemanticScholar, OpenAlex, IEEE, Elsevier, Springer, arXiv, HAL, DBLP, ISTEX, OpenAIRE, ORKG
-- 1 deprecated: GoogleScholar
-- Each handles query building, pagination, and response parsing
-
-### 2. Aggregation Pipeline
-
-**Location**: `scilex/aggregate_collect.py` (CLI) and `scilex/pipeline/` (logic)
-
-Processes collected papers:
-1. Load JSON files from all APIs
-2. Convert to unified format
-3. Deduplicate (DOI, URL, fuzzy title)
-4. Apply keyword filtering
-5. Score quality
-6. Filter by citations
-7. Rank by relevance
-8. Output to CSV
-
-**Parallel Mode** (`scilex/crawlers/aggregate_parallel.py`):
-- Multiprocessing for speed
-- Batch processing (5000 papers/batch)
-- Auto-detects CPU count
-
-### 3. Format Converters
-
-**Location**: `scilex/crawlers/aggregate.py`
-
-Convert API-specific formats to unified schema:
-- One converter function per API
-- Maps to Zotero-compatible format
-- Uses `MISSING_VALUE` sentinel for missing fields (never `None` or `""`)
-
-Converters registered in `FORMAT_CONVERTERS` dict:
-- `SemanticScholartoZoteroFormat`
-- `IstextoZoteroFormat`
-- `ArxivtoZoteroFormat`
-- `DBLPtoZoteroFormat`
-- `HALtoZoteroFormat`
-- `OpenAlextoZoteroFormat`
-- `IEEEtoZoteroFormat`
-- `SpringertoZoteroFormat`
-- `ElseviertoZoteroFormat`
-- `OpenAIREtoZoteroFormat`
-- `ORKGtoZoteroFormat`
-
-### 4. Filtering Engine
-
-**Location**: `scilex/aggregate_collect.py` (CLI) and `scilex/pipeline/` (logic)
-
-5-phase filtering:
-1. ItemType filter
-2. Keyword filter
-3. Quality filter
-4. Citation filter
-5. Relevance ranking
-
-### 5. Citation System
-
-**Location**: `src/citations/citations_tools.py`
-
-Three-tier strategy:
-1. SQLite cache (instant)
-2. Semantic Scholar data (if available)
-3. OpenCitations API (rate-limited)
-
-Cache location: `output/citation_cache.db`
-
-### 6. Zotero Integration
-
-**Location**: `src/Zotero/push_to_Zotero.py`
-
-API client for Zotero:
-- Bulk uploads (50 items/batch)
-- Duplicate detection by URL
-- Collection management
-
-## Data Flow
-
-### Collection
+SciLEx has three layers: a **core library** (collection, aggregation, enrichment,
+analyses, exports) driven by `scilex.yml`; the **command line** (`scilex-*` entry
+points, thin wrappers around the core); and the **desktop app** (`scilex.gui`, NiceGUI
+in a native window), whose services call the same core. The user-facing view of each
+part is in [Modules](../modules/index.md).
 
 ```
-Config → Job Generation → Parallel Workers → API Calls → JSON Files
+                         scilex.yml  +  keys.yml
+                                 │  scilex/settings (schema, presets, loader)
+              ┌──────────────────┼──────────────────────────┐
+              ▼                  ▼                          ▼
+        command line       core library               desktop app
+        scilex-*      ──►  crawlers/ pipeline/   ◄──  gui/pages    (display only)
+                           citations/ snowball/       gui/services (logic, no UI)
+                           graph_analysis/ kg/        gui/components
+                           Zotero/ rdf/ …
+                                 │
+                                 ▼
+             review folder + output/<name>/   (plain files, see "Files of a review")
+                                 │
+                                 ▼
+                Zotero group  ·  BibTeX / CSV / Turtle  ·  knowledge graph
 ```
 
-Each job:
-- API name
-- Keyword combination
-- Year
-- Output path
+## Core library
 
-Output: `output/collect_YYYYMMDD_HHMMSS/{API}/{query_id}/page_*`
+| Package / module | Module (docs) | Role |
+|---|---|---|
+| `settings/` | ① Configure | `scilex.yml` / `keys.yml`: pydantic schema (unknown keys rejected), presets, loader, legacy migration, `scilex config` |
+| `crawlers/collectors/` | ② Collect | one collector per API, inheriting `API_collector` (`base.py`) |
+| `crawlers/collector_collection.py` | ② Collect | jobs keywords × years × APIs, parallel runs, idempotent resume |
+| `crawlers/adaptive_rate_limiter.py`, `circuit_breaker.py`, `key_pool.py`, `vpn/` | ② Collect | rate limits, failing APIs, key rotation, NordVPN rotation |
+| `crawlers/aggregate.py`, `aggregate_parallel.py` | ② Collect | API formats → one Zotero-shaped format; parallel aggregation |
+| `pipeline/` | ② Collect | filters, ranking, DOI recovery, open access, venue ranks, reports |
+| `citations/` | ⑥ Enrich | citation counts and references (SQLite cache, fetchers) |
+| `PapersWithCode/`, `enrich_with_pwc.py` | ⑥ Enrich | Papers with Code client and title matching |
+| `linked_enrichment.py` | ⑥ Enrich | Crossref, Linked Papers With Code, ORKG |
+| `keyword_annotation.py`, `paper_types.py`, `citation_metrics.py` | ⑥ Enrich | search-keyword tags, paper types, metrics |
+| `snowball/`, `snowball_sampling.py`, `seed_papers.py` | ⑤ Extend | snowball sampling, seed papers |
+| `keyword_suggestions/`, `suggest_keywords.py` | ⑤ Extend | keyword suggestions |
+| `graph_analysis/`, `summarize/`, `report_charts.py` | ⑦ Analyses | citation graphs, communities, summaries, charts |
+| `tag_analysis.py`, `tagging/`, `report_annotations.py`, `annotation_agreement.py` | ④ Annotate, ⑦ Analyses | annotation tags, grid, report, Krippendorff's alpha |
+| `review_tags.py` | ④ Annotate | workflow tags (`ANNOT:`, `ANNOT_VALID_BY:`, `DELETED_BY:`, `KEEP:`…) |
+| `Zotero/`, `push_to_zotero.py` | Zotero, ⑧ Export | Zotero API client, push |
+| `export_to_bibtex.py`, `export_to_turtle.py`, `rdf/` | ⑧ Export | BibTeX and BIBO Turtle |
+| `kg/`, `build_kg.py` | ⑧ Export | knowledge graph with the pinned scilex-lpwc-ap profile (`kg/ap/`) |
+| `user_profile.py` | Workspace | the user's ORCID iD (`user.yml`) |
 
-### Aggregation
-
-```
-JSON Files → Format Conversion → Deduplication → Filtering → CSV
-```
-
-Output: `aggregated_data.csv` with columns:
-- Core: title, authors, year, DOI, abstract
-- Publication: itemType, publicationTitle, volume, issue
-- Metadata: nb_citation, quality_score, relevance_score, archive
-
-## Design Patterns
-
-### Factory Pattern
-API collectors created dynamically:
-```python
-api_collectors = {
-    'SemanticScholar': SemanticScholar_collector,
-    'OpenAlex': OpenAlex_collector,
-    'OpenAIRE': OpenAIRE_collector,
-    'ORKG': ORKG_collector,
-    ...
-}
-collector = api_collectors[api_name](config)
-```
-
-### Circuit Breaker
-Fails fast for broken APIs:
-- Tracks consecutive failures
-- Opens circuit after 5 failures
-- Skips requests when open
-
-### Repository Pattern
-Abstracts data storage:
-- JSON for raw collection data
-- CSV for aggregated results
-- SQLite for citation cache
-
-## Performance Features
-
-- **Parallel Collection**: Multiple APIs simultaneously
-- **Parallel Aggregation**: Batch processing with multiprocessing
-- **Citation Caching**: SQLite cache avoids redundant API calls
-- **Circuit Breaker**: Skip broken APIs quickly
-- **Rate Limiting**: Per-API throttling
-- **Bulk Operations**: Zotero uploads in batches
-
-## Configuration System
-
-Two user-facing files, validated by `scilex/settings/`:
-
-- `scilex.yml` (one per review): pydantic models in `settings/schema.py` (unknown keys are rejected),
-  named presets in `settings/presets.py`.
-- `keys.yml` (shared, `~/.config/scilex/keys.yml`): API keys and rate limits, overridable with
-  `SCILEX_<API>_<FIELD>` environment variables.
-
-Priority for `scilex.yml` values: code defaults < preset < `scilex.yml` < command-line options.
-
-`settings/loader.py` discovers and merges the files and `to_legacy()` converts them to the internal
-`(main_config, api_config)` dictionaries consumed by `SciLExConfig`, the pipeline and the web API.
-`settings/resolve.py` (`resolve_legacy_configs`) is the single entry point that also falls back to the
-legacy `scilex.config.yml` + `scilex.advanced.yml` + `api.config.yml` files. `settings/migrate.py` converts
-those to the new format (`scilex config migrate`).
-
-To add an option: add it to the schema (`settings/schema.py`), map it in `to_legacy()`, handle it in
-`settings/migrate.py`, document it in `scilex.yml.example` and in `docs/reference/configuration.md`.
-
-See the [Configuration Reference](../reference/configuration.md).
-
-## Error Handling
-
-- Specific exception types (no bare `except`)
-- 30-second timeouts on all API calls
-- Retry logic with exponential backoff
-- State files for recovery
-
-## Directory Structure
+### Collection and aggregation
 
 ```
-scilex/
-├── settings/                  # scilex.yml / keys.yml: schema, presets, loader, resolve, migrate, cli, advanced
-├── config.py, config_defaults.py   # SciLExConfig and code defaults
-├── crawlers/
-│   ├── collectors/            # One collector class per API (inherit API_collector)
-│   ├── collector_collection.py  # Orchestration and job management
-│   ├── aggregate.py           # Format converters (one per API)
-│   ├── aggregate_parallel.py  # Parallel aggregation
-│   ├── converter_utils.py     # Shared converter helpers
-│   └── key_pool.py            # API key rotation
-├── pipeline/                  # Aggregation steps (filters, ranking, enrichment, reports)
-├── citations/                 # Citation cache, fetchers, reference fetcher
-├── Zotero/, rdf/, PapersWithCode/ (client.py, title_matcher.py, tag_formatter.py), vpn/, templates/
-├── run_collection.py          # scilex-collect
-├── aggregate_collect.py       # scilex-aggregate
-├── push_to_zotero.py          # scilex-push-zotero
-├── export_to_bibtex.py, export_to_turtle.py, enrich_with_pwc.py, init_templates.py
-└── webapi/                    # FastAPI server
-
-scilex.yml.example, keys.yml.example   # templates at the repository root
-
-output/
-└── <name>/                    # One folder per review (name in scilex.yml)
-    ├── {API}/                 # Per-API raw results
-    ├── config_used.yml        # Internal snapshot used by --resume
-    └── aggregated_results.csv # Final output
+scilex.yml → jobs (keyword combination × year × API) → parallel collectors → JSON pages
+JSON pages → format converters → deduplication (DOI, normalised title)
+           → abstracts, citations, optional venue rank / open access / LLM score
+           → item type → quality → abstract quality → citations → relevance ranking
+           → output/<name>/aggregated_results.csv
 ```
 
-## Adding New Components
+Converters use the `MISSING_VALUE` sentinel for missing fields, never `None` or `""`.
+Each filtering phase writes its counts to `filtering_summary.json`, which feeds the
+PRISMA flow.
 
-### New API Collector
+### Configuration
 
-1. Create a collector class in `scilex/crawlers/collectors/<api_name>.py`
-2. Implement abstract methods
-3. Add format converter in `scilex/crawlers/aggregate.py`
-4. Register in `api_collectors` dict in `scilex/crawlers/collector_collection.py`
-5. Add to `keys.yml.example` and the `search.apis` list of `scilex.yml.example`
+Priority of `scilex.yml` values: code defaults < preset < `scilex.yml` < command-line
+options. `settings/loader.py` discovers and merges the files and `to_legacy()` converts
+them to the internal `(main_config, api_config)` dictionaries used by `SciLExConfig` and
+the pipeline. `settings/resolve.py` (`resolve_legacy_configs`) also falls back to the
+legacy three-file configuration; `settings/migrate.py` converts it.
 
-See [Adding Collectors](adding-collectors.md) for details.
+To add an option: add it to `settings/schema.py`, map it in `to_legacy()`, handle it in
+`settings/migrate.py`, describe it in `gui/services/field_catalog.py` (Configure form),
+and document it in `scilex.yml.example` and `docs/reference/configuration.md`.
 
-### New Filter
+## Desktop app (`scilex/gui`)
 
-1. Add the filter in `scilex/pipeline/`
-2. Add the config option (schema, `to_legacy`, migrate, example, docs: see Configuration System)
-3. Insert in filtering pipeline
-4. Update documentation
+| Folder | Rule |
+|---|---|
+| `pages/` | one module per screen, **display only**; `render(ctx, review)` |
+| `services/` | all the logic, **no UI code**, tested without a window |
+| `components/` | reusable widgets (job panel, Zotero picker, paper details, sync badge…) |
+| `app.py`, `native_window.py`, `self_test.py` | entry point, pywebview window, `--self-test` |
+| `state.py` | `AppContext`: workspace, job runner, user profile |
+
+The sidebar is declared in `components/stepper.py` (`PIPELINE_STEPS`): key, label,
+Material icon, whether it needs results, and whether it hides once the review has papers.
+Enrichers and analyses are declared once in `services/analyses.py` (`ANALYSES`, with
+their group `enrich`, `analyse` or `extend`) and drawn as tabs by `pages/analyses.py`.
+
+### Jobs and concurrency
+
+`services/jobs.py` runs every costly action as a `Job` in a thread. Each job declares
+the **resources** it uses (a review's results in read, row-write or rewrite mode, a
+Zotero library, the collection slot); `conflicts()` decides which jobs wait for which.
+`services/results_store.py` merges concurrent row writes to `aggregated_results.csv`, so
+enrichers running together never erase each other's cells.
+
+### Traceability
+
+- `services/journal.py`: append-only `workflow.jsonl` per review (agent = ORCID iD),
+  mappable to PROV-O ([provenance proposal](../kg/provenance-proposal.md));
+- `services/paper_log.py`: when and how each paper entered the review;
+- `services/run_history.py`: last completion of each action;
+- `services/prisma.py`, `provenance.py`, `consistency.py`: the Overview, from those files.
+
+### Zotero
+
+`services/zotero_library.py` (libraries, groups, collections, review source),
+`zotero_sync.py` (two-way sync with per-side baselines), `zotero_extend.py`,
+`extension_collection.py` (one collection per extension), `agreement.py`,
+`members.py`, `zotero_citations.py` (frozen citation snapshot).
+
+Secrets: every text that can reach a knowledge graph or a Zotero note goes through
+`crawlers.utils.sanitize_secrets`; no API key is ever written to a graph, an import or
+the journal.
+
+## Documentation
+
+Sphinx with MyST Markdown (`docs/conf.py`). Module icons are generated from the app
+icon by `docs/_tools/make_module_icons.py`; run it after adding a module and add the
+module to its `MODULES` table, `docs/modules/` and the toctree of `docs/index.md`.
+
+```bash
+pip install -r docs/requirements.txt
+sphinx-build docs docs/_build
+```
 
 ## Testing
 
-Tests in `tests/`:
-- `test_dual_keyword_logic.py` - Keyword matching
-- `test_openaire_collector.py` / `test_openaire_aggregation.py` - OpenAIRE
-- `test_orkg_collector.py` / `test_orkg_aggregation.py` - ORKG
-- Unit tests for collectors and format converters
+```bash
+uv sync --extra dev --extra gui
+uv run python -m pytest tests/                 # all tests
+uv run python -m pytest tests/ -m "not live"   # offline only
+uv run python -m pytest tests/gui/             # desktop app services and pages
+```
 
-Run: `uv run python -m pytest tests/`
+`tests/conftest.py` isolates the developer's home (keys, reviews, user profile), so the
+suite never reads your real configuration.
+
+## Adding components
+
+- **API collector**: see [Adding Collectors](adding-collectors.md).
+- **Enricher or analysis**: write the core function, register an entry in
+  `ANALYSES` (`services/analyses.py`) with its group, options and runner, declare its
+  job resources, then document it in `docs/modules/`.
+- **Pipeline step of the review**: a page in `pages/`, its logic in `services/`, a `Step`
+  in `components/stepper.py`, then a module page and icon.

@@ -5,6 +5,7 @@ import importlib.util
 
 from nicegui import ui
 
+from scilex.gui.components.running_jobs import render_jobs_button
 from scilex.gui.components.stepper import (
     DEFAULT_STEP,
     NEEDS_RESULTS_HINT,
@@ -62,6 +63,8 @@ def render(ctx: AppContext, review_id: str, step: str = DEFAULT_STEP) -> None:
         return
     if step not in STEPS:
         step = DEFAULT_STEP
+    if STEPS[step].hidden_with_results and review.has_results and not review.error:
+        step = "extend"  # Collect of a review with papers: Extend > New collect
     ui.page_title(f"{STEPS[step].label_for(review)} · {review.name} · SciLEx")
 
     with ui.row().classes("w-full p-4 gap-6 no-wrap items-start"):
@@ -70,6 +73,7 @@ def render(ctx: AppContext, review_id: str, step: str = DEFAULT_STEP) -> None:
                 if review.has_results and not review.error:
                     render_sync_badge(ctx, review)
                 ui.label(review.name).classes("text-lg font-bold")
+                render_jobs_button(ctx)
             ui.label(str(review.folder)).classes(
                 "text-xs text-gray-500 px-2 pb-2 break-all w-52"
             )

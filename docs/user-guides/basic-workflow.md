@@ -172,6 +172,9 @@ LOG_LEVEL=DEBUG uv run scilex-collect
 
 ## Next Steps
 
+- [Modules](../modules/index.md) - Screening, annotation, extension, enrichment, analyses, export
+- [Command-line reference](../reference/cli.md) - Every command
+
 - [Advanced Filtering](advanced-filtering.md) - Filtering options
 - [Configuration](../getting-started/configuration.md) - All config parameters
 - [API Comparison](../reference/api-comparison.md) - API details

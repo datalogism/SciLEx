@@ -8,7 +8,7 @@ Common issues and solutions when using SciLEx.
 
 **Problem**:
 ```
-Error: Python 3.13+ required
+Error: Python 3.10+ required
 ```
 
 **Solution**:
@@ -16,7 +16,7 @@ Error: Python 3.13+ required
 # Check your Python version
 python --version
 
-# Install Python 3.13+ from python.org
+# Install Python 3.10+ (3.13 recommended) from python.org
 # Or use pyenv
 pyenv install 3.13
 pyenv local 3.13

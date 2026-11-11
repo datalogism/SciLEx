@@ -165,7 +165,7 @@ class _CollectionPicker:
         with ui.card().classes("w-full gap-2").mark("annotate-collection"):
             ui.label("Zotero collection").classes("text-lg font-bold")
             ui.label(
-                "Uses the Zotero key and library id of the API keys page. "
+                "Uses the global Zotero key and the review's Zotero group. "
                 + (
                     f"This review was created from '{source.collection_name}'."
                     if source

@@ -1,7 +1,8 @@
 """Choose a Zotero library (yours or a group), then the whole library or a collection.
 
-Used to import a review from Zotero and to set the Zotero library and collection
-of an existing review (each review has its own).
+The libraries are those the global Zotero key reaches. Used to import a review
+from Zotero and to set the dedicated Zotero group of a review
+(``groups_only``: a review's library is always a group).
 """
 
 from __future__ import annotations
@@ -22,15 +23,24 @@ WHOLE_LIBRARY = "__library__"
 class ZoteroPicker:
     """Library, collection and sub-collection widgets, filled from Zotero on demand."""
 
-    def __init__(self, current: ZoteroSource | None = None, allow_whole_library: bool = True):
+    def __init__(
+        self,
+        current: ZoteroSource | None = None,
+        allow_whole_library: bool = True,
+        groups_only: bool = False,
+        autoload: bool = False,
+    ):
         self.current = current
         self.allow_whole_library = allow_whole_library
+        self.groups_only = groups_only
         self.libraries: dict[str, ZoteroLibrary] = {}
         self.collections: dict[str, ZoteroCollection] = {}
         with ui.column().classes("w-full gap-1") as self.column:
             with ui.row().classes("w-full items-center no-wrap"):
                 self.library_select = (
-                    ui.select({}, label="Zotero library")
+                    ui.select(
+                        {}, label="Zotero group" if groups_only else "Zotero library"
+                    )
                     .classes("grow")
                     .mark("zotero-library-select")
                 )
@@ -45,14 +55,28 @@ class ZoteroPicker:
             self.subcollections = ui.checkbox(
                 "Include the sub-collections (kept as sub-corpora)", value=True
             ).mark("zotero-subcollections")
+            self.notice = ui.label("").classes("text-sm text-warning")
+            self.notice.set_visibility(False)
         self.library_select.on_value_change(lambda _: self._load_collections())
         if current is not None:
             key = self._library_key(current.library_type, current.library_id)
             self.library_select.set_options(
-                {key: current.library_name or f"{current.library_type} {current.library_id}"},
+                {
+                    key: current.library_name
+                    or f"{current.library_type} {current.library_id}"
+                },
                 value=key,
             )
             self.subcollections.value = current.include_subcollections
+        if autoload:
+            from scilex.gui.services import keys_editor
+
+            try:
+                configured = zotero_library.zotero_configured(keys_editor.load_keys())
+            except Exception:
+                configured = False
+            if configured:
+                ui.timer(0.1, self.load, once=True)
 
     @staticmethod
     def _library_key(library_type: str, library_id: str) -> str:
@@ -71,7 +95,9 @@ class ZoteroPicker:
     async def load(self) -> None:
         """List the libraries the key can read, then the collections of the chosen one."""
         try:
-            found = await run.io_bound(zotero_library.list_libraries)
+            found = await run.io_bound(
+                zotero_library.list_libraries, None, self.groups_only
+            )
         except (zotero_library.ZoteroNotConfiguredError, ConnectionError) as exc:
             show_error("Cannot list the Zotero libraries", exc, expected=True)
             return
@@ -81,7 +107,19 @@ class ZoteroPicker:
         self.libraries = {
             self._library_key(lib.library_type, lib.library_id): lib for lib in found
         }
-        chosen = self.library_select.value if self.library_select.value in self.libraries else None
+        self.notice.set_visibility(not found)
+        if not found:
+            self.notice.set_text(
+                "The Zotero key reaches no group: create one on zotero.org/groups "
+                "and give the key access to it (zotero.org/settings/keys)."
+                if self.groups_only
+                else "The Zotero key reaches no library."
+            )
+        chosen = (
+            self.library_select.value
+            if self.library_select.value in self.libraries
+            else None
+        )
         self.library_select.set_options(
             {key: lib.name for key, lib in self.libraries.items()},
             value=chosen or next(iter(self.libraries), None),
@@ -112,7 +150,8 @@ class ZoteroPicker:
                 WHOLE_LIBRARY if self.allow_whole_library else None
             )
         if value not in options:
-            value = None
+            # A dedicated group is used whole unless a collection is chosen.
+            value = WHOLE_LIBRARY if WHOLE_LIBRARY in options else None
         self.collection_select.set_options(options, value=value)
 
     def source(self) -> ZoteroSource | None:
@@ -120,6 +159,8 @@ class ZoteroPicker:
         library = self.library
         if library is None:
             if self.current is not None and self.collection_select.value is None:
+                if self.groups_only and self.current.library_type != "group":
+                    return None
                 return self.current  # nothing reloaded: keep the current choice
             return None
         if self.collection_select.value == WHOLE_LIBRARY:

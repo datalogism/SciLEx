@@ -154,12 +154,20 @@ def run_file_export(review: Review, fmt: str, scope: str) -> Path:
 
 
 def zotero_settings(config: SciLExConfig) -> ZoteroSettings | None:
-    """Zotero credentials from the config, or None if incomplete."""
+    """Zotero credentials from the config, or None without a key.
+
+    The global key is enough: ``user_id`` is "" when the keys file has no
+    library id (the review's own group is used).
+    """
     block = config.api.get("Zotero") or config.api.get("zotero") or {}
     api_key, user_id = block.get("api_key"), block.get("user_id")
-    if not api_key or not user_id:
+    if isinstance(api_key, list):
+        api_key = api_key[0] if api_key else None
+    if not api_key:
         return None
-    return ZoteroSettings(str(api_key), str(user_id), block.get("user_mode") or "user")
+    return ZoteroSettings(
+        str(api_key), str(user_id or ""), block.get("user_mode") or "user"
+    )
 
 
 def push_to_zotero(
@@ -182,7 +190,11 @@ def push_to_zotero(
     if zotero_api is None:
         settings = zotero_settings(config)
         if settings is None:
-            raise ValueError("Zotero settings are missing in keys.yml.")
+            raise ValueError("The global Zotero key is missing (API keys page).")
+        if source is None and not settings.user_id:
+            raise ValueError(
+                "The review has no Zotero group: choose it on its Zotero group page."
+            )
         from scilex.Zotero.zotero_api import ZoteroAPI
 
         library_id, library_type = (
@@ -199,7 +211,9 @@ def push_to_zotero(
     else:
         collection = zotero_api.get_or_create_collection(review.name)
         if not collection:
-            raise RuntimeError(f"Could not get or create the collection {review.name!r}.")
+            raise RuntimeError(
+                f"Could not get or create the collection {review.name!r}."
+            )
         key = collection["data"]["key"]
     existing_urls = zotero_api.get_existing_item_urls(key)
     templates = prefetch_templates(data)

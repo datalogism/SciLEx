@@ -297,6 +297,24 @@ def check_zotero(api_key: str, user_id: str, user_mode: str) -> tuple[bool, str]
     )
 
 
+def check_zotero_key(api_key: str):
+    """Ask Zotero whose key this is and what it reaches (never returns the key).
+
+    Returns:
+        ``(ok, message, info)``; ``info`` is a ``ZoteroKeyInfo`` or None.
+    """
+    from scilex.gui.services import zotero_library
+
+    try:
+        info = zotero_library.key_info(api_key, refresh=True)
+    except (zotero_library.ZoteroNotConfiguredError, ConnectionError) as exc:
+        message = str(exc)
+        if not (api_key or "").strip():
+            message = "Enter the API key first."
+        return False, message, None
+    return True, info.describe(), info
+
+
 def _interpret_status(status: int) -> tuple[bool, str]:
     if 200 <= status < 300:
         return True, "Key accepted."

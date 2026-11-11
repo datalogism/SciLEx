@@ -31,9 +31,11 @@
 
 - [Overview](#overview)
 - [Architecture](#architecture)
+- [Modules](#modules)
 - [Key Features](#key-features)
 - [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
+- [Where SciLEx Is Used](#where-scilex-is-used)
 - [Citation](#citation)
 - [Contributing](#contributing)
 - [License](#license)
@@ -42,7 +44,7 @@
 
 ## Overview
 
-**SciLEx** (Science Literature Exploration) is a Python toolkit for systematic literature reviews. It crawls 14 academic APIs in parallel, deduplicates results using DOI-based and normalized title exact matching, and applies a 5-phase quality filtering pipeline before exporting to Zotero, BibTeX or RDF/Turtle.
+**SciLEx** (Science Literature Exploration) is a Python toolkit for systematic literature reviews. It crawls 14 academic APIs in parallel, deduplicates results using DOI-based and normalized title exact matching, and applies a 5-phase quality filtering pipeline. It then carries the review through eligibility criteria, screening, collaborative annotation in a Zotero group, corpus extension, enrichment from open scholarly sources and analyses, up to an export to Zotero, BibTeX, RDF/Turtle or a knowledge graph conforming to the [scilex-lpwc-ap](https://codeberg.org/cringwald/scilex-lpwc-ap) application profile.
 It runs from the command line or from a desktop app (macOS, Windows, Linux) that works on the same review folders.
 
 
@@ -51,6 +53,33 @@ It runs from the command line or from a desktop app (macOS, Windows, Linux) that
 ## Architecture
 
 ![SciLEx framework architecture](img/Framework.png)
+
+---
+
+## Modules
+
+Each step of a review is a module (a screen of the desktop app, and for most a `scilex-*` command), presented with the flint of the SciLEx icon. See [Modules at a glance](https://scilex.readthedocs.io/en/latest/modules/index.html).
+
+<p align="center">
+  <img src="docs/_static/modules/map.png" width="100%" alt="Map of the SciLEx modules">
+</p>
+
+| Module | Purpose |
+|---|---|
+| Workspace | reviews, ORCID iD (required), global API keys, running jobs |
+| Overview | PRISMA flow, provenance card, history, things to check |
+| Explore | filter the corpus, break it down, read each paper's notice |
+| ① Configure | `scilex.yml`: search, filters, citations, VPN rotation |
+| ② Collect | 14 APIs, deduplication, 5-phase filtering, ranking |
+| Eligibility criteria | the SLR criteria table as testable, reversible rules |
+| ③ Screen | include / exclude / maybe, with keyboard shortcuts |
+| ④ Annotate | annotation grid in Zotero, annotators, agreement study (Krippendorff's alpha) |
+| ⑤ Extend | new collect, snowballing, keyword suggestions, BibTeX, Zotero — one Zotero collection per extension |
+| Consolidate | cross-source duplicates, filters, required sub-corpora |
+| ⑥ Enrich | citations, Papers with Code, Crossref, Linked Papers With Code, ORKG, search keywords, paper types, citation metrics |
+| ⑦ Analyses | charts, citation graph, accessibility, annotations, summaries — compared by paper type or collection |
+| ⑧ Export | BibTeX, CSV, RDF/Turtle, Zotero, knowledge graph (SHACL-checked) |
+| Zotero | one group per review, members, two-way sync, tag conventions |
 
 ---
 
@@ -67,9 +96,13 @@ It runs from the command line or from a desktop app (macOS, Windows, Linux) that
 - Citation count enrichment via CrossRef, OpenCitations, OpenAlex and Semantic Scholar
 - Optional CORE/SJR venue ranking, open-access lookup (Unpaywall) and LLM relevance screening (OpenRouter)
 - Papers with Code enrichment: tasks, methods, evaluated benchmarks, official GitHub repository and stars from [paperswithcode.co](https://paperswithcode.co) (anonymous API, no key)
-- Analyses: co-authorship graphs and communities, snowball sampling, seed papers, cluster summaries, keyword suggestions
-- Export to Zotero (bulk upload), BibTeX (with PDF links) or RDF/Turtle
-- Desktop app: configure, collect, screen, export and analyse a review without the command line
+- Crossref, Linked Papers With Code and ORKG enrichment; default paper types (Benchmark, Review, Dataset, Model); citation metrics (PageRank, citations per year…)
+- Eligibility criteria (period, coherence, language, access, peer review, DOI, duplicates) as testable rules with exceptions
+- Collaborative annotation in a dedicated Zotero group: annotation grid, balanced assignment, inter-annotator agreement, two-way sync of tags
+- Analyses: citation graphs and communities, accessibility and coverage, annotation crossings, cluster summaries, snowball sampling, seed papers, keyword suggestions
+- Export to Zotero (bulk upload), BibTeX (with PDF links), RDF/Turtle, or a knowledge graph with the scilex-lpwc-ap application profile
+- Traceability: PRISMA flow, append-only workflow journal (agent = ORCID iD), per-paper import log
+- Desktop app: the whole review without the command line
 - Idempotent, resumable collections (`--resume`, incremental `--since`)
 
 ### Supported APIs
@@ -106,15 +139,17 @@ See the [API Comparison](https://scilex.readthedocs.io/en/latest/reference/api-c
     ├── keys.yml.example
     ├── scilex/
     │   ├── run_collection.py, aggregate_collect.py, collect_status.py   # CLI entry points
-    │   ├── enrich_with_hf.py, push_to_zotero.py, export_to_*.py          # enrichment and outputs
+    │   ├── enrich_with_*.py, linked_enrichment.py, paper_types.py      # enrichment
+    │   ├── push_to_zotero.py, export_to_*.py, build_kg.py               # outputs
     │   ├── settings/        # scilex.yml / keys.yml schema, presets, loader, migration
     │   ├── templates/       # scilex init templates
     │   ├── pipeline/        # aggregation, filtering, ranking, reports
     │   ├── crawlers/        # one collector per API
-    │   ├── citations/       # 4-tier citation resolution
+    │   ├── citations/       # citation resolution and cache
     │   ├── rdf/             # RDF/Turtle export
+    │   ├── kg/              # knowledge graph (pinned scilex-lpwc-ap profile in kg/ap/)
     │   ├── graph_analysis/, snowball/, summarize/, keyword_suggestions/
-    │   ├── gui/             # desktop app (scilex-gui)
+    │   ├── gui/             # desktop app (scilex-gui): pages/, services/, components/
     │   ├── Zotero/
     │   └── PapersWithCode/
     ├── tests/
@@ -233,6 +268,7 @@ Run the pipeline step by step:
 ❯ scilex-push-zotero        # Push to a Zotero collection
 ❯ scilex-export-bibtex      # Export to BibTeX
 ❯ scilex-export-turtle      # Export to RDF/Turtle
+❯ scilex-build-kg           # Knowledge graph (scilex-lpwc-ap profile, SHACL-checked)
 ```
 
 Every pipeline command accepts `--config PATH` and `--keys PATH`.
@@ -256,8 +292,8 @@ See the [Quick Start Guide](https://scilex.readthedocs.io/en/latest/getting-star
 
 Ready-to-run builds for macOS (`.dmg`), Windows (`.zip`) and Linux (`.tar.gz`) are attached to each
 [GitHub Release](https://github.com/Wimmics/SciLEx/releases/latest) (the macOS app is not signed yet:
-right-click → **Open** the first time). A review goes through ① Configure, ② Collect, ③ Screen, ④ Export, ⑤ Analyses and ⑥ Annotate (a review can also start from an existing Zotero collection);
-API keys are set once for all reviews.
+right-click → **Open** the first time). The app asks for your ORCID iD first; API keys (including one global Zotero key) are set once for all reviews, and each review gets its own Zotero group.
+A review goes through Overview, Explore, ① Configure, ② Collect, Eligibility criteria, ③ Screen, ④ Annotate, ⑤ Extend, Consolidate, ⑥ Enrich, ⑦ Analyses and ⑧ Export; it can also start from an existing Zotero library or a SciLEx knowledge graph.
 
 From a checkout:
 ```sh
@@ -267,7 +303,7 @@ From a checkout:
 ❯ uv run scilex-gui --self-test  # check the installation without opening a window
 ❯ scripts/build_gui.sh           # build a standalone app with PyInstaller (dist/), then self-test it
 ```
-See the [desktop app guide](docs/user-guides/gui.md).
+See the [desktop app guide](docs/user-guides/gui.md) and the [module pages](docs/modules/index.md).
 
 ### Testing
 
@@ -287,6 +323,26 @@ Then run the tests:
 
 ---
 
+
+## Where SciLEx Is Used
+
+### Projects
+
+| Project | Use of SciLEx |
+|---|---|
+| **Infinity project** | work packages WP8.6 *Workflow ecosystem lifecycle* and WP8.4 *AI tools* |
+| **[GOBLIN](https://cringwald.codeberg.page/GOBLIN-WG1.1/)** — COST Action CA23147 *Global Network on Large-Scale, Cross-domain and Multilingual Open Knowledge Graphs*, WG1 *Knowledge Graphs Engineering* | The WG1.1 community survey *Methodologies, tools and practices for KG modelling* collects, screens and annotates its literature with SciLEx (shared Zotero group `goblin-wg1.1_survey`) |
+
+### Articles
+
+- C. Ringwald, F. Gandon, C. Faron, F. Michel, H. Abi Akl. **A systematic review of relation extraction task since the emergence of Transformers.** arXiv:2511.03610, 2025 (submitted to ACM Computing Surveys). [arXiv](https://arxiv.org/abs/2511.03610) · [annotated Zotero bibliography](https://www.zotero.org/groups/6070963/scilex_re_systlitreview)
+- N.-E. Mbengue. **In Data or Invisible: Toward a Better Digital Representation of Low-Resource Languages with Knowledge Graphs.** PhD proposal, ESWC 2026, Dubrovnik. [arXiv:2605.05931](https://arxiv.org/pdf/2605.05931)
+- G. Montenegro. **Towards Ontology-Guided and Traceable GraphRAG for Legal Knowledge in Industrial Maintenance.** ISWC 2026. [HAL hal-05775660](https://inria.hal.science/hal-05775660v1/document)
+- B. Navet. **Knowledge Graphs as External Memory for LLM-based Scientific Assistants.** ISWC 2026. [HAL hal-05747244](https://hal.science/hal-05747244v1/document)
+
+Using SciLEx in a project or a paper? Open an [issue](https://github.com/Wimmics/SciLEx/issues) or a pull request to add it here.
+
+---
 
 ## Citation
 

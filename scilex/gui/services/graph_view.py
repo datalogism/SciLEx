@@ -73,6 +73,10 @@ class GraphView:
     edges: list[dict] = field(default_factory=list)
     papers: pd.DataFrame = field(default_factory=pd.DataFrame)
     graph_file: Path | None = None
+    # Colour of each value, per "colour by" choice (see COLOR_BY).
+    palettes: dict[str, dict[str, str]] = field(default_factory=dict)
+    # The review's results row of each drawn paper (details on click).
+    records: dict[str, dict] = field(default_factory=dict)
 
     @property
     def title(self) -> str:
@@ -127,6 +131,53 @@ def _paper_table(clusters_csv: Path) -> pd.DataFrame:
     frame["pagerank"] = pd.to_numeric(frame["pagerank"], errors="coerce").fillna(0.0)
     frame["year"] = frame["date"].map(_year)
     return frame
+
+
+COMMUNITY, PAPER_TYPE, COLLECTION = "community", "paper_type", "collection"
+COLOR_BY = {
+    COMMUNITY: "Community",
+    PAPER_TYPE: "Paper type",
+    COLLECTION: "Zotero collection",
+}
+NO_COLLECTION = "(no collection)"
+
+
+def _records_by_doi(collect_dir: Path) -> dict[str, dict]:
+    """The review's results rows, by normalised DOI."""
+    from scilex.gui.services.extend import read_results
+
+    try:
+        data = read_results(collect_dir / "aggregated_results.csv")
+    except (OSError, ValueError):
+        return {}
+    if data is None:
+        return {}
+    found = {}
+    for row in data.to_dict("records"):
+        doi = normalize_doi(row.get("DOI")) if is_valid(row.get("DOI")) else None
+        if doi:
+            found[doi] = row
+    return found
+
+
+def _groups(record: dict | None) -> tuple[str, str]:
+    """``(paper type, first Zotero collection)`` of a results row."""
+    from scilex import review_tags
+    from scilex.paper_types import effective_type
+
+    if record is None:
+        return "(unknown)", "(unknown)"
+    collections = review_tags.split_tags(record.get("zotero_collections"))
+    return effective_type(record), collections[0] if collections else NO_COLLECTION
+
+
+def _palette(values) -> dict[str, str]:
+    """A colour per value, the most frequent first."""
+    ranked = pd.Series(list(values), dtype=object).value_counts().index
+    return {
+        str(value): PALETTE[rank] if rank < len(PALETTE) else OTHER_COLOR
+        for rank, value in enumerate(ranked)
+    }
 
 
 def build_graph_view(
@@ -188,6 +239,7 @@ def build_graph_view(
         )
 
     max_rank = max(pagerank.values(), default=0.0) or 1.0
+    records = _records_by_doi(graph_dir.parent)
     nodes = []
     for node in shown:
         row = by_doi.loc[node] if node in by_doi.index else None
@@ -214,6 +266,8 @@ def build_graph_view(
                 "year": year,
                 "doi": node,
                 "cluster": cluster,
+                PAPER_TYPE: _groups(records.get(node))[0],
+                COLLECTION: _groups(records.get(node))[1],
                 "symbolSize": round(8 + 28 * (pagerank[node] / max_rank) ** 0.5, 1),
                 "itemStyle": {"color": colors[cluster]},
                 "tooltip": tooltip,
@@ -232,7 +286,14 @@ def build_graph_view(
     papers = frame[frame["doi_key"].isin(linked)].copy()
     papers["cluster_id"] = papers["cluster_id"].astype("Int64")
     papers = papers.sort_values(["cluster_id", "pagerank"], ascending=[True, False])
+    palettes = {
+        COMMUNITY: {str(c): color for c, color in colors.items()},
+        PAPER_TYPE: _palette(node[PAPER_TYPE] for node in nodes),
+        COLLECTION: _palette(node[COLLECTION] for node in nodes),
+    }
     return GraphView(
+        records={node: records[node] for node in shown if node in records},
+        palettes=palettes,
         name=name,
         total_papers=len(frame),
         linked_papers=len(linked),
@@ -264,15 +325,81 @@ def _layout(node_count: int) -> dict:
     }
 
 
-def chart_options(view: GraphView, cluster: int | None = None) -> dict:
-    """ECharts options of a force-directed graph, optionally one community only."""
+def group_of(node: dict, color_by: str) -> str:
+    """The value of ``node`` for the ``color_by`` choice."""
+    return str(node["cluster"] if color_by == COMMUNITY else node.get(color_by, ""))
+
+
+def compare_groups(view: GraphView, color_by: str) -> pd.DataFrame:
+    """Per paper type or collection: papers drawn, links inside and across groups."""
+    if color_by == COMMUNITY or not view.nodes:
+        return pd.DataFrame()
+    of = {node["id"]: group_of(node, color_by) for node in view.nodes}
+    rows: dict[str, dict] = {}
+    for node in view.nodes:
+        group = of[node["id"]]
+        row = rows.setdefault(
+            group,
+            {
+                "group": group,
+                "papers": 0,
+                "communities": set(),
+                "inside": 0,
+                "across": 0,
+            },
+        )
+        row["papers"] += 1
+        row["communities"].add(node["cluster"])
+    for edge in view.edges:
+        a, b = of.get(edge["source"]), of.get(edge["target"])
+        if a is None or b is None:
+            continue
+        if a == b:
+            rows[a]["inside"] += 1
+        else:
+            rows[a]["across"] += 1
+            rows[b]["across"] += 1
+    table = pd.DataFrame(
+        [{**row, "communities": len(row["communities"])} for row in rows.values()]
+    )
+    return table.sort_values("papers", ascending=False).rename(
+        columns={
+            "group": COLOR_BY[color_by],
+            "papers": "Papers drawn",
+            "communities": "Communities",
+            "inside": "Links inside",
+            "across": "Links to other groups",
+        }
+    )
+
+
+def chart_options(
+    view: GraphView, cluster: int | None = None, color_by: str = COMMUNITY
+) -> dict:
+    """ECharts options of a force-directed graph, optionally one community only.
+
+    ``color_by``: colour the papers by community, paper type or Zotero
+    collection (see ``COLOR_BY``), to compare them in the network.
+    """
     nodes = [
         node for node in view.nodes if cluster is None or node["cluster"] == cluster
     ]
     kept = {node["id"] for node in nodes}
     # Label the most central papers only, so the drawing stays readable.
     labelled = {node["id"] for node in nodes[:10]}
-    data = [{**node, "label": {"show": node["id"] in labelled}} for node in nodes]
+    palette = view.palettes.get(color_by) or {}
+    data = [
+        {
+            **node,
+            "label": {"show": node["id"] in labelled},
+            "itemStyle": {
+                "color": palette.get(
+                    group_of(node, color_by), node["itemStyle"]["color"]
+                )
+            },
+        }
+        for node in nodes
+    ]
     links = [
         {
             **edge,

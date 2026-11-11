@@ -66,7 +66,11 @@ def test_adds_new_papers_merges_tags_and_stays_unlinked(review):
     assert summary.enriched == 1 and summary.linked is None
 
     data = read_results(review.results_path).set_index("title")
-    assert data.loc["REBEL", "tags"] == "LANG:English;TASK:RE"
+    # Tags merged, then every paper gets its default type.
+    assert (
+        data.loc["REBEL", "tags"] == "LANG:English;TASK:RE;PAPER_TYPE:Model or Method"
+    )
+    assert "PAPER_TYPE:" in data.loc["DocRED", "tags"]  # the added paper too
     assert data.loc["REBEL", "zotero_collections"] == "models"
     assert data.loc["REBEL", "zotero_key"] == "OLDKEY"  # not linked: left as it was
     assert not is_valid(data.loc["DocRED", "zotero_key"])  # no key outside a link

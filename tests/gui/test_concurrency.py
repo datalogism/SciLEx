@@ -115,7 +115,7 @@ def test_rows_wait_for_an_enricher_of_the_same_review_only(tmp_path):
     )
     try:
         assert runner.conflicting_job(review, "consolidate") is enricher
-        with pytest.raises(JobConflictError, match="analysis-orkg on rag_kg"):
+        with pytest.raises(JobConflictError, match="orkg on rag_kg"):
             runner.start_task(review, "consolidate", lambda job: None)
         # Another enricher of the same review merges its own cells: allowed.
         second = runner.start_task(

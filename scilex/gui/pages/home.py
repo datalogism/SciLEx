@@ -11,6 +11,7 @@ from scilex.gui.components.branding import render_logo
 from scilex.gui.components.dialogs import one_shot_dialog
 from scilex.gui.components.errors import show_error
 from scilex.gui.components.folder_picker import pick_folder_in_page
+from scilex.gui.components.running_jobs import render_jobs_button
 from scilex.gui.components.zotero_picker import ZoteroPicker
 from scilex.gui.services import keys_editor, kg_import, zotero_library
 from scilex.gui.services.workspace import Review, reviews_home
@@ -57,6 +58,7 @@ def render(ctx: AppContext) -> None:
             ui.button(
                 "API keys", icon="key", on_click=lambda: ui.navigate.to("/keys")
             ).props("outline").mark("home-keys")
+            render_jobs_button(ctx)
             ui.button(
                 ctx.profile.name or ctx.profile.orcid,
                 icon="badge",
@@ -233,6 +235,14 @@ async def pick_config_file(ctx: AppContext) -> str | None:
     return selection[0] if selection else None
 
 
+def _zotero_configured() -> bool:
+    """True when the global Zotero key is set (Zotero is not asked)."""
+    try:
+        return zotero_library.zotero_configured(keys_editor.load_keys())
+    except (OSError, ValueError):
+        return False
+
+
 def new_review_dialog(ctx: AppContext) -> None:
     """Ask for a folder, a name and a starting point, then create the review.
 
@@ -243,7 +253,11 @@ def new_review_dialog(ctx: AppContext) -> None:
     with one_shot_dialog() as dialog, ui.card().classes("w-[36rem]"):
         ui.label("New review").classes("text-lg font-bold")
         start = ui.toggle(
-            {SCRATCH: "From scratch", ZOTERO: "From Zotero", KG: "From a knowledge graph"},
+            {
+                SCRATCH: "From scratch",
+                ZOTERO: "From Zotero",
+                KG: "From a knowledge graph",
+            },
             value=SCRATCH,
         ).mark("new-review-start")
         folder = _folder_input(ctx, "Folder (optional, created if needed)")
@@ -319,21 +333,25 @@ class _ZoteroImportFields:
         self.ctx, self.name = ctx, name
         with ui.column().classes("w-full gap-2") as self.column:
             ui.label(
-                "The papers of a Zotero library (yours or a group), or of one of its "
-                "collections, become the review's results. Keywords come from SciLEx's "
+                "The papers of a Zotero group, or of one of its collections, become "
+                "the review's results; the group becomes the review's own group. Keywords come from SciLEx's "
                 "Collect_KW tags, years from the paper dates, and the annotation grid "
                 "from DIMENSION:value tags, unless a configuration file is given."
             ).classes("text-xs text-gray-500")
             self._zotero_status()
-            self.picker = ZoteroPicker()
+            self.picker = ZoteroPicker(groups_only=True, autoload=True)
             self.picker.collection_select.on_value_change(self._suggest_name)
-            self.mode = ui.radio(
-                {
-                    ONE_REVIEW: "One review (collections kept as sub-corpora)",
-                    PER_COLLECTION: "One review per collection",
-                },
-                value=ONE_REVIEW,
-            ).props("dense").mark("zotero-mode")
+            self.mode = (
+                ui.radio(
+                    {
+                        ONE_REVIEW: "One review (collections kept as sub-corpora)",
+                        PER_COLLECTION: "One review per collection",
+                    },
+                    value=ONE_REVIEW,
+                )
+                .props("dense")
+                .mark("zotero-mode")
+            )
             with ui.row().classes("w-full items-center no-wrap"):
                 self.config = (
                     ui.input(
@@ -360,9 +378,7 @@ class _ZoteroImportFields:
 
     def _zotero_status(self) -> None:
         """Say that the keys are missing, when they are."""
-        try:
-            zotero_library.zotero_credentials(keys_editor.load_keys())
-        except (zotero_library.ZoteroNotConfiguredError, OSError, ValueError):
+        if not _zotero_configured():
             with (
                 ui.row()
                 .classes("w-full items-center no-wrap gap-2")
@@ -370,16 +386,19 @@ class _ZoteroImportFields:
             ):
                 ui.icon("warning").classes("text-warning")
                 ui.label(
-                    "Zotero is not configured: set its key and library id in the "
-                    "global API keys first."
+                    "Zotero is not configured: set the global Zotero key in the "
+                    "API keys first."
                 ).classes("text-sm grow")
                 ui.button(
                     "API keys", icon="key", on_click=lambda: ui.navigate.to("/keys")
                 ).props("flat dense no-caps").mark("zotero-go-keys")
 
+    _suggested = ""
+
     def _suggest_name(self, _event) -> None:
-        if (self.name.value or "").strip():
-            return
+        typed = (self.name.value or "").strip()
+        if typed and typed != self._suggested:
+            return  # the user's own name
         collection = self.picker.collection
         library = self.picker.library
         leaf = (
@@ -387,7 +406,8 @@ class _ZoteroImportFields:
             if collection
             else (library.name.removeprefix("Group: ") if library else "")
         )
-        self.name.value = _safe_name(leaf)
+        self._suggested = _safe_name(leaf)
+        self.name.value = self._suggested
 
     async def create(self, folder: Path, name: str):
         """Import the chosen library / collection; None (after a message) on error.
@@ -397,7 +417,7 @@ class _ZoteroImportFields:
         """
         source = self.picker.source()
         if source is None:
-            ui.notify("Load the Zotero libraries and choose one", type="warning")
+            ui.notify("Choose a Zotero group", type="warning")
             return None
         config_text = (self.config.value or "").strip()
         config_file = Path(config_text).expanduser() if config_text else None
@@ -416,7 +436,9 @@ class _ZoteroImportFields:
             )
             if self.mode.value == PER_COLLECTION:
                 by_path = {c.path: c for c in collections}
-                for path, items in sorted(zotero_library.split_by_collection(papers).items()):
+                for path, items in sorted(
+                    zotero_library.split_by_collection(papers).items()
+                ):
                     collection = by_path[path]
                     part = ZoteroSource(
                         library_id=source.library_id,
@@ -549,7 +571,9 @@ class _KgImportFields:
             show_error("Cannot read this knowledge graph", exc, expected=True)
             return
         info = self.info
-        parts = f"; sub-corpora: {', '.join(info.subcorpora)}" if info.subcorpora else ""
+        parts = (
+            f"; sub-corpora: {', '.join(info.subcorpora)}" if info.subcorpora else ""
+        )
         self.summary.text = (
             f"'{info.title}': {info.papers} papers, {info.triples} triples{parts}."
         )
@@ -567,9 +591,7 @@ class _KgImportFields:
         if config_file is not None and not config_file.is_file():
             ui.notify(f"No such file: {config_file}", type="warning")
             return None
-        notice = ui.notification(
-            f"Reading {path.name}…", spinner=True, timeout=None
-        )
+        notice = ui.notification(f"Reading {path.name}…", spinner=True, timeout=None)
         try:
             review, summary = await run.io_bound(
                 kg_import.create_review_from_kg,
@@ -579,7 +601,12 @@ class _KgImportFields:
                 path,
                 config_file,
             )
-        except (*EXPECTED_ERRORS, kg_import.KgImportError, ValueError, yaml.YAMLError) as exc:
+        except (
+            *EXPECTED_ERRORS,
+            kg_import.KgImportError,
+            ValueError,
+            yaml.YAMLError,
+        ) as exc:
             show_error("Cannot create the review", exc, expected=True)
             return None
         except Exception as exc:

@@ -8,7 +8,7 @@ from pathlib import Path
 from nicegui import run, ui
 
 from scilex.gui.components.errors import show_error
-from scilex.gui.services import consistency, journal, provenance
+from scilex.gui.services import consistency, journal, prisma, provenance
 from scilex.gui.services import overview as service
 from scilex.gui.services.workspace import Review, Workspace, adopt_folder
 from scilex.gui.state import AppContext
@@ -91,6 +91,84 @@ def _years(by_year: dict[int, int]) -> dict:
                 "itemStyle": {"color": BLUE, "borderRadius": [4, 4, 0, 0]},
                 "barMaxWidth": 24,
             }
+        ],
+    }
+
+
+TYPE_COLORS = (BLUE, AQUA, YELLOW, ORANGE, "#9c6b4e", "#a463f2")
+
+
+def _type_colors(types) -> dict[str, str]:
+    return {t: TYPE_COLORS[i % len(TYPE_COLORS)] for i, t in enumerate(types)}
+
+
+def _types_per_year(data: service.Overview) -> dict:
+    """Papers per year, stacked by paper type."""
+    years = sorted({y for per in data.type_by_year.values() for y in per})
+    years = list(range(years[0], years[-1] + 1)) if years else []
+    colors = _type_colors(data.by_type)
+    return {
+        "grid": {"left": 8, "right": 8, "top": 36, "bottom": 8, "containLabel": True},
+        "legend": {"top": 0, "textStyle": {"color": TEXT_SECONDARY}},
+        "tooltip": {"trigger": "axis", "axisPointer": {"type": "shadow"}},
+        "xAxis": {
+            "type": "category",
+            "data": [str(y) for y in years],
+            **_AXIS,
+            "splitLine": {"show": False},
+        },
+        "yAxis": {"type": "value", **_AXIS, "minInterval": 1},
+        "series": [
+            {
+                "name": kind,
+                "type": "bar",
+                "stack": "types",
+                "data": [data.type_by_year.get(kind, {}).get(y, 0) for y in years],
+                "itemStyle": {"color": colors[kind]},
+                "barMaxWidth": 24,
+            }
+            for kind in data.by_type
+        ],
+    }
+
+
+def _types_per_collection(data: service.Overview) -> dict:
+    """Share of each paper type in each Zotero collection (100 % bars)."""
+    collections = list(_fold(data.by_collection))[::-1]
+    collections = [c for c in collections if c in data.type_by_collection]
+    colors = _type_colors(data.by_type)
+
+    def share(collection: str, kind: str) -> float:
+        counts = data.type_by_collection.get(collection, {})
+        total = sum(counts.values()) or 1
+        return round(100 * counts.get(kind, 0) / total, 1)
+
+    return {
+        "grid": {"left": 8, "right": 16, "top": 36, "bottom": 8, "containLabel": True},
+        "legend": {"top": 0, "textStyle": {"color": TEXT_SECONDARY}},
+        "tooltip": {"trigger": "axis", "axisPointer": {"type": "shadow"}},
+        "xAxis": {"type": "value", "max": 100, **_AXIS},
+        "yAxis": {
+            "type": "category",
+            "data": collections,
+            **_AXIS,
+            "splitLine": {"show": False},
+            "axisLabel": {
+                "color": TEXT_SECONDARY,
+                "width": 200,
+                "overflow": "truncate",
+            },
+        },
+        "series": [
+            {
+                "name": kind,
+                "type": "bar",
+                "stack": "share",
+                "data": [share(c, kind) for c in collections],
+                "itemStyle": {"color": colors[kind]},
+                "barMaxWidth": 18,
+            }
+            for kind in data.by_type
         ],
     }
 
@@ -199,13 +277,14 @@ def render(ctx: AppContext, review: Review) -> None:
 
     async def load() -> None:
         try:
-            data, issues, events, card = await run.io_bound(_gather, review)
+            data, issues, events, card, flow = await run.io_bound(_gather, review)
         except Exception as exc:
             with body:
                 show_error("Cannot read the review", exc)
             return
         body.clear()
         with body:
+            _prisma(review, flow)
             _review_card(card)
             _issues(review, issues)
             _draw(review, data)
@@ -228,7 +307,81 @@ def _gather(review: Review):
         consistency.check(review, main),
         journal.load(review.folder),
         provenance.review_card(review.folder),
+        prisma.compute(review, main),
     )
+
+
+PHASE_CLASSES = "text-xs font-bold uppercase tracking-wide text-primary self-center"
+
+
+def _box(box: prisma.Box, marker: str, tone: str = "") -> None:
+    with ui.card().classes(f"w-full gap-0 p-3 {tone}").mark(marker):
+        with ui.row().classes("items-baseline gap-2 no-wrap"):
+            ui.label(box.title).classes("text-sm font-medium")
+            ui.label("—" if box.count is None else f"n = {box.count:,}").classes(
+                "text-sm font-bold"
+            )
+        for line in box.lines:
+            ui.label(line).classes("text-xs text-gray-600")
+
+
+def _arrow() -> None:
+    ui.icon("south").classes("text-gray-400 justify-self-center")
+
+
+def _prisma(review: Review, flow: prisma.Prisma) -> None:
+    """The PRISMA flow diagram: identification, screening, inclusion, enrichment."""
+
+    async def export() -> None:
+        try:
+            files = await run.io_bound(
+                prisma.export_figure, flow, review.collection_dir
+            )
+        except Exception as exc:
+            show_error("Cannot export the PRISMA flow", exc)
+            return
+        for path in files:
+            ui.download(path, path.name)
+        ui.notify(
+            f"PRISMA flow saved: {', '.join(p.name for p in files)} in "
+            f"{review.collection_dir}",
+            type="positive",
+            multi_line=True,
+        )
+
+    with ui.card().classes("w-full gap-2").mark("overview-prisma"):
+        with ui.row().classes("w-full items-center"):
+            ui.label("PRISMA flow").classes("font-bold")
+            ui.space()
+            if not flow.empty:
+                ui.button("Export (SVG, PNG)", icon="download", on_click=export).props(
+                    "flat dense no-caps"
+                ).mark("prisma-export")
+        if flow.empty:
+            ui.label(
+                "Nothing to show yet: the flow fills in with the collect, the "
+                "extensions, the filters, the screening and the enrichments."
+            ).classes("text-sm text-gray-600")
+            return
+        with ui.grid(columns="7rem 1fr 1fr").classes("w-full gap-2 items-stretch"):
+            ui.label("Identification").classes(PHASE_CLASSES)
+            _box(flow.identification, "prisma-identification")
+            _box(flow.other_sources, "prisma-extensions")
+            ui.label("")
+            _arrow()
+            _box(flow.removed_before, "prisma-removed", "bg-gray-50")
+            ui.label("Screening").classes(PHASE_CLASSES)
+            _box(flow.screened, "prisma-screened")
+            _box(flow.excluded, "prisma-excluded", "bg-gray-50")
+            ui.label("")
+            _arrow()
+            ui.label("")
+            ui.label("Included").classes(PHASE_CLASSES)
+            _box(flow.included, "prisma-included", "bg-green-50")
+            _box(flow.pending, "prisma-pending")
+            ui.label("Enrichment").classes(PHASE_CLASSES)
+            with ui.element("div").classes("col-span-2"):
+                _box(flow.enrichment, "prisma-enrichment", "border-dashed")
 
 
 def _short(iso: str) -> str:
@@ -473,6 +626,22 @@ def _draw(review: Review, data: service.Overview) -> None:
             _chart_card("Papers per year", _years(data.by_year))
         if data.by_source:
             _chart_card("Papers per source", _hbar(data.by_source))
+        if data.by_type:
+            _chart_card(
+                "Papers per type",
+                _hbar(data.by_type),
+                height=max(160, 36 * len(data.by_type)),
+                note="PAPER_TYPE tag, else the default type (⑥ Enrich > Paper types "
+                "writes the tags).",
+            )
+        if data.type_by_year:
+            _chart_card("Paper types per year", _types_per_year(data))
+        if data.type_by_collection:
+            _chart_card(
+                "Paper types per Zotero collection (%)",
+                _types_per_collection(data),
+                height=max(220, 30 * min(len(data.type_by_collection), MAX_BARS) + 40),
+            )
         if data.by_collection:
             _chart_card(
                 "Papers per Zotero collection",

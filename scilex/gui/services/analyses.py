@@ -21,6 +21,7 @@ from pathlib import Path
 import pandas as pd
 
 from scilex.config import SciLExConfig
+from scilex.constants import is_valid
 from scilex.pipeline_utils import (
     extract_corpus_dois,
     find_clusters_csv,
@@ -119,6 +120,17 @@ ANALYSES = (
         "Stops between graphs; the graph being built finishes first.",
     ),
     AnalysisInfo(
+        "coverage",
+        "Accessibility",
+        "Study the accessibility of each paper (open with a PDF, open, restricted, "
+        "unknown) and the rates of papers having a DOI, a code repository "
+        "(GitHub…), citation data, and being cited in the citation network (by "
+        "any paper, by a paper of the corpus); for the whole corpus or compared "
+        "per Zotero collection or paper type. No network needed.",
+        "results",
+        "Runs in a few seconds.",
+    ),
+    AnalysisInfo(
         "tags",
         "Annotations",
         "Analyse the DIMENSION:value annotation tags: coverage of each dimension, "
@@ -182,6 +194,18 @@ ANALYSES = (
         group="enrich",
     ),
     AnalysisInfo(
+        "paper_types",
+        "Paper types",
+        "Tag each paper with its type: PAPER_TYPE:Benchmark, PAPER_TYPE:Review or "
+        "State of the art, PAPER_TYPE:Dataset or PAPER_TYPE:Model or Method, from "
+        "cue words of its title and abstract. A type already set (by a person, "
+        "in Zotero or SciLEx) is kept. The analyses use these types to compare "
+        "the papers. No network needed.",
+        "results",
+        "Runs in a few seconds; nothing is written when cancelled.",
+        group="enrich",
+    ),
+    AnalysisInfo(
         "orkg",
         "ORKG",
         "Add the Open Research Knowledge Graph paper, research fields and research "
@@ -221,6 +245,7 @@ RESULTS_MODE = {
     "summaries": "read",
     "keywords": "read",
     "tags": "read",
+    "coverage": "read",
     "citations": "read",  # writes its own caches, not the results
     "snowball": "rows",
     "enrich": "write",
@@ -228,6 +253,7 @@ RESULTS_MODE = {
     "lpwc": "write",
     "orkg": "write",
     "search_keywords": "write",
+    "paper_types": "write",
     "metrics": "write",
 }
 
@@ -252,6 +278,8 @@ SCOPED = (
     "tags",
     "search_keywords",
     "metrics",
+    "coverage",
+    "paper_types",
 )
 
 
@@ -301,10 +329,14 @@ def existing_outputs(collect_dir: Path, name: str) -> list[Path]:
             [SNOWBALL_BACKUP_FILENAME, SNOWBALL_SEPARATE_FILENAME],
         ),
         "graph": (graph_dir, ["clusters_*.csv", "*_graph.gexf", "*_graph.graphml"]),
-        "summaries": (graph_dir, ["summary_report.md"]),
+        "summaries": (graph_dir, ["summary_report.md", "summary_compare_*.png"]),
         "tags": (
             collect_dir / "annotation_analysis",
-            ["annotation_report.md", "*.png"],
+            ["annotation_report.md", "compare_*.md", "*.png"],
+        ),
+        "coverage": (
+            collect_dir / "coverage_analysis",
+            ["coverage_report.md", "*.png", "coverage_per_paper.csv"],
         ),
     }
     if name not in patterns:
@@ -320,6 +352,7 @@ STALE_INPUTS: dict[str, tuple[str, ...]] = {
     "keywords": (f"{GRAPH_DIRNAME}/clusters_*.csv",),
     "summaries": (f"{GRAPH_DIRNAME}/clusters_*.csv",),
     "tags": ("aggregated_results.csv",),
+    "coverage": ("aggregated_results.csv", "citations_cache.json", "citers_cache.json"),
 }
 # Writes within the same second as the outputs are not a change.
 STALE_TOLERANCE_SECONDS = 1.0
@@ -373,7 +406,11 @@ def missing_prerequisite(collect_dir: Path, needs: str) -> str | None:
 
 
 def run_report(
-    config: SciLExConfig, progress: ProgressFn, *, cancel_event: CancelEvent = None
+    config: SciLExConfig,
+    progress: ProgressFn,
+    *,
+    compare_by: str = "paper_type",
+    cancel_event: CancelEvent = None,
 ) -> AnalysisResult:
     """Generate the charts of the aggregated results (``scilex-report``)."""
     from scilex import report_charts as charts
@@ -397,6 +434,13 @@ def run_report(
             return AnalysisResult("Cancelled.")
         progress(int(100 * index / len(steps)), f"Drawing {label}…")
         plot(df, out_dir)
+    from scilex.gui.services import compare
+
+    for old in out_dir.glob("compare_*.png"):  # the last comparison only
+        old.unlink(missing_ok=True)
+    if compare_by != compare.NONE and not _cancelled(cancel_event):
+        progress(90, f"Comparing by {compare.LABELS.get(compare_by, compare_by)}…")
+        compare.report_charts(df, out_dir, compare_by)
     files = existing_outputs(collect_dir, "report")
     return AnalysisResult(f"{len(files)} charts for {len(df)} papers.", files)
 
@@ -411,6 +455,7 @@ def run_tags(
     from_zotero: bool = False,
     max_dimensions: int = 5,
     similarity: float = 88,
+    compare_by: str = "paper_type",
 ) -> AnalysisResult:
     """Analyse the annotation tags (see ``scilex.gui.services.tag_review``)."""
     row_filter = _active(row_filter)  # discarded papers left out
@@ -426,11 +471,73 @@ def run_tags(
             max_dimensions=max_dimensions,
             similarity=similarity,
             cancelled=lambda: _cancelled(cancel_event),
+            compare_by=compare_by,
         )
     except tag_review.TagReviewError as exc:
         raise AnalysisError(str(exc)) from exc
     if _cancelled(cancel_event):
         return AnalysisResult("Cancelled.", files)
+    return AnalysisResult(message, files)
+
+
+def run_paper_types(
+    config: SciLExConfig,
+    progress: ProgressFn,
+    *,
+    row_filter: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
+    cancel_event: CancelEvent = None,
+) -> AnalysisResult:
+    """Tag the papers with their default type (see :mod:`scilex.paper_types`)."""
+    from collections import Counter
+
+    from scilex import paper_types
+    from scilex.gui.services import results_store
+
+    row_filter = _active(row_filter)
+    path, data = _read_for_enrichment(config)
+    before = row_filter(data).copy()
+    after = before.copy()
+    progress(30, "Classifying the papers…")
+    tagged = paper_types.annotate(after)
+    if _cancelled(cancel_event):
+        return AnalysisResult("Cancelled; nothing was written.")
+    if tagged:
+        results_store.write_changes(path, before, after)
+    counts = Counter(paper_types.type_of(r) for r in after.to_dict("records"))
+    spread = ", ".join(f"{t}: {counts.get(t, 0)}" for t in paper_types.TYPES)
+    others = sum(n for t, n in counts.items() if t not in paper_types.TYPES)
+    message = f"{tagged} papers tagged with their default type ({spread}" + (
+        f", other types: {others})." if others else ")."
+    )
+    progress(100, message)
+    return AnalysisResult(message, [path] if tagged else [])
+
+
+def run_coverage(
+    config: SciLExConfig,
+    progress: ProgressFn,
+    *,
+    compare_by: str = "none",
+    row_filter: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
+    cancel_event: CancelEvent = None,
+) -> AnalysisResult:
+    """Accessibility and coverage rates (see :mod:`scilex.gui.services.coverage`)."""
+    from scilex.gui.services import coverage
+    from scilex.gui.services.extend import read_results
+    from scilex.io_utils import resolve_aggregate_path
+
+    row_filter = _active(row_filter)  # discarded papers left out
+    try:
+        data = read_results(Path(resolve_aggregate_path(config.main)))
+    except (FileNotFoundError, ValueError) as exc:
+        raise AnalysisError(str(exc)) from exc
+    if data is None or data.empty:
+        raise AnalysisError("No aggregated results yet.")
+    data = row_filter(data)
+    if _cancelled(cancel_event):
+        return AnalysisResult("Cancelled.")
+    message, files = coverage.run(data, collect_dir_of(config), progress, compare_by)
+    progress(100, message)
     return AnalysisResult(message, files)
 
 
@@ -833,8 +940,12 @@ def run_snowball(
     dry_run: bool = False,
     add_to_collection: bool = True,
     cancel_event: CancelEvent = None,
+    review=None,
 ) -> AnalysisResult:
     """Extend the corpus through citation links (``scilex-snowball``).
+
+    With ``review`` (and papers added to the collection), the new papers get
+    their own Zotero collection (see :mod:`~scilex.gui.services.extension_collection`).
 
     ``add_to_collection`` False writes ``aggregated_results_snowball.csv`` and
     leaves ``aggregated_results.csv`` untouched.
@@ -893,9 +1004,19 @@ def run_snowball(
         if add_to_collection
         else f"written to {Path(output_csv).name} (collection unchanged)"
     )
-    return AnalysisResult(
-        f"{added} new papers {where} ({len(merged)} in total).", [Path(output_csv)]
-    )
+    message = f"{added} new papers {where} ({len(merged)} in total)."
+    if add_to_collection and added > 0:
+        from scilex.gui.services.paper_enrich import tag_types
+
+        tag_types(resolve_aggregate_path(config.main))
+    if review is not None and add_to_collection and added > 0:
+        from scilex.gui.services import extension_collection
+
+        published = extension_collection.publish(
+            review, extension_collection.paper_keys(corpus_df), "Snowball"
+        )
+        message = f"{message} {published.message()}"
+    return AnalysisResult(message, [Path(output_csv)])
 
 
 def _read_for_enrichment(config: SciLExConfig) -> tuple[Path, pd.DataFrame]:
@@ -958,6 +1079,40 @@ def run_linked(
     return AnalysisResult(report.message(), [path])
 
 
+ABSTRACT_GAP_THRESHOLD = 0.2  # warn above 20 % of papers without an abstract
+
+
+def abstract_gap(collect_dir: Path) -> str | None:
+    """Warn when many papers lack an abstract (keywords are looked for in it).
+
+    Returns None when the abstracts are there (or nothing can be read).
+    """
+    from scilex.gui.services.extend import read_results
+
+    try:
+        data = read_results(collect_dir / "aggregated_results.csv")
+    except (OSError, ValueError):
+        return None
+    if data is None or data.empty:
+        return None
+    data = without_discarded(data)
+    if data.empty:
+        return None
+    column = (
+        data["abstract"]
+        if "abstract" in data.columns
+        else pd.Series([None] * len(data))
+    )
+    missing = int(sum(not is_valid(v) or not str(v).strip() for v in column))
+    if missing / len(data) <= ABSTRACT_GAP_THRESHOLD:
+        return None
+    return (
+        f"{missing} of {len(data)} papers ({100 * missing // len(data)} %) have no "
+        "abstract: their keywords can only be found in the title. Run Crossref "
+        "(it fills empty abstracts) before, for a better keyword enrichment."
+    )
+
+
 def run_search_keywords(
     config: SciLExConfig,
     progress: ProgressFn,
@@ -987,8 +1142,12 @@ def run_search_keywords(
         return AnalysisResult("Cancelled; nothing was written.")
     if report.updated:
         results_store.write_changes(path, before, data)
-    progress(100, report.message())
-    return AnalysisResult(report.message(), [path] if report.updated else [])
+    message = report.message()
+    gap = abstract_gap(collect_dir_of(config))
+    if gap:
+        message = f"{message} {gap}"
+    progress(100, message)
+    return AnalysisResult(message, [path] if report.updated else [])
 
 
 def run_graph(
@@ -1063,6 +1222,7 @@ def run_summaries(
     progress: ProgressFn,
     *,
     clusters: str = "auto",
+    compare_by: str = "paper_type",
     cancel_event: CancelEvent = None,
 ) -> AnalysisResult:
     """Write the community summary report (``scilex-summarize``)."""
@@ -1075,7 +1235,8 @@ def run_summaries(
     if _cancelled(cancel_event):
         return AnalysisResult("Cancelled.")
     progress(30, "Computing cluster statistics…")
-    stats = compute_cluster_stats(_read_clusters(csv_path))
+    cluster_frame = _read_clusters(csv_path)
+    stats = compute_cluster_stats(cluster_frame)
     if not stats:
         return AnalysisResult("No clusters found in the data.")
     if all(cluster.size <= 1 for cluster in stats):
@@ -1086,11 +1247,31 @@ def run_summaries(
         )
     report_path = analysis_dir / "summary_report.md"
     generate_report(stats, str(report_path), collect_name=config.main["collect_name"])
+    files = [report_path]
+    from scilex.gui.services import compare
+
+    for old in analysis_dir.glob("summary_compare_*.png"):
+        old.unlink(missing_ok=True)
+    if compare_by != compare.NONE:
+        from scilex.gui.services.extend import read_results
+
+        try:
+            data = read_results(collect_dir / "aggregated_results.csv")
+        except (OSError, ValueError):
+            data = None
+        if data is not None:
+            section, charts = compare.community_composition(
+                cluster_frame, without_discarded(data), analysis_dir, compare_by
+            )
+            if section:
+                with open(report_path, "a", encoding="utf-8") as handle:
+                    handle.write("\n" + section)
+                files += charts
     communities = sum(1 for cluster in stats if cluster.size > 1)
     return AnalysisResult(
         f"Summary of {communities} communities from the {graph_label} graph "
         f"({len(stats) - communities} one-paper communities left out).",
-        [report_path],
+        files,
     )
 
 
@@ -1098,7 +1279,7 @@ def run_summaries(
 
 # name -> {option: caster}; options not listed are dropped.
 OPTION_CASTS: dict[str, dict[str, Callable]] = {
-    "report": {},
+    "report": {"compare_by": str},
     "keywords": {"top_k": int, "min_freq": int, "clusters": str},
     "enrich": {"dry_run": bool, "limit": int, "threshold": int},
     "citations": {
@@ -1115,13 +1296,20 @@ OPTION_CASTS: dict[str, dict[str, Callable]] = {
         "add_to_collection": bool,
     },
     "graph": {"graph_type": str, "resolution": float, "min_weight": int, "fmt": str},
-    "summaries": {"clusters": str},
-    "tags": {"max_dimensions": int, "similarity": float, "from_zotero": bool},
+    "summaries": {"clusters": str, "compare_by": str},
+    "tags": {
+        "max_dimensions": int,
+        "similarity": float,
+        "from_zotero": bool,
+        "compare_by": str,
+    },
     "crossref": {"limit": int},
     "lpwc": {"limit": int},
     "orkg": {"limit": int},
     "search_keywords": {},
     "metrics": {"tags": bool},
+    "coverage": {"compare_by": str},
+    "paper_types": {},
 }
 
 
@@ -1154,4 +1342,6 @@ RUNNERS: dict[str, Callable[..., AnalysisResult]] = {
     "orkg": lambda config, progress, **kw: run_linked(config, progress, "orkg", **kw),
     "search_keywords": run_search_keywords,
     "metrics": run_metrics,
+    "coverage": run_coverage,
+    "paper_types": run_paper_types,
 }

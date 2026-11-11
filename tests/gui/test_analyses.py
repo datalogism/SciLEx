@@ -153,8 +153,12 @@ async def test_tabs_are_rendered(ctx, tmp_path):
         for step in ("enrich", "extend", "analyses"):
             await user.open(f"/review/{review.id}/{step}")
             for name in NAMES:
+                # Extend shows its analyses among its own tabs.
+                marker = (
+                    f"extend-tab-{name}" if step == "extend" else f"analysis-tab-{name}"
+                )
                 if STEP[name] == step:
-                    await user.should_see(marker=f"analysis-tab-{name}")
+                    await user.should_see(marker=marker)
                 else:
                     await user.should_not_see(marker=f"analysis-tab-{name}")
 
@@ -163,7 +167,7 @@ async def test_missing_input_is_explained(ctx, tmp_path):
     review = _review_with_results(ctx, tmp_path)
     async with user_simulation(build_root(ctx)) as user:
         await user.open(f"/review/{review.id}/extend")
-        user.find(marker="analysis-tab-snowball").click()
+        user.find(marker="extend-tab-snowball").click()
         await user.should_see(marker="analysis-missing-snowball")
 
 
@@ -206,7 +210,8 @@ async def test_run_each_analysis(ctx, tmp_path, monkeypatch, name):
     monkeypatch.setitem(service.RUNNERS, name, fake_runner)
     async with user_simulation(build_root(ctx)) as user:
         await user.open(f"/review/{review.id}/{STEP[name]}")
-        user.find(marker=f"analysis-tab-{name}").click()
+        tab = "extend-tab" if STEP[name] == "extend" else "analysis-tab"
+        user.find(marker=f"{tab}-{name}").click()
         user.find(marker=f"analysis-run-{name}").click()
         await user.should_see("Completed", retries=50)
         await user.should_see(f"{name} finished", retries=50)
@@ -311,14 +316,14 @@ async def test_citations_job_lifts_snowball_warning(ctx, tmp_path, monkeypatch):
     async with user_simulation(build_root(ctx)) as user:
         # Snowball (⑤ Extend) needs the citations fetched in ⑥ Enrich.
         await user.open(f"/review/{review.id}/extend")
-        user.find(marker="analysis-tab-snowball").click()
+        user.find(marker="extend-tab-snowball").click()
         await user.should_see(marker="analysis-missing-snowball")
         await user.open(f"/review/{review.id}/enrich")
         user.find(marker="analysis-tab-citations").click()
         user.find(marker="analysis-run-citations").click()
         await user.should_see("Completed", retries=50)
         await user.open(f"/review/{review.id}/extend")
-        user.find(marker="analysis-tab-snowball").click()
+        user.find(marker="extend-tab-snowball").click()
         await user.should_not_see(marker="analysis-missing-snowball", retries=50)
 
 
@@ -469,6 +474,7 @@ def test_tabs_follow_prerequisites():
         "citations",
         "snowball",
         "graph",
+        "coverage",
         "tags",
         "keywords",
         "summaries",
@@ -476,6 +482,7 @@ def test_tabs_follow_prerequisites():
         "crossref",
         "lpwc",
         "search_keywords",
+        "paper_types",
         "orkg",
         "metrics",
     ]

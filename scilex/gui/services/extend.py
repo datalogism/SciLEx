@@ -39,27 +39,36 @@ def read_results(path: Path) -> pd.DataFrame | None:
 
     Under the file's lock (see :mod:`results_store`): a job writing it at the
     same moment cannot make this read, or its own replace, fail on Windows.
+    Parsed once per version of the file (see :mod:`file_cache`); each call
+    returns its own copy.
     """
+    from scilex.gui.services import file_cache
     from scilex.gui.services.results_store import lock_for
     from scilex.io_utils import load_aggregated_data
 
-    with lock_for(path):
-        if not Path(path).is_file():
-            return None
+    def parse(file: Path) -> pd.DataFrame:
         return load_aggregated_data(
-            {"collect_name": Path(path).parent.name},
-            collect_dir=str(Path(path).parent),
+            {"collect_name": file.parent.name},
+            collect_dir=str(file.parent),
             preserve_missing_marker=True,
         )
+
+    with lock_for(path):
+        return file_cache.load(Path(path), parse)
 
 
 def write_results(data: pd.DataFrame, path: Path) -> None:
     """Write aggregated results atomically, under the file's lock."""
+    from scilex.gui.services import file_cache
     from scilex.gui.services.results_store import lock_for
     from scilex.io_utils import write_aggregated_csv
 
     with lock_for(path):
-        write_aggregated_csv(data, str(path), quoting=csv.QUOTE_NONNUMERIC)
+        file_cache.forget(Path(path))
+        try:
+            write_aggregated_csv(data, str(path), quoting=csv.QUOTE_NONNUMERIC)
+        finally:
+            file_cache.forget(Path(path))
 
 
 def backup(path: Path) -> Path | None:

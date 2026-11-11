@@ -71,7 +71,9 @@ def grid_dimensions(paths: TagPaths) -> list[str]:
     return [str(t) for t in load_grid(paths.grid)[TAG_COLUMN].dropna()]
 
 
-def analyse(frame: pd.DataFrame, paths: TagPaths, similarity: float) -> tags.TagAnalysis:
+def analyse(
+    frame: pd.DataFrame, paths: TagPaths, similarity: float
+) -> tags.TagAnalysis:
     """Analyse ``frame`` with the review's synonyms, rejected merges and grid."""
     try:
         synonyms = tags.load_synonyms(paths.synonyms)
@@ -137,6 +139,7 @@ def run(
     max_dimensions: int = 5,
     similarity: float = tags.DEFAULT_SIMILARITY,
     cancelled: Callable[[], bool] = lambda: False,
+    compare_by: str = "none",
 ) -> tuple[str, list[Path]]:
     """Analyse the tags and write the outputs; returns ``(message, files)``."""
     from scilex.gui.services.analyses import read_result_csv
@@ -167,7 +170,11 @@ def run(
         raise TagReviewError(
             "No DIMENSION:value annotation tag in these papers. Annotate them in "
             "Zotero (see ④ Annotate)"
-            + (", then tick \"Read the tags from Zotero now\"." if not from_zotero else ".")
+            + (
+                ', then tick "Read the tags from Zotero now".'
+                if not from_zotero
+                else "."
+            )
         )
     paths.out_dir.mkdir(parents=True, exist_ok=True)
     frame.reindex(columns=SOURCE_COLUMNS).to_csv(paths.source, index=False)
@@ -181,6 +188,18 @@ def run(
         progress,
         cancelled,
     )
+    from scilex.gui.services import compare
+
+    for old in paths.out_dir.glob("compare_*"):  # the last comparison only
+        old.unlink(missing_ok=True)
+    if compare_by != compare.NONE and not cancelled():
+        progress(95, f"Comparing by {compare.LABELS.get(compare_by, compare_by)}…")
+        files = [
+            *files,
+            *compare.annotation_comparison(
+                frame, paths.out_dir, compare_by, max_dimensions
+            ),
+        ]
     used = sum(1 for d in analysis.dimensions.values() if d.values)
     return (
         f"{analysis.annotated} of {analysis.papers} papers annotated, {used} "
@@ -196,7 +215,9 @@ def run(
 def pending_suggestions(paths: TagPaths) -> pd.DataFrame:
     """Suggestions of the last run not yet accepted or rejected."""
     if not paths.suggestions.is_file():
-        return pd.DataFrame(columns=["dimension", "value", "merge_into", "similarity", "papers"])
+        return pd.DataFrame(
+            columns=["dimension", "value", "merge_into", "similarity", "papers"]
+        )
     frame = pd.read_csv(paths.suggestions, dtype=str).fillna("")
     decided = {
         (tags.dimension_name(r["dimension"] or "*"), tags.value_key(r["value"]))
@@ -226,7 +247,9 @@ def reject(paths: TagPaths, rows: list[dict]) -> int:
 
 def remove_synonyms(paths: TagPaths, rows: list[dict]) -> int:
     """Stop merging ``rows``."""
-    return tags.remove_merge_rows(paths.synonyms, rows) if paths.synonyms.is_file() else 0
+    return (
+        tags.remove_merge_rows(paths.synonyms, rows) if paths.synonyms.is_file() else 0
+    )
 
 
 # --- crossing on demand -----------------------------------------------------------
@@ -244,7 +267,10 @@ def dimension_choices(paths: TagPaths) -> list[str]:
 
 
 def cross(
-    paths: TagPaths, first: str, second: str, similarity: float = tags.DEFAULT_SIMILARITY
+    paths: TagPaths,
+    first: str,
+    second: str,
+    similarity: float = tags.DEFAULT_SIMILARITY,
 ) -> tuple[Path, int]:
     """Draw the crossing of two dimensions on the tags of the last run.
 
@@ -258,11 +284,11 @@ def cross(
     analysis = analyse(frame, paths, similarity)
     table, common = tags.cooccurrence(analysis, first, second)
     if table.empty:
-        raise TagReviewError(
-            f"No paper has a value for both {first} and {second}."
-        )
+        raise TagReviewError(f"No paper has a value for both {first} and {second}.")
     name = f"cross_{tags._safe_name(first)}_x_{tags._safe_name(second)}.png"
-    return tags.plot_crossing(first, second, table, common, paths.out_dir / name), common
+    return tags.plot_crossing(
+        first, second, table, common, paths.out_dir / name
+    ), common
 
 
 # --- cleaning Zotero -------------------------------------------------------------

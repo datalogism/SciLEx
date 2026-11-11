@@ -80,6 +80,39 @@ def test_chart_filters_one_community(tmp_path):
     assert len(series["links"]) == 1
 
 
+def test_colour_by_paper_type_and_collection(tmp_path):
+    graph_dir = tmp_path / "graph_analysis"
+    _write_graph(graph_dir)
+    pd.DataFrame(
+        {
+            "title": ["A survey of A", "Paper B", "Paper C"],
+            "itemType": ["journalArticle"] * 3,
+            "DOI": ["10.1/a", "10.1/b", "10.1/c"],
+            "tags": ["", "PAPER_TYPE:Dataset", ""],
+            "zotero_collections": ["Core", "Core", "Extension 1"],
+        }
+    ).to_csv(tmp_path / "aggregated_results.csv", sep=";", index=False)
+    view = service.build_graph_view(graph_dir, "cocitation")
+    types = {node["id"]: node[service.PAPER_TYPE] for node in view.nodes}
+    assert types == {
+        "10.1/a": "Review or State of the art",  # default type, from the title
+        "10.1/b": "Dataset",  # its tag
+        "10.1/c": "Model or Method",
+    }
+    by_collection = service.chart_options(view, color_by=service.COLLECTION)
+    colors = {
+        n["id"]: n["itemStyle"]["color"] for n in by_collection["series"][0]["data"]
+    }
+    assert colors["10.1/a"] == colors["10.1/b"] != colors["10.1/c"]
+    table = service.compare_groups(view, service.COLLECTION).set_index(
+        "Zotero collection"
+    )
+    assert table.loc["Core", "Papers drawn"] == 2
+    assert table.loc["Core", "Links inside"] == 1  # A-B
+    assert table.loc["Extension 1", "Links to other groups"] == 1  # B-C
+    assert service.compare_groups(view, service.COMMUNITY).empty
+
+
 def test_tooltip_escapes_titles(tmp_path):
     _write_graph(tmp_path)
     path = tmp_path / "clusters_cocitation.csv"

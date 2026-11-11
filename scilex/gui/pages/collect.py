@@ -6,8 +6,6 @@ from scilex.gui.components.dialogs import one_shot_dialog
 from scilex.gui.components.errors import show_error
 from scilex.gui.components.job_panel import BusyNotice, JobPanel
 from scilex.gui.components.run_status import RunStatus
-from scilex.gui.pages.analyses import render_tabs
-from scilex.gui.services import analyses as analyses_service
 from scilex.gui.services import extend as extension
 from scilex.gui.services import run_history
 from scilex.gui.services.collect_summary import (
@@ -68,11 +66,9 @@ def render(ctx: AppContext, review: Review, extending: bool = False) -> None:
     loaded from Zotero) and holds the corpus-extension tools (snowball, keywords).
     """
     if extending:
-        ui.label("Extend").classes("text-2xl font-bold").mark("extend-title")
         ui.label(
-            "Add papers to the review: run the queries of scilex.yml that were not "
-            "run yet (new keywords, years or APIs set in ① Configure), or extend the "
-            "corpus through citations (Snowball) and new search keywords below."
+            "Run the queries of scilex.yml that were not run yet (new keywords, "
+            "years or APIs set in ① Configure)."
         ).classes("text-gray-500")
     else:
         ui.label("Collect").classes("text-2xl font-bold")
@@ -518,8 +514,3 @@ def render(ctx: AppContext, review: Review, extending: bool = False) -> None:
     resume_button.on_click(lambda: start(resume=True))
     aggregate_button.on_click(aggregate_only)
     cancel_button.on_click(cancel)
-
-    if extending:
-        ui.separator()
-        ui.label("Extend the corpus").classes("text-lg font-bold")
-        render_tabs(ctx, review, analyses_service.in_group("extend"))

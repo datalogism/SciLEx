@@ -15,11 +15,12 @@ myst_enable_extensions = [
 ]
 
 templates_path = ["_templates"]
-exclude_patterns = ["_build"]
+exclude_patterns = ["_build", "_tools", "wip", "superpowers", "decisions"]
 
 html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
 html_logo = "../img/projectLogoScilex.png"
+html_favicon = "../scilex/gui/assets/icon.png"
 
 source_suffix = {
     ".rst": "restructuredtext",

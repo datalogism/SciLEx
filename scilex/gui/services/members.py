@@ -127,7 +127,9 @@ def discover(review: Review) -> list[Member]:
 
     source = zotero_library.load_source(review.folder)
     if source is None:
-        raise ValueError("The review has no Zotero library: link it first (⑧ Export).")
+        raise ValueError(
+            "The review has no Zotero group: choose it on its Zotero group page."
+        )
     api = zotero_library.client(effective_keys(review.folder), library=source)
     members = load(review.folder)
     if source.library_type == "group":
@@ -173,6 +175,65 @@ def discover(review: Review) -> list[Member]:
     members = [m for m in members if m.identifier]
     save(review.folder, members)
     return members
+
+
+@dataclass
+class GroupMember:
+    """One row of the review's group page: a person and their place."""
+
+    label: str
+    role: str  # owner, admin, member (of the Zotero group), contributor, manual
+    zotero_id: str = ""
+    username: str = ""
+    orcid: str = ""
+    in_group: bool = False
+
+
+def group_roster(group, saved: list[Member]) -> list[GroupMember]:
+    """The group's people (owner, admins, members), then the review's other members.
+
+    ``group`` is a :class:`~scilex.gui.services.zotero_library.ZoteroGroup`
+    (None: the group could not be read, the saved members only). Names and
+    ORCID iDs come from ``members.yml`` (Zotero gives only user ids).
+    """
+    by_id = {m.zotero_id: m for m in saved if m.zotero_id}
+    rows: list[GroupMember] = []
+    seen: set[str] = set()
+    if group is not None:
+        people = [("owner", [group.owner]), ("admin", group.admins)]
+        people.append(("member", group.members))
+        for role, ids in people:
+            for user_id in ids:
+                if not user_id or user_id in seen:
+                    continue
+                seen.add(user_id)
+                known = by_id.get(user_id)
+                rows.append(
+                    GroupMember(
+                        label=(known.name or known.username)
+                        if known and (known.name or known.username)
+                        else f"Zotero user {user_id}",
+                        role=role,
+                        zotero_id=user_id,
+                        username=known.username if known else "",
+                        orcid=known.orcid if known else "",
+                        in_group=True,
+                    )
+                )
+    for member in saved:
+        if member.zotero_id and member.zotero_id in seen:
+            continue
+        rows.append(
+            GroupMember(
+                label=member.name or member.username or member.orcid,
+                role=member.role,
+                zotero_id=member.zotero_id,
+                username=member.username,
+                orcid=member.orcid,
+                in_group=group is None and member.role in ("owner", "admin", "member"),
+            )
+        )
+    return rows
 
 
 # -- assignment ---------------------------------------------------------------

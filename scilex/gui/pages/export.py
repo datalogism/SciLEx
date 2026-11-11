@@ -7,8 +7,8 @@ from nicegui import run, ui
 from scilex.gui.components.dialogs import one_shot_dialog
 from scilex.gui.components.errors import show_error
 from scilex.gui.components.job_panel import BusyNotice, JobPanel
+from scilex.gui.components.review_group import review_group_card
 from scilex.gui.components.run_status import RunStatus
-from scilex.gui.components.zotero_picker import ZoteroPicker
 from scilex.gui.services import exports, kg_export, run_history, zotero_library
 from scilex.gui.services.jobs import (
     READ,
@@ -88,58 +88,11 @@ def zotero_summary(counts: dict[str, int]) -> str:
     )
 
 
-def _zotero_target_card(review: Review) -> None:
-    """Show, and let the user change, the review's own Zotero library and collection."""
-    with ui.card().classes("w-full").mark("zotero-target"):
-        ui.label("Zotero library of this review").classes("font-bold")
-
-        @ui.refreshable
-        def current() -> None:
-            source = zotero_library.load_source(review.folder)
-            ui.label(
-                source.describe()
-                if source
-                else f"Not chosen: the library of your API keys, collection "
-                f"'{review.name}' (created when pushing)."
-            ).classes("text-sm").mark("zotero-target-current")
-
-        current()
-
-        def change() -> None:
-            with one_shot_dialog() as dialog, ui.card().classes("w-[36rem]"):
-                ui.label("Zotero library and collection of this review").classes(
-                    "text-lg font-bold"
-                )
-                ui.label(
-                    "Each review can use its own library (yours or a group) and "
-                    "collection, or a whole library."
-                ).classes("text-sm text-gray-500")
-                picker = ZoteroPicker(zotero_library.load_source(review.folder))
-
-                def save() -> None:
-                    source = picker.source()
-                    if source is None:
-                        ui.notify("Load the libraries and choose one", type="warning")
-                        return
-                    zotero_library.save_source(review.folder, source)
-                    dialog.close()
-                    current.refresh()
-
-                with ui.row().classes("w-full justify-end"):
-                    ui.button("Cancel", on_click=dialog.close).props("flat")
-                    ui.button("Save", on_click=save).mark("zotero-target-save")
-            dialog.open()
-
-        ui.button("Change", icon="edit", on_click=change).props("outline dense").mark(
-            "zotero-target-change"
-        )
-
-
 def render(ctx: AppContext, review: Review) -> None:
     """Draw the Export screen of ``review``."""
     ui.label("Export").classes("text-2xl font-bold")
     ui.label("Choose which papers to export, then a format.").classes("text-gray-500")
-    _zotero_target_card(review)
+    review_group_card(review)
 
     scope = ui.radio(
         {
@@ -320,15 +273,29 @@ def render(ctx: AppContext, review: Review) -> None:
         if settings is None:
             show_error(
                 "Cannot prepare the Zotero push",
-                ValueError("Zotero user ID and API key are missing."),
+                ValueError("The global Zotero key is missing (API keys page)."),
                 expected=True,
             )
             return
-        with one_shot_dialog() as dialog, ui.card().mark("zotero-confirm"):
-            ui.label(
-                f"Push {count} papers to the Zotero {settings.user_mode} library "
-                f'{settings.user_id} (collection "{review.name}")?'
+        source = zotero_library.load_source(review.folder)
+        if source is None and not settings.user_id:
+            show_error(
+                "Cannot prepare the Zotero push",
+                ValueError("Choose the review's Zotero group first."),
+                expected=True,
             )
+            return
+        if source is not None and source.collection_key:
+            target = source.describe()
+        elif source is not None:
+            target = f'{source.describe()}, collection "{review.name}"'
+        else:
+            target = (
+                f"{settings.user_mode} library {settings.user_id} "
+                f'(collection "{review.name}")'
+            )
+        with one_shot_dialog() as dialog, ui.card().mark("zotero-confirm"):
+            ui.label(f"Push {count} papers to Zotero: {target}?")
             with ui.row().classes("justify-end w-full"):
                 ui.button("Cancel", on_click=dialog.close).props("flat").mark(
                     "zotero-cancel"

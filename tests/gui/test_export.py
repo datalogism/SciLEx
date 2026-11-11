@@ -131,9 +131,9 @@ def test_zotero_settings():
     complete = SciLExConfig({}, {"Zotero": {"api_key": "k", "user_id": "1"}})
     assert exports.zotero_settings(complete).user_mode == "user"
     assert exports.zotero_settings(SciLExConfig({}, {})) is None
-    assert (
-        exports.zotero_settings(SciLExConfig({}, {"Zotero": {"api_key": "k"}})) is None
-    )
+    # The global key alone is enough: the review's group gives the library.
+    key_only = exports.zotero_settings(SciLExConfig({}, {"Zotero": {"api_key": "k"}}))
+    assert key_only.api_key == "k" and key_only.user_id == ""
 
 
 def test_push_to_zotero_with_mock_client(review, monkeypatch):

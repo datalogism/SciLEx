@@ -177,3 +177,91 @@ def test_paper_log_dates_only_papers_added_after_it_exists(tmp_path):
     log = paper_log.update(other, data, when=dt.date(2026, 11, 10), fresh=True)
     assert {entry["imported_at"] for entry in log.values()} == {"2026-11-10"}
     assert paper_log.load(other) == log
+
+
+def test_citation_network_feeds_cited_and_in_corpus_counts(tmp_path):
+    review = Review(folder=tmp_path, name="rag", output_root=tmp_path / "output")
+    review.collection_dir.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "itemType": ["journalArticle"] * 3,
+            "title": ["A", "B", "C"],
+            "DOI": ["10.1/a", "10.1/b", "NA"],
+            "date": ["2024", "2023", "2022"],
+            "nb_citation": [1, 50, 3],
+        }
+    ).to_csv(review.results_path, sep=";")
+    import json
+
+    # A is cited by 3 papers, one of them B (also found through B's references);
+    # B's citers were not fetched but A cites it.
+    (review.collection_dir / "citers_cache.json").write_text(
+        json.dumps({"https://doi.org/10.1/A": ["10.1/B", "10.9/x", "10.9/y"]})
+    )
+    (review.collection_dir / "citations_cache.json").write_text(
+        json.dumps({"10.1/a": ["10.1/b"], "10.1/b": ["10.1/a", "10.9/z"]})
+    )
+    session = screening.ScreeningSession(review)
+    rows = {r["title"]: r for r in session.rows}
+    assert session.has_network
+    assert rows["A"]["citations"] == 3  # network count beats the stale Collect 1
+    assert rows["A"]["cited_in_corpus"] == 1
+    assert rows["B"]["citations"] == 50  # Collect count kept when higher
+    assert rows["B"]["cited_in_corpus"] == 1
+    assert rows["C"]["cited_in_corpus"] is None  # no DOI
+    assert session.network_counts("doi:10.1/a") == {
+        "cited_in_corpus": 1,
+        "network_citers": 3,
+        "network_references": 1,
+    }
+    assert session.network_counts("doi:10.1/b") == {
+        "cited_in_corpus": 1,
+        "network_references": 2,
+    }
+
+
+def test_no_citation_network_leaves_counts_alone(tmp_path):
+    review = make_review(tmp_path)
+    session = screening.ScreeningSession(review)
+    assert not session.has_network
+    assert all(r["cited_in_corpus"] is None for r in session.rows)
+
+
+def test_collection_filter_takes_subcollections(tmp_path):
+    review = Review(folder=tmp_path, name="rag", output_root=tmp_path / "output")
+    review.collection_dir.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "itemType": ["journalArticle"] * 4,
+            "title": ["A", "B", "C", "D"],
+            "date": ["2024"] * 4,
+            "zotero_collections": [
+                "Corpus/Included",
+                "Corpus / Excluded;Other",
+                "Other",
+                "NA",
+            ],
+        }
+    ).to_csv(review.results_path, sep=";")
+    session = screening.ScreeningSession(review)
+    assert session.collection_options() == [
+        ("Corpus", 2),
+        ("Corpus/Excluded", 1),
+        ("Corpus/Included", 1),
+        ("Other", 2),
+        (screening.NONE_VALUE, 1),
+    ]
+
+    def titles(*chosen):
+        rows = session.visible_rows(facets={"collection": set(chosen)})
+        return sorted(r["title"] for r in rows)
+
+    assert titles("Corpus") == ["A", "B"]
+    assert titles("Corpus/Included") == ["A"]
+    assert titles("Corpus/Included", "Other") == ["A", "B", "C"]
+    assert titles(screening.NONE_VALUE) == ["D"]
+
+
+def test_no_collection_selector_when_it_would_change_nothing(tmp_path):
+    review = make_review(tmp_path)
+    assert screening.ScreeningSession(review).collection_options() == []

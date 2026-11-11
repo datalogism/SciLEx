@@ -140,6 +140,38 @@ def render_tabs(
     tab_panels.on_value_change(lambda event: show_tab(event.value))
 
 
+def _run_crossref_first(ctx: AppContext, review: Review) -> None:
+    """Start the Crossref enrichment (fills empty abstracts) from another tab."""
+    try:
+        config = Workspace.load_config(review)
+
+        def body(job: Job) -> str:
+            def progress(percent: int, message: str) -> None:
+                job.progress, job.message = percent, message
+
+            result = service.RUNNERS["crossref"](
+                config, progress, cancel_event=job.cancel_event
+            )
+            job.result = result
+            return result.message
+
+        ctx.runner.start_task(
+            review,
+            kind_of("crossref"),
+            body,
+            resources=resources_of(review, "crossref", {}),
+        )
+    except (SettingsError, FileNotFoundError, JobConflictError) as exc:
+        show_error("Cannot run Crossref now", exc, expected=True)
+        return
+    ui.notify(
+        "Crossref is filling the empty abstracts (progress in ⑥ Enrich > Crossref, "
+        "and in the jobs list). Run the keywords once it is done.",
+        type="info",
+        multi_line=True,
+    )
+
+
 def _render_analysis(
     ctx: AppContext,
     review: Review,
@@ -161,6 +193,18 @@ def _render_analysis(
 
     show_problem()
     problem_refreshers.append(show_problem.refresh)
+    if name in ("search_keywords", "keywords"):
+        gap = service.abstract_gap(collect_dir)
+        if gap:
+            with ui.row().classes("items-center gap-2 no-wrap"):
+                ui.label(gap).classes("text-sm text-orange-700").mark(
+                    f"analysis-abstracts-{name}"
+                )
+                ui.button(
+                    "Run Crossref first",
+                    icon="auto_awesome",
+                    on_click=lambda: _run_crossref_first(ctx, review),
+                ).props("outline dense no-caps").mark(f"analysis-crossref-first-{name}")
 
     options = _render_options(name)
     reason_label = (
@@ -196,7 +240,7 @@ def _render_analysis(
                 )
             if name == "graph":
                 # The graph files are drawn as a network, not listed one by one.
-                render_graph_results(service.graph_dir_of(collect_dir))
+                render_graph_results(service.graph_dir_of(collect_dir), review)
                 return
             for path in files:
                 _render_file(path)
@@ -288,7 +332,7 @@ def _render_analysis(
                 kwargs["row_filter"] = kept_papers_filter(review)
             if name == "tags":
                 kwargs["review_folder"] = review.folder
-            if name == "citations":
+            if name in ("citations", "snowball"):
                 kwargs["review"] = review
 
             def body(job: Job) -> str:
@@ -351,6 +395,10 @@ def _render_options(name: str) -> dict:
     with ui.row().classes("items-center gap-4"):
         if name in ("keywords", "summaries"):
             select("clusters", "Clusters", service.CLUSTER_CHOICES, "auto")
+        if name in ("report", "coverage", "tags", "summaries"):
+            from scilex.gui.services.compare import COMPARE_BY, PAPER_TYPE
+
+            select("compare_by", "Compare by", COMPARE_BY, PAPER_TYPE)
         if name == "keywords":
             number("top_k", "Max suggestions", 30, min=1, precision=0)
             number("min_freq", "Min frequency", 2, min=1, precision=0)

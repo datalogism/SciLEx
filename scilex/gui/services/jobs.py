@@ -143,7 +143,9 @@ class Job:
 
     def describe(self) -> str:
         """``"collection on rag_kg"``: what the user sees of a blocking job."""
-        kind = KIND_LABELS.get(self.kind, self.kind)
+        kind = KIND_LABELS.get(self.kind) or self.kind.removeprefix(
+            "analysis-"
+        ).replace("-", " ")
         return f"{kind} on {self.review_name or self.review_id}"
 
 
@@ -210,6 +212,18 @@ class JobRunner:
         """Every active job, oldest first."""
         jobs = [job for job in self._jobs.values() if job.is_active]
         return sorted(jobs, key=lambda job: job.started_at)
+
+    def recent_jobs(self, within_seconds: float = 900) -> list[Job]:
+        """Jobs finished in the last ``within_seconds``, most recent first."""
+        now = datetime.now()
+        jobs = [
+            job
+            for job in self._jobs.values()
+            if not job.is_active
+            and job.finished_at is not None
+            and (now - job.finished_at).total_seconds() <= within_seconds
+        ]
+        return sorted(jobs, key=lambda job: job.finished_at, reverse=True)
 
     @staticmethod
     def resources_for(
@@ -449,10 +463,23 @@ class JobRunner:
 
     @staticmethod
     def _extend(job: Job, review: Review, mode: str | None, previous) -> str:
-        if not mode or previous is None or job.cancel_event.is_set():
+        from scilex.gui.services.paper_enrich import tag_types
+
+        if job.cancel_event.is_set():
+            return ""
+        if not mode or previous is None:
+            tag_types(review.results_path)  # every paper gets its default type
             return ""
         job.message = "Merging with the papers already in the review…"
         summary = extension.apply_extension(mode, previous, review.results_path)
+        tag_types(review.results_path)  # before the new papers are pushed
+        if summary and mode == extension.ADD_NEW:
+            from scilex.gui.services import extension_collection
+
+            published = extension_collection.publish(
+                review, extension_collection.paper_keys(previous), "New collect"
+            )
+            summary = f"{summary} {published.message()}"
         if summary:
             logger.info(summary)
         return summary

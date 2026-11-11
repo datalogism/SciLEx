@@ -44,6 +44,7 @@ WORKFLOW_TAG_PREFIXES = (
     "DELETED_BY:",
     "AGREEMENT_COPY:",
     "SCREEN:",
+    "KEEP:",  # exception to an eligibility criterion (KEEP:C1)
 )
 METRIC_TAG_PREFIXES = (
     "CITATIONS:",

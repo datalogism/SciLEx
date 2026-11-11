@@ -224,6 +224,9 @@ def import_bibtex(review: Review, text: str, filename: str = "") -> BibtexImport
             previous[ORIGIN_COLUMN] = ""
         merged = pd.concat([previous, added], ignore_index=True)
     write_results(merged, review.results_path)
+    from scilex.gui.services.paper_enrich import tag_types
+
+    tag_types(review.results_path)
     try:
         paper_log.update(review.folder, merged, when=today, fresh=previous is None)
     except OSError:

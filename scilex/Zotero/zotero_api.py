@@ -262,18 +262,22 @@ class ZoteroAPI:
 
         return None
 
-    def create_collection(self, name: str) -> dict | None:
+    def create_collection(self, name: str, parent: str | None = None) -> dict | None:
         """
         Create a new collection.
 
         Args:
             name: Name for the new collection
+            parent: Key of the parent collection (None: a top-level collection)
 
         Returns:
             Created collection dictionary if successful, None otherwise
         """
         logging.info(f"Creating collection: '{name}'")
-        response = self._post("/collections", data=[{"name": name}])
+        body = {"name": name}
+        if parent:
+            body["parentCollection"] = parent
+        response = self._post("/collections", data=[body])
 
         if response and response.status_code in [200, 201]:
             logging.info(f"Successfully created collection '{name}'")
@@ -373,7 +377,9 @@ class ZoteroAPI:
             The concatenated export, or None if a page request failed.
         """
         path = (
-            f"/collections/{collection_key}/items/top" if collection_key else "/items/top"
+            f"/collections/{collection_key}/items/top"
+            if collection_key
+            else "/items/top"
         )
         chunks: list[str] = []
         start = 0

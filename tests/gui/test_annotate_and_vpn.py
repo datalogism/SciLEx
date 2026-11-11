@@ -35,7 +35,7 @@ class FakeZotero:
         return [{"data": {"key": "C1", "name": "rag_kg"}, "meta": {"numItems": 2}}]
 
     def get_groups(self):
-        return []
+        return [{"id": 42, "data": {"id": 42, "name": "RAG review"}}]
 
     def get_top_items(self, collection_key=None):
         return self.items
@@ -180,7 +180,9 @@ async def test_annotate_preview_then_apply(ctx, tmp_path, monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_new_review_from_zotero_dialog(ctx, tmp_path, monkeypatch):
+async def test_new_review_from_zotero_dialog(
+    ctx, tmp_path, monkeypatch, isolated_scilex_env
+):
     items = [
         paper("A", ["Collect_KW1:graph rag"])
         | {
@@ -194,6 +196,14 @@ async def test_new_review_from_zotero_dialog(ctx, tmp_path, monkeypatch):
     ]
     monkeypatch.setattr(
         zotero_library, "client", lambda keys=None, library=None: FakeZotero(items)
+    )
+    isolated_scilex_env.write_text("Zotero:\n  api_key: global\n")
+    monkeypatch.setattr(
+        zotero_library,
+        "key_info",
+        lambda key, refresh=False: zotero_library.ZoteroKeyInfo(
+            "1", "ada", user_library=True, all_groups="write"
+        ),
     )
     async with user_simulation(build_root(ctx)) as user:
         await user.open("/")
