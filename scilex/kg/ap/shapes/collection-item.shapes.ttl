@@ -1,0 +1,75 @@
+# scilex-lpwc-ap -- iteration 3 -- SHACL, GENERAL level (valid for any SciLEx collection).
+# Collection items: every resource of the collection (lpwc:paper, ORSD NFR2).
+# One targeted node shape per file, constraints on the focus node's own triples only
+# (see ../README.md: how X-DigCheck evaluates shapes).
+
+@prefix sh:       <http://www.w3.org/ns/shacl#> .
+@prefix rdf:      <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:     <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:      <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms:  <http://purl.org/dc/terms/> .
+@prefix foaf:     <http://xmlns.com/foaf/0.1/> .
+@prefix skos:     <http://www.w3.org/2004/02/skos/core#> .
+@prefix fabio:    <http://purl.org/spar/fabio/> .
+@prefix frbr:     <http://purl.org/vocab/frbr/core#> .
+@prefix cito:     <http://purl.org/spar/cito/> .
+@prefix c4o:      <http://purl.org/spar/c4o/> .
+@prefix pro:      <http://purl.org/spar/pro/> .
+@prefix datacite: <http://purl.org/spar/datacite/> .
+@prefix literal:  <http://www.essepuntato.it/2010/06/literalreification/> .
+@prefix prism:    <http://prismstandard.org/namespaces/basic/2.0/> .
+@prefix oco:      <https://w3id.org/oc/ontology/> .
+@prefix dcat:     <http://www.w3.org/ns/dcat#> .
+@prefix void:     <http://rdfs.org/ns/void#> .
+@prefix lpwc:     <https://linkedpaperswithcode.com/class/> .
+@prefix lpwcp:    <https://linkedpaperswithcode.com/property/> .
+@prefix sxv:      <https://w3id.org/scilex/vocab#> .
+@prefix sxsh:     <https://w3id.org/scilex/ap/lpwc/shapes#> .
+@prefix ucd:      <https://w3id.org/scilex/ap/lpwc/shapes/ucd#> .
+
+sxsh:CollectionItemShape
+    a sh:NodeShape ;
+    rdfs:label "Collection item (OCDM br, LPWC paper)"@en ;
+    sh:targetClass lpwc:paper ;
+    sh:property [
+        sh:path dcterms:identifier ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ;
+        sh:message "A collection item has exactly one citation key." ] ;
+    sh:property [
+        sh:path rdf:type ; sh:qualifiedMinCount 1 ; sh:qualifiedMaxCount 1 ;
+        sh:qualifiedValueShape [ sh:in ( fabio:JournalArticle fabio:ProceedingsPaper fabio:BookChapter
+            fabio:Book fabio:AcademicProceedings fabio:Thesis fabio:ReportDocument fabio:DataFile
+            fabio:ComputerProgram fabio:WebContent fabio:Expression ) ] ;
+        sh:message "A collection item has exactly one FaBiO bibliographic type (OCDM type table)." ] ;
+    sh:property [
+        sh:path dcterms:title ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ;
+        sh:message "A collection item has exactly one title." ] ;
+    sh:property [
+        sh:path prism:publicationDate ; sh:maxCount 1 ;
+        sh:or ( [ sh:datatype xsd:date ] [ sh:datatype xsd:gYearMonth ] [ sh:datatype xsd:gYear ] ) ;
+        sh:message "The publication date is a single xsd:date, xsd:gYearMonth or xsd:gYear." ] ;
+    sh:property [ sh:path dcterms:abstract ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path datacite:hasIdentifier ; sh:class datacite:Identifier ] ;
+    # at most one DOI: identifier IRIs follow the OCDM layout id/<scheme>/<value>
+    sh:property [
+        sh:path datacite:hasIdentifier ;
+        sh:qualifiedValueShape [ sh:pattern "/id/doi/" ] ; sh:qualifiedMaxCount 1 ;
+        sh:message "A collection item has at most one DOI." ] ;
+    sh:property [ sh:path frbr:embodiment ; sh:maxCount 1 ; sh:class fabio:Manifestation ] ;
+    sh:property [
+        sh:path frbr:partOf ; sh:maxCount 1 ; sh:nodeKind sh:IRI ;
+        sh:message "A collection item is part of at most one venue (journal, proceedings or book)." ] ;
+    sh:property [ sh:path pro:isDocumentContextFor ; sh:class pro:RoleInTime ] ;
+    sh:property [ sh:path cito:cites ; sh:nodeKind sh:IRI ] ;
+    sh:property [
+        sh:path c4o:hasGlobalCitationFrequency ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:class c4o:GlobalCitationCount ] ;
+    sh:property [ sh:path dcterms:subject ; sh:class skos:Concept ] ;
+    sh:property [ sh:path lpwcp:hasTask ;     sh:class lpwc:task ] ;
+    sh:property [ sh:path lpwcp:usesDataset ; sh:class lpwc:dataset ] ;
+    sh:property [ sh:path lpwcp:hasModel ;    sh:class lpwc:model ] ;
+    sh:property [ sh:path lpwcp:hasMethod ;   sh:class lpwc:method ] ;
+    sh:property [ sh:path lpwcp:hasConference ; sh:maxCount 1 ; sh:class lpwc:conference ] ;
+    # iter3: every item belongs to exactly one collection (one dcat:Dataset per collection)
+    sh:property [ sh:path void:inDataset ; sh:minCount 1 ; sh:maxCount 1 ; sh:class dcat:Dataset ;
+        sh:message "A collection item belongs to exactly one collection (void:inDataset)." ] ;
+    sh:property [ sh:path prism:versionIdentifier ; sh:maxCount 1 ; sh:datatype xsd:string ] .

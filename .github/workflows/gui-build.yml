@@ -1,0 +1,114 @@
+name: GUI build
+
+# Build the desktop app on each OS (PyInstaller cannot cross-compile) and
+# run the packaged executable's self-test, which catches missing modules and
+# data files that a successful build does not reveal.
+on:
+  workflow_dispatch:
+  push:
+    tags: ["gui-v*"]
+  pull_request:
+    paths:
+      - "scilex/gui/**"
+      - "packaging/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/gui-build.yml"
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            executable: dist/SciLEx.app/Contents/MacOS/SciLEx
+            artifact: SciLEx-macos.dmg
+          - os: windows-latest
+            executable: dist/SciLEx/SciLEx.exe
+            artifact: SciLEx-windows.zip
+          - os: ubuntu-22.04  # older glibc: the build runs on more distributions
+            executable: dist/SciLEx/SciLEx
+            artifact: SciLEx-linux.tar.gz
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      # PyInstaller loads Qt during the build to find its plugins (the "xcb"
+      # display plugin among them): without these libraries it skips them and
+      # the window cannot open. They are also needed by the self-test.
+      - name: Install Qt system libraries (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libgl1 libegl1 libglib2.0-0 libdbus-1-3 \
+            libfontconfig1 libxkbcommon0 libxkbcommon-x11-0 libnss3 libxcomposite1 \
+            libxdamage1 libxrandr2 libxtst6 libasound2 libxkbfile1 libxcb-cursor0 \
+            libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
+            libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 \
+            libxshmfence1 libgbm1
+
+      - name: Install dependencies
+        run: uv sync --extra gui --extra build
+
+      - name: Build
+        run: uv run pyinstaller packaging/scilex-gui.spec --noconfirm --clean
+
+      - name: Self-test of the packaged app
+        shell: bash
+        run: ${{ matrix.executable }} --self-test
+
+      # The window toolkit check the app runs at startup (pythonnet, .NET,
+      # WebView2): fails if the bundle misses one of them.
+      - name: Window toolkit check (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: ${{ matrix.executable }} --probe-native
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: hdiutil create -volname SciLEx -srcfolder dist/SciLEx.app -ov -format UDZO ${{ matrix.artifact }}
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path dist/SciLEx -DestinationPath ${{ matrix.artifact }}
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: tar -czf ${{ matrix.artifact }} -C dist SciLEx
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
+
+  # On a gui-v* tag, attach the three builds to a GitHub Release so users get a
+  # permanent download link (workflow artifacts need a login and expire).
+  release:
+    if: startsWith(github.ref, 'refs/tags/gui-v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" release/* --clobber -R "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" release/* -R "$GITHUB_REPOSITORY" \
+              --title "SciLEx desktop app ${TAG#gui-v}" --generate-notes
+          fi

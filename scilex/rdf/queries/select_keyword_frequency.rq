@@ -1,0 +1,15 @@
+# Topic/keyword distribution across the corpus.
+# dcterms:subject is emitted once per keyword per paper (split on comma/semicolon
+# at conversion time), so this gives the number of papers mentioning each keyword.
+
+PREFIX bibo: <http://purl.org/ontology/bibo/>
+PREFIX dcterms: <http://purl.org/dc/terms/>
+
+SELECT ?keyword (COUNT(DISTINCT ?paper) AS ?paperCount)
+WHERE {
+  VALUES ?paperType { bibo:AcademicArticle bibo:Book bibo:BookSection bibo:Manual bibo:Thesis bibo:Proceedings bibo:Report bibo:Manuscript bibo:Document }
+  ?paper a ?paperType ;
+         dcterms:subject ?keyword .
+}
+GROUP BY ?keyword
+ORDER BY DESC(?paperCount)

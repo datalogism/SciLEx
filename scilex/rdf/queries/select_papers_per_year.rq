@@ -1,0 +1,16 @@
+# Publication trend: number of corpus papers per year.
+# dcterms:date is stored as a plain string literal (e.g. "2023" or "2023-06"),
+# so the year is extracted with SUBSTR rather than YEAR().
+
+PREFIX bibo: <http://purl.org/ontology/bibo/>
+PREFIX dcterms: <http://purl.org/dc/terms/>
+
+SELECT ?year (COUNT(?paper) AS ?count)
+WHERE {
+  VALUES ?paperType { bibo:AcademicArticle bibo:Book bibo:BookSection bibo:Manual bibo:Thesis bibo:Proceedings bibo:Report bibo:Manuscript bibo:Document }
+  ?paper a ?paperType ;
+         dcterms:date ?date .
+  BIND(SUBSTR(STR(?date), 1, 4) AS ?year)
+}
+GROUP BY ?year
+ORDER BY ?year

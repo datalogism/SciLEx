@@ -1,0 +1,176 @@
+# Ancien format, voir scilex.yml.example (racine du dépôt) / `scilex config migrate`.
+# ============================================================================
+# SciLEx Main Configuration - Quick Start
+# ============================================================================
+#
+# Copy this file to 'scilex.config.yml' and customize for your research
+#
+# Essential variables below (keywords, years, APIs, mode, quality filters).
+# Advanced settings? Put them in the same file (see scilex.yml.example)
+# API credentials? See src/api.config.yml.example
+#
+# ============================================================================
+
+# ============================================================================
+# RESEARCH QUESTION - Customize these for your project
+# ============================================================================
+
+# Keywords for paper search - supports two modes:
+#
+# Single group (papers matching ANY keyword):
+#   keywords:
+#     - ["machine learning", "deep learning", "neural networks"]
+#
+# Dual groups (papers matching ANY from group1 AND ANY from group2):
+#   keywords:
+#     - ["group1_term1", "group1_term2"]
+#     - ["group2_term1", "group2_term2"]
+#
+keywords:
+  - ["RAG", "Retrieval Augmented Generation", "LLM", "Large Language Model"]
+  - ["Knowledge Graph", "knowledge graphs", "semantic network"]
+
+# Optional bonus keywords - boost relevance scores without filtering
+#
+# Papers are COLLECTED and FILTERED using mandatory keywords only.
+# Papers that match bonus keywords get higher relevance scores, helping them
+# rise to the top when using max_papers limit, but they are not excluded if
+# they don't match bonus keywords.
+#
+# Use bonus keywords for "nice-to-have" terms that should enhance relevance
+# but aren't essential for the research focus.
+#
+# Example:
+#   bonus_keywords:
+#     - "temporal reasoning"
+#     - "multi-hop"
+#     - "context windows"
+#
+# Bonus keyword matches are weighted at 0.5x compared to mandatory keywords.
+#
+# Leave empty or remove this section if not using bonus keywords.
+#
+bonus_keywords: []  # Empty by default - add your bonus keywords here
+
+# Years to search (creates separate queries for each year)
+years:
+  - 2023
+  - 2024
+  - 2025
+
+# Data sources to query
+# Free APIs: OpenAlex, HAL, DBLP, Arxiv, PubMed
+# Paid APIs: SemanticScholar (free tier OK), IEEE, Elsevier, Springer
+apis:
+  - SemanticScholar
+  - OpenAlex
+  - Arxiv
+  # - PubMed  # Biomedical literature (35M+ papers, ~25% with PMC PDFs)
+
+# Semantic Scholar API mode - IMPORTANT for collection speed
+# Choose wisely based on your API tier:
+#
+#   "regular" (RECOMMENDED for most users):
+#     * Standard search endpoint (/paper/search)
+#     * Results per page: 100 papers
+#     * Rate limit: 1 request/second (with API key)
+#     * Works with standard API keys and free tier
+#     * Best for: Small to medium collections (up to 10,000 papers)
+#
+#   "bulk" (POWER USERS ONLY):
+#     * Bulk search endpoint (/paper/search/bulk)
+#     * Results per page: 1000 papers (10x larger batches)
+#     * Rate limit: 1 request/second
+#     * 10x FASTER collection (fewer API calls needed)
+#     * Requires: Higher-tier API access or special approval
+#     * Apply at: https://www.semanticscholar.org/product/api#api-key-form
+#     * Best for: Large collections (50,000+ papers)
+#
+# Example: 5000 papers search
+#   - regular mode: 50 requests (5000 / 100) = ~50 seconds
+#   - bulk mode:    5 requests  (5000 / 1000) = ~5 seconds
+#
+semantic_scholar_mode: regular
+
+# Project identification
+collect_name: my_research_project
+
+# Fetch citation counts during aggregation (CrossRef → OpenCitations fallback)
+# Set to false to skip citation fetching (faster runs, no citation-based filtering)
+aggregate_get_citations: true
+
+# Maximum articles per query (optional, advanced setting)
+# Default: -1 (unlimited - collect all available papers)
+# Set to a number to limit papers collected per API query (keyword/year/API combo)
+#
+# Examples:
+#   max_articles_per_query: 100   # Testing: quick run (1-2 sec per query)
+#   max_articles_per_query: 1000  # Balanced: good sample (controls quota)
+#   max_articles_per_query: 2000  # Coverage: larger collection
+#   max_articles_per_query: -1    # Unlimited (default, collect all)
+#
+# How it works: Collectors stop making API requests when total >= limit
+# Per-query: Total papers = number_of_queries * max_articles_per_query
+# For details, see scilex.advanced.yml.example
+#
+# max_articles_per_query: -1
+
+# ============================================================================
+# QUALITY FILTERS - Core filtering decisions
+# ============================================================================
+
+quality_filters:
+  # Paper type restrictions (whitelist specific types)
+  enable_itemtype_filter: false
+  allowed_item_types:
+    - journalArticle    # Peer-reviewed journals
+    - conferencePaper   # Conference proceedings
+
+  # Content requirements
+  require_abstract: true        # Literature review? → true | Bibliometrics? → false
+  require_doi: false
+
+  # Focus on impactful papers
+  apply_citation_filter: true
+
+  # Output size (null for unlimited, 500-1000 for focused reviews)
+  max_papers: 1000
+
+# ============================================================================
+# PAPERS WITH CODE ENRICHMENT (Optional - adds tasks/methods/benchmarks/code repos)
+# ============================================================================
+
+pwc_enrichment:
+  enabled: true                      # Enable/disable enrichment (anonymous API, no key)
+
+  fuzzy_match_threshold: 85          # Minimum title similarity (0-100)
+                                     # 90+: Very strict, 85: Recommended, 75: Lenient
+
+  # Cache settings (recommended for performance)
+  cache_path: "output/pwc_cache.db"  # Cache database location
+  cache_ttl_days: 30                 # Cache expiration (days)
+
+# ============================================================================
+# NOTES
+# ============================================================================
+#
+# Default values (automatically used, no need to specify):
+#   - Abstract length validation: 50-1000 words
+#   - Minimum authors: 1
+#   - Generate quality report: true
+#   - Apply relevance ranking: true
+#   - Abstract quality filter: disabled (enable in scilex.advanced.yml)
+#   - Open access requirement: false
+#   - Output directory: output/
+#   - Aggregated filename: aggregated_results.csv
+#
+# For advanced customization (rarely needed):
+#   - Copy scilex.advanced.yml.example to scilex.advanced.yml
+#   - Uncomment settings you want to override
+#   - See advanced file for all available options
+#
+# API Configuration (required for paid APIs):
+#   - See src/api.config.yml.example
+#   - Copy to src/api.config.yml and add your credentials
+#
+# ============================================================================

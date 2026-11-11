@@ -1,0 +1,737 @@
+{
+ "SemanticScholar": {
+  "input": {
+   "paper_id": "abc123",
+   "title": "A Study of Things",
+   "abstract": "We study things.",
+   "authors": [
+    {
+     "name": "Ada Lovelace"
+    },
+    {
+     "name": "Alan Turing"
+    },
+    {
+     "name": ""
+    }
+   ],
+   "publication_date": "2021-05-01",
+   "DOI": "https://doi.org/10.1000/ss.1",
+   "url": "https://example.org/ss",
+   "publicationTypes": [
+    "JournalArticle"
+   ],
+   "publicationVenue": {
+    "type": "journal",
+    "name": "J. Things",
+    "publisher": "Acme",
+    "issn": "1234-5678"
+   },
+   "journal": {
+    "name": "Journal of Things",
+    "pages": "10-20",
+    "volume": "7"
+   },
+   "open_access_pdf": "https://example.org/ss.pdf",
+   "citationCount": 0,
+   "referenceCount": 12
+  },
+  "expected": {
+   "title": "A Study of Things",
+   "publisher": "Acme",
+   "itemType": "journalArticle",
+   "authors": "Ada Lovelace;Alan Turing",
+   "language": "NA",
+   "abstract": "We study things.",
+   "archiveID": "abc123",
+   "archive": "SemanticScholar",
+   "date": "2021-05-01",
+   "DOI": "10.1000/ss.1",
+   "url": "https://example.org/ss",
+   "rights": "open_access",
+   "pages": "10-20",
+   "journalAbbreviation": "Journal of Things",
+   "volume": "7",
+   "serie": "1234-5678",
+   "issue": "NA",
+   "pdf_url": "https://example.org/ss.pdf",
+   "ss_citation_count": 0,
+   "ss_reference_count": 12
+  }
+ },
+ "Istex": {
+  "input": {
+   "genre": [
+    "research-article"
+   ],
+   "title": "Istex Title",
+   "author": [
+    {
+     "name": "A One"
+    },
+    {
+     "name": "B Two"
+    }
+   ],
+   "abstract": "Istex abstract",
+   "arkIstex": "ark:/67375/XYZ",
+   "publicationDate": "2019",
+   "doi": [
+    "10.1000/istex.1"
+   ],
+   "language": [
+    "eng",
+    "fre"
+   ],
+   "series": {
+    "title": "Series X"
+   },
+   "host": {
+    "volume": "3",
+    "issue": "2",
+    "title": "Host Journal",
+    "pages": {
+     "first": "5",
+     "last": "9"
+    },
+    "publisherId": [
+     "PUB1"
+    ]
+   },
+   "url": "https://istex.example/1",
+   "fulltext": [
+    {
+     "extension": "txt",
+     "uri": "u.txt"
+    },
+    {
+     "extension": "pdf",
+     "uri": "https://istex.example/1.pdf"
+    }
+   ],
+   "accessCondition": {
+    "contentType": "Open Access"
+   }
+  },
+  "expected": {
+   "title": "Istex Title",
+   "publisher": "PUB1",
+   "itemType": "journalArticle",
+   "authors": "A One;B Two",
+   "language": "eng",
+   "abstract": "Istex abstract",
+   "archiveID": "ark:/67375/XYZ",
+   "archive": "Istex",
+   "date": "2019",
+   "DOI": "10.1000/istex.1",
+   "url": "https://istex.example/1",
+   "rights": "Open Access",
+   "pages": "5-9",
+   "journalAbbreviation": "Host Journal",
+   "volume": "3",
+   "serie": "Series X",
+   "issue": "2",
+   "pdf_url": "https://istex.example/1.pdf"
+  }
+ },
+ "Arxiv": {
+  "input": {
+   "id": "http://arxiv.org/abs/2301.12345v1",
+   "title": "Arxiv Title",
+   "abstract": "Arxiv abstract",
+   "authors": [
+    "X Y",
+    "Z W"
+   ],
+   "doi": "10.1000/arx.1",
+   "published": "2023-01-30",
+   "categories": [
+    "cs.AI",
+    "cs.CL"
+   ],
+   "journal": ""
+  },
+  "expected": {
+   "title": "Arxiv Title",
+   "publisher": "arXiv",
+   "itemType": "preprint",
+   "authors": "X Y;Z W",
+   "language": "NA",
+   "abstract": "Arxiv abstract",
+   "archiveID": "http://arxiv.org/abs/2301.12345v1",
+   "archive": "Arxiv",
+   "date": "2023-01-30",
+   "DOI": "10.1000/arx.1",
+   "url": "http://arxiv.org/abs/2301.12345v1",
+   "rights": "open_access",
+   "pages": "NA",
+   "journalAbbreviation": "cs.AI, cs.CL",
+   "volume": "NA",
+   "serie": "NA",
+   "issue": "NA",
+   "pdf_url": "https://arxiv.org/pdf/2301.12345v1.pdf"
+  }
+ },
+ "DBLP": {
+  "input": {
+   "@id": "123/456",
+   "info": {
+    "title": "DBLP Title.",
+    "year": "2020",
+    "authors": {
+     "author": [
+      {
+       "text": "Anna A"
+      },
+      {
+       "text": "Bob B"
+      }
+     ]
+    },
+    "doi": "10.1000/dblp.1",
+    "pages": "1-10",
+    "volume": "9",
+    "number": "4",
+    "publisher": "DBLP Pub",
+    "access": "open",
+    "url": "https://dblp.org/rec/1",
+    "type": "Conference and Workshop Papers",
+    "venue": "ConfX"
+   }
+  },
+  "expected": {
+   "title": "DBLP Title.",
+   "publisher": "DBLP Pub",
+   "itemType": "conferencePaper",
+   "authors": "Anna A;Bob B",
+   "language": "NA",
+   "abstract": "NA",
+   "archiveID": "123/456",
+   "archive": "DBLP",
+   "date": "2020",
+   "DOI": "10.1000/dblp.1",
+   "url": "https://dblp.org/rec/1",
+   "rights": "open",
+   "pages": "1-10",
+   "journalAbbreviation": "NA",
+   "volume": "9",
+   "serie": "NA",
+   "issue": "4",
+   "pdf_url": "NA",
+   "conferenceName": "ConfX"
+  }
+ },
+ "HAL": {
+  "input": {
+   "halId_s": "hal-0001",
+   "docType_s": "ART",
+   "title_s": [
+    "HAL Title"
+   ],
+   "abstract_s": [
+    "HAL abstract"
+   ],
+   "bookTitle_s": "Book",
+   "doiId_id": "https://doi.org/10.1000/hal.1",
+   "journalTitle_t": "HAL Journal",
+   "submittedDateY_i": 2022,
+   "volume_s": "5",
+   "issue_s": "1",
+   "page_s": "100-110",
+   "publisher_s": [
+    "HAL Pub"
+   ],
+   "files_s": [
+    "https://hal.science/f.txt",
+    "https://hal.science/f.pdf"
+   ],
+   "language_s": [
+    "en"
+   ],
+   "authFullNameIdHal_fs": [
+    "Jane Doe_FacetSep_jane-doe",
+    "John Roe_FacetSep_"
+   ]
+  },
+  "expected": {
+   "title": "HAL Title",
+   "publisher": "HAL Pub",
+   "itemType": "journalArticle",
+   "authors": "Jane Doe;John Roe",
+   "language": "en",
+   "abstract": "HAL abstract",
+   "archiveID": "hal-0001",
+   "archive": "HAL",
+   "date": "2022",
+   "DOI": "10.1000/hal.1",
+   "url": "https://hal.science/hal-0001",
+   "rights": "open_access",
+   "pages": "100-110",
+   "journalAbbreviation": "HAL Journal",
+   "volume": "5",
+   "serie": "Book",
+   "issue": "1",
+   "pdf_url": "https://hal.science/f.pdf"
+  }
+ },
+ "OpenAlex": {
+  "input": {
+   "id": "https://openalex.org/W1",
+   "doi": "https://doi.org/10.1000/oa.1",
+   "title": "OA Title",
+   "publication_date": "2018-03-04",
+   "language": "en",
+   "type": "journal-article",
+   "best_oa_location": {
+    "landing_page_url": "https://oa.example/1",
+    "pdf_url": "https://oa.example/1.pdf"
+   },
+   "abstract_inverted_index": {
+    "Hello": [
+     0
+    ],
+    "world": [
+     1
+    ]
+   },
+   "open_access": {
+    "is_oa": true
+   },
+   "authorships": [
+    {
+     "author": {
+      "display_name": "Ann Author"
+     }
+    },
+    {
+     "author": {
+      "display_name": "Bo Writer"
+     }
+    }
+   ],
+   "biblio": {
+    "volume": "12",
+    "issue": "3",
+    "first_page": "100",
+    "last_page": "120"
+   },
+   "primary_location": {
+    "source": {
+     "host_organization_name": "OA Pub",
+     "issn_l": "1111-2222",
+     "type": "journal",
+     "display_name": "OA Journal"
+    }
+   },
+   "cited_by_count": 42
+  },
+  "expected": {
+   "title": "OA Title",
+   "publisher": "OA Pub",
+   "itemType": "journalArticle",
+   "authors": "Ann Author;Bo Writer",
+   "language": "en",
+   "abstract": "Hello world",
+   "archiveID": "https://openalex.org/W1",
+   "archive": "OpenAlex",
+   "date": "2018-03-04",
+   "DOI": "10.1000/oa.1",
+   "url": "https://oa.example/1",
+   "rights": "open_access",
+   "pages": "100-120",
+   "journalAbbreviation": "OA Journal",
+   "volume": "12",
+   "serie": "1111-2222",
+   "issue": "3",
+   "pdf_url": "https://oa.example/1.pdf",
+   "oa_citation_count": 42
+  }
+ },
+ "IEEE": {
+  "input": {
+   "article_number": "9999",
+   "publication_date": "1 Jan. 2020",
+   "publication_year": "2020",
+   "title": "IEEE Title",
+   "abstract": "IEEE abstract",
+   "html_url": "https://ieeexplore.ieee.org/document/9999",
+   "access_type": "LOCKED",
+   "doi": "10.1000/ieee.1",
+   "publisher": "IEEE",
+   "volume": "8",
+   "issue": "2",
+   "publication_title": "IEEE Trans.",
+   "authors": {
+    "authors": [
+     {
+      "full_name": "P Q"
+     },
+     {
+      "full_name": "R S"
+     }
+    ]
+   },
+   "start_page": "11",
+   "end_page": "22",
+   "pdf_url": "https://ieeexplore.ieee.org/9999.pdf",
+   "content_type": "Journals"
+  },
+  "expected": {
+   "title": "IEEE Title",
+   "publisher": "IEEE",
+   "itemType": "journalArticle",
+   "authors": "P Q;R S",
+   "language": "NA",
+   "abstract": "IEEE abstract",
+   "archiveID": "9999",
+   "archive": "IEEE",
+   "date": "1 Jan. 2020",
+   "DOI": "10.1000/ieee.1",
+   "url": "https://ieeexplore.ieee.org/document/9999",
+   "rights": "LOCKED",
+   "pages": "11-22",
+   "journalAbbreviation": "IEEE Trans.",
+   "volume": "8",
+   "serie": "NA",
+   "issue": "2",
+   "pdf_url": "https://ieeexplore.ieee.org/9999.pdf"
+  }
+ },
+ "Springer": {
+  "input": {
+   "identifier": "doi:10.1000/spr.1",
+   "publicationDate": "2017-06-01",
+   "title": "Springer Title",
+   "abstract": "Springer abstract",
+   "url": [
+    {
+     "format": "html",
+     "value": "https://link.springer.com/1"
+    },
+    {
+     "format": "pdf",
+     "value": "https://link.springer.com/1.pdf"
+    }
+   ],
+   "openaccess": "false",
+   "doi": "10.1000/spr.1",
+   "publisher": "Springer",
+   "volume": "4",
+   "number": "2",
+   "publicationName": "Spr Journal",
+   "creators": [
+    {
+     "creator": "Smith, J."
+    },
+    {
+     "creator": "Doe, A."
+    }
+   ],
+   "startingPage": "1",
+   "endingPage": "9",
+   "contentType": "Article"
+  },
+  "expected": {
+   "title": "Springer Title",
+   "publisher": "Springer",
+   "itemType": "journalArticle",
+   "authors": "Smith, J.;Doe, A.",
+   "language": "NA",
+   "abstract": "Springer abstract",
+   "archiveID": "doi:10.1000/spr.1",
+   "archive": "Springer",
+   "date": "2017-06-01",
+   "DOI": "10.1000/spr.1",
+   "url": "https://link.springer.com/1",
+   "rights": "false",
+   "pages": "1-9",
+   "journalAbbreviation": "Spr Journal",
+   "volume": "4",
+   "serie": "NA",
+   "issue": "2",
+   "pdf_url": "https://link.springer.com/1.pdf"
+  }
+ },
+ "Elsevier": {
+  "input": {
+   "source-id": "555",
+   "prism:coverDate": "2016-02-02",
+   "dc:title": "Elsevier Title",
+   "dc:description": "Elsevier abstract",
+   "prism:url": "https://api.elsevier.com/1",
+   "openaccess": "0",
+   "prism:doi": "10.1000/els.1",
+   "publisher": "Elsevier",
+   "prism:volume": "10",
+   "prism:issueIdentifier": "5",
+   "prism:publicationName": "Els Journal",
+   "dc:creator": "Lee A.",
+   "prism:pageRange": "30-40",
+   "subtypeDescription": "Conference Paper"
+  },
+  "expected": {
+   "title": "Elsevier Title",
+   "publisher": "Elsevier",
+   "itemType": "conferencePaper",
+   "authors": "Lee A.",
+   "language": "NA",
+   "abstract": "Elsevier abstract",
+   "archiveID": "555",
+   "archive": "Elsevier",
+   "date": "2016-02-02",
+   "DOI": "10.1000/els.1",
+   "url": "https://api.elsevier.com/1",
+   "rights": "0",
+   "pages": "30-40",
+   "journalAbbreviation": "Els Journal",
+   "volume": "10",
+   "serie": "NA",
+   "issue": "5",
+   "pdf_url": "NA"
+  }
+ },
+ "PubMedCentral": {
+  "input": {
+   "title": "PMC Title",
+   "authors": [
+    "Doe J",
+    "Roe R"
+   ],
+   "abstract": "PMC abstract",
+   "doi": "10.1000/pmc.1",
+   "pmc_id": "PMC123456",
+   "pmid": "111",
+   "date": "2020-01-02",
+   "journal": "PMC Journal",
+   "volume": "1",
+   "issue": "2",
+   "pages": "3-4",
+   "publisher": "PMC Pub",
+   "language": "eng"
+  },
+  "expected": {
+   "title": "PMC Title",
+   "publisher": "PMC Pub",
+   "itemType": "journalArticle",
+   "authors": "Doe J;Roe R",
+   "language": "eng",
+   "abstract": "PMC abstract",
+   "archiveID": "PMC123456",
+   "archive": "PubMedCentral",
+   "date": "2020-01-02",
+   "DOI": "10.1000/pmc.1",
+   "url": "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC123456/",
+   "rights": "open-access",
+   "pages": "3-4",
+   "journalAbbreviation": "PMC Journal",
+   "volume": "1",
+   "serie": "NA",
+   "issue": "2",
+   "pdf_url": "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC123456/pdf/",
+   "tags": "NA"
+  }
+ },
+ "PubMed": {
+  "input": {
+   "title": "PubMed Title",
+   "authors": [
+    "Doe J",
+    "Roe R"
+   ],
+   "abstract": "PM abstract",
+   "doi": "10.1000/pm.1",
+   "pmid": "222",
+   "pmcid": "PMC222",
+   "pdf_url": "https://pmc.example/222.pdf",
+   "date": "2021-02-03",
+   "journal": "PM Journal",
+   "volume": "2",
+   "issue": "3",
+   "pages": "5-6",
+   "language": "eng",
+   "mesh_terms": [
+    "Humans",
+    "Cells"
+   ],
+   "publication_type": "Review"
+  },
+  "expected": {
+   "title": "PubMed Title",
+   "publisher": "NA",
+   "itemType": "journalArticle",
+   "authors": "Doe J;Roe R",
+   "language": "eng",
+   "abstract": "PM abstract",
+   "archiveID": "222",
+   "archive": "PubMed",
+   "date": "2021-02-03",
+   "DOI": "10.1000/pm.1",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/222/",
+   "rights": "open-access",
+   "pages": "5-6",
+   "journalAbbreviation": "PM Journal",
+   "volume": "2",
+   "serie": "NA",
+   "issue": "3",
+   "pdf_url": "https://pmc.example/222.pdf",
+   "tags": "Humans;Cells"
+  }
+ },
+ "OpenAIRE": {
+  "input": {
+   "metadata": {
+    "oaf:entity": {
+     "oaf:result": {
+      "title": {
+       "$": "OpenAIRE Title"
+      },
+      "creator": [
+       {
+        "$": "Ng A"
+       },
+       {
+        "$": "Li B"
+       }
+      ],
+      "dateofacceptance": {
+       "$": "2015-05-15"
+      },
+      "description": {
+       "$": "OA abstract"
+      },
+      "pid": [
+       {
+        "@classid": "doi",
+        "$": "10.1000/oaire.1"
+       }
+      ],
+      "journal": {
+       "$": "OAIRE Journal"
+      },
+      "language": {
+       "@classid": "eng"
+      },
+      "bestaccessright": {
+       "@classname": "Open Access"
+      },
+      "resourcetype": {
+       "@classname": "Conference object"
+      },
+      "originalId": [
+       "oai:x::1",
+       "oai:x::2"
+      ],
+      "children": {
+       "instance": [
+        {
+         "webresource": {
+          "url": {
+           "$": "https://oaire.example/1"
+          }
+         }
+        }
+       ]
+      }
+     }
+    }
+   }
+  },
+  "expected": {
+   "title": "OpenAIRE Title",
+   "publisher": "NA",
+   "itemType": "conferencePaper",
+   "authors": "Ng A;Li B",
+   "language": "eng",
+   "abstract": "OA abstract",
+   "archiveID": "oai:x::1",
+   "archive": "OpenAIRE",
+   "date": "2015-05-15",
+   "DOI": "10.1000/oaire.1",
+   "url": "https://oaire.example/1",
+   "rights": "open_access",
+   "pages": "NA",
+   "journalAbbreviation": "OAIRE Journal",
+   "volume": "NA",
+   "serie": "NA",
+   "issue": "NA",
+   "pdf_url": "NA"
+  }
+ },
+ "ORKG": {
+  "input": {
+   "id": "R123",
+   "title": "ORKG Title",
+   "identifiers": {
+    "doi": [
+     "10.1000/orkg.1"
+    ]
+   },
+   "publication_info": {
+    "published_year": 2019,
+    "published_in": {
+     "label": "ORKG Venue"
+    }
+   },
+   "authors": [
+    {
+     "name": "Carl C"
+    },
+    {
+     "name": "Dora D"
+    }
+   ]
+  },
+  "expected": {
+   "title": "ORKG Title",
+   "publisher": "NA",
+   "itemType": "journalArticle",
+   "authors": "Carl C;Dora D",
+   "language": "NA",
+   "abstract": "NA",
+   "archiveID": "R123",
+   "archive": "ORKG",
+   "date": "2019",
+   "DOI": "10.1000/orkg.1",
+   "url": "https://orkg.org/paper/R123",
+   "rights": "NA",
+   "pages": "NA",
+   "journalAbbreviation": "ORKG Venue",
+   "volume": "NA",
+   "serie": "NA",
+   "issue": "NA",
+   "pdf_url": "NA"
+  }
+ },
+ "BioRxiv": {
+  "input": {
+   "doi": "10.1101/2024.01.15.575123",
+   "title": "BioRxiv Title",
+   "authors": "Smith, J.; Doe, A.",
+   "abstract": "BioRxiv abstract",
+   "date": "2024-01-15",
+   "version": "2",
+   "category": "neuroscience",
+   "published": "NA"
+  },
+  "expected": {
+   "title": "BioRxiv Title",
+   "publisher": "bioRxiv",
+   "itemType": "preprint",
+   "authors": "Smith, J.; Doe, A.",
+   "language": "en",
+   "abstract": "BioRxiv abstract",
+   "archiveID": "10.1101/2024.01.15.575123",
+   "archive": "BioRxiv",
+   "date": "2024-01-15",
+   "DOI": "10.1101/2024.01.15.575123",
+   "url": "https://www.biorxiv.org/content/10.1101/2024.01.15.575123",
+   "rights": "open_access",
+   "pages": "NA",
+   "journalAbbreviation": "neuroscience",
+   "volume": "NA",
+   "serie": "NA",
+   "issue": "NA",
+   "pdf_url": "https://www.biorxiv.org/content/10.1101/2024.01.15.575123v2.full.pdf"
+  }
+ }
+}

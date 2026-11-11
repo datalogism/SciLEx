@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Rebuild the desktop app in the background after a commit that touches the
+# app's code. Install: scripts/git-hooks/install.sh
+# Skipped in secondary worktrees and for commits without scilex/ or packaging/ changes.
+# The app is built in build/dist-staging and only then moved into dist/, so
+# dist/SciLEx.app stays launchable during a build. A commit made while a build
+# runs is not lost: the build starts again on the new HEAD when it ends.
+set -uo pipefail
+
+root="$(git rev-parse --show-toplevel)"
+[ "$(git rev-parse --git-dir)" = "$(git rev-parse --git-common-dir)" ] || exit 0
+git diff-tree --no-commit-id --name-only -r HEAD | grep -qE '^(scilex/|packaging/|pyproject.toml$|uv.lock$)' || exit 0
+
+lock="$root/build/.gui-build.lock"
+log="$root/build/gui-build.log"
+staging="$root/build/dist-staging"
+mkdir -p "$root/build"
+# One build at a time: mkdir is atomic; a stale lock older than 30 min is dropped.
+find "$lock" -maxdepth 0 -mmin +30 -exec rmdir {} \; 2>/dev/null
+mkdir "$lock" 2>/dev/null || exit 0
+
+swap_into_dist() {
+  # Replace each built entry (SciLEx.app, SciLEx) with a rename, not a copy.
+  mkdir -p "$root/dist"
+  for built in "$staging"/*; do
+    name="$(basename "$built")"
+    old="$root/dist/.$name.old"
+    rm -rf "$old"
+    [ -e "$root/dist/$name" ] && mv "$root/dist/$name" "$old"
+    mv "$built" "$root/dist/$name"
+    rm -rf "$old"
+  done
+}
+
+(
+  trap 'rmdir "$lock"' EXIT
+  built_head=""
+  while [ "$(git -C "$root" rev-parse HEAD)" != "$built_head" ]; do
+    built_head="$(git -C "$root" rev-parse HEAD)"
+    rm -rf "$staging"
+    if "$root/scripts/build_gui.sh" "$staging" >"$log" 2>&1; then
+      swap_into_dist
+      status=ok
+    else
+      status=FAILED
+    fi
+    echo "[$(date '+%F %T')] GUI build $status (${built_head:0:8})" >>"$root/build/gui-build.history"
+  done
+) >/dev/null 2>&1 &

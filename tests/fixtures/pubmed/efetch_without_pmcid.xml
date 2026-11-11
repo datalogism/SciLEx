@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE PubmedArticleSet PUBLIC "-//NLM//DTD PubMedArticle, 1st January 2024//EN" "https://dtd.nlm.nih.gov/ncbi/pubmed/out/pubmed_240101.dtd">
+<PubmedArticleSet>
+    <PubmedArticle>
+        <MedlineCitation Status="MEDLINE" Owner="NLM">
+            <PMID Version="1">23456789</PMID>
+            <DateCompleted>
+                <Year>2024</Year>
+                <Month>02</Month>
+                <Day>20</Day>
+            </DateCompleted>
+            <Article PubModel="Print">
+                <Journal>
+                    <ISSN IssnType="Print">0028-0836</ISSN>
+                    <JournalIssue CitedMedium="Print">
+                        <Volume>625</Volume>
+                        <Issue>7994</Issue>
+                        <PubDate>
+                            <Year>2024</Year>
+                            <Month>Feb</Month>
+                        </PubDate>
+                    </JournalIssue>
+                    <Title>Nature</Title>
+                    <ISOAbbreviation>Nature</ISOAbbreviation>
+                </Journal>
+                <ArticleTitle>Deep learning for drug discovery: a comprehensive review.</ArticleTitle>
+                <Pagination>
+                    <MedlinePgn>234-256</MedlinePgn>
+                </Pagination>
+                <Abstract>
+                    <AbstractText>Deep learning has transformed drug discovery pipelines.</AbstractText>
+                </Abstract>
+                <AuthorList CompleteYN="Y">
+                    <Author ValidYN="Y">
+                        <LastName>Johnson</LastName>
+                        <ForeName>Alice</ForeName>
+                        <Initials>A</Initials>
+                    </Author>
+                </AuthorList>
+                <Language>eng</Language>
+                <PublicationTypeList>
+                    <PublicationType UI="D016454">Review</PublicationType>
+                </PublicationTypeList>
+            </Article>
+            <MeshHeadingList>
+                <MeshHeading>
+                    <DescriptorName UI="D000086382" MajorTopicYN="Y">Machine Learning</DescriptorName>
+                </MeshHeading>
+                <MeshHeading>
+                    <DescriptorName UI="D055808" MajorTopicYN="N">Drug Discovery</DescriptorName>
+                </MeshHeading>
+            </MeshHeadingList>
+        </MedlineCitation>
+        <PubmedData>
+            <ArticleIdList>
+                <ArticleId IdType="pubmed">23456789</ArticleId>
+                <ArticleId IdType="doi">10.1038/s41586-024-07146-0</ArticleId>
+            </ArticleIdList>
+        </PubmedData>
+    </PubmedArticle>
+</PubmedArticleSet>

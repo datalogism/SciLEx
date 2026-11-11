@@ -1,0 +1,501 @@
+@prefix c4o: <http://purl.org/spar/c4o/> .
+@prefix cito: <http://purl.org/spar/cito/> .
+@prefix datacite: <http://purl.org/spar/datacite/> .
+@prefix dcat: <http://www.w3.org/ns/dcat#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix fabio: <http://purl.org/spar/fabio/> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix frbr: <http://purl.org/vocab/frbr/core#> .
+@prefix literal: <http://www.essepuntato.it/2010/06/literalreification/> .
+@prefix lpwc: <https://linkedpaperswithcode.com/class/> .
+@prefix lpwcp: <https://linkedpaperswithcode.com/property/> .
+@prefix oco: <https://w3id.org/oc/ontology/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix prism: <http://prismstandard.org/namespaces/basic/2.0/> .
+@prefix pro: <http://purl.org/spar/pro/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix sxv: <https://w3id.org/scilex/vocab#> .
+@prefix vann: <http://purl.org/vocab/vann/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+dcat:Dataset a rdfs:Class,
+        owl:Class ;
+    rdfs:label "Dataset"@en ;
+    rdfs:isDefinedBy <http://www.w3.org/ns/dcat> ;
+    skos:definition "A collection of data, published or curated by a single source, and available for access or download in one or more representations."@en .
+
+foaf:Organization a rdfs:Class,
+        owl:Class ;
+    rdfs:label "Organization" ;
+    rdfs:isDefinedBy foaf: ;
+    skos:definition "An organization." .
+
+foaf:Person a rdfs:Class,
+        owl:Class ;
+    rdfs:label "Person" ;
+    rdfs:isDefinedBy foaf: ;
+    skos:definition "A person." .
+
+prism:endingPage a owl:DatatypeProperty ;
+    rdfs:label "endingPage"@en ;
+    rdfs:isDefinedBy prism: ;
+    sxv:declarationInferred true .
+
+prism:issueIdentifier a owl:DatatypeProperty ;
+    rdfs:label "issueIdentifier"@en ;
+    rdfs:isDefinedBy prism: ;
+    sxv:declarationInferred true .
+
+prism:number a owl:DatatypeProperty ;
+    rdfs:label "number"@en ;
+    rdfs:isDefinedBy prism: ;
+    sxv:declarationInferred true .
+
+prism:pageRange a owl:DatatypeProperty ;
+    rdfs:label "pageRange"@en ;
+    rdfs:isDefinedBy prism: ;
+    sxv:declarationInferred true .
+
+prism:publicationDate a owl:DatatypeProperty ;
+    rdfs:label "publicationDate"@en ;
+    rdfs:isDefinedBy prism: ;
+    sxv:declarationInferred true .
+
+prism:startingPage a owl:DatatypeProperty ;
+    rdfs:label "startingPage"@en ;
+    rdfs:isDefinedBy prism: ;
+    sxv:declarationInferred true .
+
+prism:versionIdentifier a owl:DatatypeProperty ;
+    rdfs:label "versionIdentifier"@en ;
+    rdfs:isDefinedBy prism: ;
+    sxv:declarationInferred true .
+
+prism:volume a owl:DatatypeProperty ;
+    rdfs:label "volume"@en ;
+    rdfs:isDefinedBy prism: ;
+    sxv:declarationInferred true .
+
+dcterms:abstract a rdf:Property ;
+    rdfs:label "Abstract"@en ;
+    rdfs:isDefinedBy dcterms: ;
+    skos:definition "A summary of the resource."@en .
+
+dcterms:conformsTo a rdf:Property ;
+    rdfs:label "Conforms To"@en ;
+    rdfs:isDefinedBy dcterms: ;
+    skos:definition "An established standard to which the described resource conforms."@en .
+
+dcterms:description a rdf:Property ;
+    rdfs:label "Description"@en ;
+    rdfs:isDefinedBy dcterms: ;
+    skos:definition "An account of the resource."@en .
+
+dcterms:identifier a rdf:Property ;
+    rdfs:label "Identifier"@en ;
+    rdfs:isDefinedBy dcterms: ;
+    skos:definition "An unambiguous reference to the resource within a given context."@en .
+
+dcterms:language a rdf:Property ;
+    rdfs:label "Language"@en ;
+    rdfs:isDefinedBy dcterms: ;
+    skos:definition "A language of the resource."@en .
+
+dcterms:rights a rdf:Property ;
+    rdfs:label "Rights"@en ;
+    rdfs:isDefinedBy dcterms: ;
+    skos:definition "Information about rights held in and over the resource."@en .
+
+dcterms:subject a rdf:Property ;
+    rdfs:label "Subject"@en ;
+    rdfs:isDefinedBy dcterms: ;
+    skos:definition "A topic of the resource."@en .
+
+dcterms:title a rdf:Property ;
+    rdfs:label "Title"@en ;
+    rdfs:isDefinedBy dcterms: ;
+    skos:definition "A name given to the resource."@en .
+
+c4o:BibliographicInformationSource a owl:Class ;
+    rdfs:label "bibliographic information source"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/c4o> ;
+    skos:definition "A source of information about bibliographic citations, such as Google Scholar, Web of Science or Scopus."@en .
+
+c4o:GlobalCitationCount a owl:Class ;
+    rdfs:label "global citation count"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/c4o> ;
+    skos:definition "The number of times a work has been cited globally, as determined from a particular bibliographic information source on a particular date."@en .
+
+c4o:hasGlobalCitationFrequency a owl:ObjectProperty ;
+    rdfs:label "has global citation frequency"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/c4o> ;
+    skos:definition "The relation between a publication entity and its global citation count, according to a particular information source on a particular date."@en .
+
+c4o:hasGlobalCountSource a owl:ObjectProperty ;
+    rdfs:label "has global count source"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/c4o> ;
+    skos:definition "The relation between a global citation count and the bibliographic information source providing the global citation count information for a particular publication on a particular date."@en .
+
+c4o:hasGlobalCountValue a owl:DatatypeProperty ;
+    rdfs:label "has global count value"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/c4o> ;
+    skos:definition "An integer defining the value of the global citation count of a cited entity recorded from a named bibliographic information source on a particular date."@en .
+
+cito:cites a owl:ObjectProperty ;
+    rdfs:label "cites"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/cito> ;
+    skos:definition "A relation according to which a citing entity cites a cited entity, either directly and explicitly (as in the reference list of a journal article), indirectly (e.g. by citing a more recent paper by the same group on the same topic), or implicitly (e.g. as in artistic quotations or parodies, or in cases of plagiarism)."@en .
+
+datacite:Identifier a owl:Class ;
+    rdfs:label "identifier"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/datacite> ;
+    skos:definition "An identifier that uniquely identities an entity, such as a funding agency, a person or a resource."@en .
+
+datacite:arxiv a datacite:ResourceIdentifierScheme,
+        owl:NamedIndividual ;
+    rdfs:label "arxiv"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/datacite> ;
+    skos:definition "The ArXiv ID is a unique identifier for ArXiv (http://arxiv.org/), a open access repository of preprints."@en .
+
+datacite:doi a datacite:ResourceIdentifierScheme,
+        owl:NamedIndividual ;
+    rdfs:label "doi"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/datacite> ;
+    skos:definition "The Digital Object Identifier (DOI) is a unique identifier assigned to identify digital objects."@en .
+
+datacite:hasIdentifier a owl:ObjectProperty ;
+    rdfs:label "has identifier"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/datacite> ;
+    skos:definition "A unique identifier for the entity (either a funder, a person, a license or a resource)."@en .
+
+datacite:isbn a datacite:ResourceIdentifierScheme,
+        owl:NamedIndividual ;
+    rdfs:label "isbn"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/datacite> ;
+    skos:definition "The International Standard Book Number (ISBN) is a unique 13-digit commercial identifier for books and monographic publications."@en .
+
+datacite:issn a datacite:ResourceIdentifierScheme,
+        owl:NamedIndividual ;
+    rdfs:label "issn"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/datacite> ;
+    skos:definition "The International Standard Serial Number (ISSN) is an eight-digit code to uniquely identify a periodical publication, such as a magazine."@en .
+
+datacite:usesIdentifierScheme a owl:ObjectProperty ;
+    rdfs:label "uses identifier scheme"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/datacite> ;
+    skos:definition "The identifier scheme used to provide the identifier for an entity (either a funder, a person, a license or a resource)."@en .
+
+fabio:AcademicProceedings a owl:Class ;
+    rdfs:label "academic proceedings"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/fabio> ;
+    skos:definition "A document containing the programme and collected papers, or their abstracts, presented at an academic meeting."@en .
+
+fabio:Book a owl:Class ;
+    rdfs:label "book"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/fabio> ;
+    skos:definition "A non-serial document that is complete in one volume or a designated finite number of volumes. A book published by a publisher is usually identified by an International Standard Book Number (ISBN), and may be manifested as a physical printed publication on paper bound in a hard or soft cover, or in electronic format as an 'e-book'."@en .
+
+fabio:BookChapter a owl:Class ;
+    rdfs:label "book chapter"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/fabio> ;
+    skos:definition "A defined chapter of a book, usually with a separate title or number."@en .
+
+fabio:BookSeries a owl:Class ;
+    rdfs:label "book series"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/fabio> ;
+    skos:definition "A sequence of books having certain characteristics in common that are formally identified together as a group."@en .
+
+fabio:ComputerProgram a owl:Class ;
+    rdfs:label "computer program"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/fabio> ;
+    skos:definition "A unit of computer code in source or compiled form, employing one or more algorithms to be executed by a digital computer to undertake a particular task. Computer programs are collectively called 'software' to distinguish them from the equipment ('hardware') upon which they run."@en .
+
+fabio:Journal a owl:Class ;
+    rdfs:label "journal"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/fabio> ;
+    skos:definition "A scholarly periodical primarily devoted to the publication of original research papers."@en .
+
+fabio:JournalArticle a owl:Class ;
+    rdfs:label "journal article"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/fabio> ;
+    skos:definition "An article, typically the realization of a research paper reporting original research findings, published in a journal issue."@en .
+
+fabio:Manifestation a owl:Class ;
+    rdfs:label "manifestation"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/fabio> ;
+    skos:definition "A subclass of FRBR Manifestation, restricted to manifestations of `fabio:Expression`. `fabio:Manifestation` specifically applies to electronic (digital) as well as to physical manifestations of expressions."@en .
+
+fabio:ProceedingsPaper a owl:Class ;
+    rdfs:label "proceedings paper"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/fabio> ;
+    skos:definition "A paper, typically the realization of a research paper reporting original research findings, usually published within an academic proceedings volume."@en .
+
+fabio:ReportDocument a owl:Class ;
+    rdfs:label "report document"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/fabio> ;
+    skos:definition "The realization of a report, usually in printed form."@en .
+
+fabio:WebContent a owl:Class ;
+    rdfs:label "web content"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/fabio> ;
+    skos:definition "Information prepared specifically and primarily for manifestation in a web page, comprising text, images, datasets and/or other works."@en .
+
+fabio:hasAccessDate a owl:DatatypeProperty ;
+    rdfs:label "has access date"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/fabio> ;
+    skos:definition "The date on which a particular digital item, such as a PDF or an HTML file, has been accessed by somebody."@en .
+
+fabio:hasShortTitle a owl:DatatypeProperty ;
+    rdfs:label "has short title"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/fabio> ;
+    skos:definition "A short version of the title of a resource, typically used to label or refer to a particular entity in an abbreviated form, for example an abbreviated journal title in a reference, or a short title of a document used as the running title in a page header."@en .
+
+pro:author a pro:PublishingRole,
+        owl:NamedIndividual ;
+    rdfs:label "author"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/pro> ;
+    skos:definition "The role a person has of authorship of some material (for example a document)."@en .
+
+pro:editor a pro:PublishingRole,
+        owl:NamedIndividual ;
+    rdfs:label "editor"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/pro> ;
+    skos:definition "The role of a person who selects and prepares for publication material created and submitted by authors, having oversight of its content, format and presentation."@en .
+
+pro:isDocumentContextFor a owl:ObjectProperty ;
+    rdfs:label "is document context for"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/pro> ;
+    skos:definition "The relation between a document and the role for which that document provides the context (e.g. relating a document to the role of author or peer-reviewer of that document)."@en .
+
+pro:isHeldBy a owl:ObjectProperty ;
+    rdfs:label "is role held by"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/pro> ;
+    skos:definition "The relation between a role in time that an agent holds, or a contribution situation that an agent makes, and that agent."@en .
+
+pro:publisher a pro:PublishingRole,
+        owl:NamedIndividual ;
+    rdfs:label "publisher"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/pro> ;
+    skos:definition "The role of a person or an organization that published material, or of a publisher's employee who has responsibility for such publications."@en .
+
+pro:withRole a owl:FunctionalProperty,
+        owl:ObjectProperty ;
+    rdfs:label "with role"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/pro> ;
+    skos:definition "The relation between an agent's role in time and a definition of the type of role held by this agent."@en .
+
+frbr:embodiment a owl:ObjectProperty ;
+    rdfs:label "embodiment"@en ;
+    rdfs:isDefinedBy <http://purl.org/vocab/frbr/core> ;
+    skos:definition "A manifestation that embodies an expression."@en .
+
+frbr:exemplar a owl:ObjectProperty ;
+    rdfs:label "exemplar"@en ;
+    rdfs:isDefinedBy <http://purl.org/vocab/frbr/core> ;
+    skos:definition "An item that is an exemplar of a manifestation."@en .
+
+frbr:partOf a owl:ObjectProperty ;
+    rdfs:label "part of"@en ;
+    rdfs:isDefinedBy <http://purl.org/vocab/frbr/core> ;
+    skos:definition "An endeavour incorporating an endeavour."@en .
+
+literal:hasLiteralValue a owl:DatatypeProperty ;
+    rdfs:label "hasLiteralValue"@en ;
+    rdfs:isDefinedBy <http://www.essepuntato.it/2010/06/literalreification> ;
+    sxv:declarationInferred true .
+
+skos:ConceptScheme a owl:Class ;
+    rdfs:label "Concept Scheme"@en ;
+    rdfs:isDefinedBy <http://www.w3.org/2004/02/skos/core> ;
+    skos:definition "A set of concepts, optionally including statements about semantic relationships between those concepts."@en .
+
+skos:altLabel a rdf:Property,
+        owl:AnnotationProperty ;
+    rdfs:label "alternative label"@en ;
+    rdfs:isDefinedBy <http://www.w3.org/2004/02/skos/core> ;
+    skos:definition "An alternative lexical label for a resource."@en .
+
+skos:exactMatch a rdf:Property,
+        owl:ObjectProperty,
+        owl:TransitiveProperty ;
+    rdfs:label "has exact match"@en ;
+    rdfs:isDefinedBy <http://www.w3.org/2004/02/skos/core> ;
+    skos:definition "skos:exactMatch is used to link two concepts, indicating a high degree of confidence that the concepts can be used interchangeably across a wide range of information retrieval applications. skos:exactMatch is a transitive property, and is a sub-property of skos:closeMatch."@en .
+
+skos:inScheme a rdf:Property,
+        owl:ObjectProperty ;
+    rdfs:label "is in scheme"@en ;
+    rdfs:isDefinedBy <http://www.w3.org/2004/02/skos/core> ;
+    skos:definition "Relates a resource (for example a concept) to a concept scheme in which it is included."@en .
+
+skos:notation a rdf:Property,
+        owl:DatatypeProperty ;
+    rdfs:label "notation"@en ;
+    rdfs:isDefinedBy <http://www.w3.org/2004/02/skos/core> ;
+    skos:definition "A notation, also known as classification code, is a string of characters such as \"T58.5\" or \"303.4833\" used to uniquely identify a concept within the scope of a given concept scheme."@en .
+
+skos:prefLabel a rdf:Property,
+        owl:AnnotationProperty ;
+    rdfs:label "preferred label"@en ;
+    rdfs:isDefinedBy <http://www.w3.org/2004/02/skos/core> ;
+    skos:definition "The preferred lexical label for a resource, in a given language."@en .
+
+prov:Entity a owl:Class ;
+    rdfs:label "Entity" ;
+    rdfs:isDefinedBy <http://www.w3.org/ns/prov-o> .
+
+prov:wasDerivedFrom a owl:ObjectProperty ;
+    rdfs:label "wasDerivedFrom" ;
+    rdfs:isDefinedBy <http://www.w3.org/ns/prov-o> ;
+    skos:definition "The more specific subproperties of prov:wasDerivedFrom (i.e., prov:wasQuotedFrom, prov:wasRevisionOf, prov:hadPrimarySource) should be used when applicable."@en .
+
+foaf:familyName a rdf:Property,
+        owl:DatatypeProperty ;
+    rdfs:label "familyName" ;
+    rdfs:isDefinedBy foaf: ;
+    skos:definition "The family name of some person." .
+
+foaf:givenName a rdf:Property,
+        owl:DatatypeProperty ;
+    rdfs:label "Given name" ;
+    rdfs:isDefinedBy foaf: ;
+    skos:definition "The given name of some person." .
+
+foaf:name a rdf:Property,
+        owl:DatatypeProperty ;
+    rdfs:label "name" ;
+    rdfs:isDefinedBy foaf: ;
+    skos:definition "A name for some thing." .
+
+lpwc:dataset a owl:Class ;
+    rdfs:label "Dataset"@en ;
+    rdfs:isDefinedBy <https://linkedpaperswithcode.com/ontology#> ;
+    rdfs:subClassOf skos:Concept ;
+    skos:definition "A dataset is a collection of data"@en .
+
+lpwc:method a owl:Class ;
+    rdfs:label "Method"@en ;
+    rdfs:isDefinedBy <https://linkedpaperswithcode.com/ontology#> ;
+    rdfs:subClassOf skos:Concept ;
+    skos:definition """
+A method is a machine learning component that refers to a specific procedure or technique used to solve problems or accomplish tasks.
+"""@en .
+
+lpwc:model a owl:Class ;
+    rdfs:label "Model"@en ;
+    rdfs:isDefinedBy <https://linkedpaperswithcode.com/ontology#> ;
+    rdfs:subClassOf skos:Concept ;
+    skos:definition "A machine learning model"@en .
+
+lpwc:paper a owl:Class ;
+    rdfs:label "Paper"@en ;
+    rdfs:isDefinedBy <https://linkedpaperswithcode.com/ontology#> ;
+    rdfs:subClassOf fabio:Expression ;
+    skos:definition """
+A paper makes content and research results available to the general public
+"""@en .
+
+lpwc:task a owl:Class ;
+    rdfs:label "Task"@en ;
+    rdfs:isDefinedBy <https://linkedpaperswithcode.com/ontology#> ;
+    rdfs:subClassOf skos:Concept ;
+    skos:definition """
+A task is a specific problem or operation for which solutions are developed and applied.
+"""@en .
+
+lpwcp:hasConference a owl:ObjectProperty ;
+    rdfs:label "has conference"@en ;
+    rdfs:isDefinedBy <https://linkedpaperswithcode.com/ontology#> ;
+    skos:definition "This property specifies the conference of a paper"@en .
+
+lpwcp:hasMethod a owl:ObjectProperty ;
+    rdfs:label "has method"@en ;
+    rdfs:isDefinedBy <https://linkedpaperswithcode.com/ontology#> ;
+    skos:definition "This property specifies the method that is used by a paper"@en .
+
+lpwcp:hasModel a owl:ObjectProperty ;
+    rdfs:label "has model"@en ;
+    rdfs:isDefinedBy <https://linkedpaperswithcode.com/ontology#> ;
+    skos:definition "This property specifies the model that is used by a paper or an evaluation"@en .
+
+lpwcp:hasTask a owl:ObjectProperty ;
+    rdfs:label "has task"@en ;
+    rdfs:isDefinedBy <https://linkedpaperswithcode.com/ontology#> ;
+    skos:definition "This property specifies the task that is addresed by a paper or an evaluation"@en .
+
+lpwcp:introducedBy a owl:ObjectProperty ;
+    rdfs:label "introduced by"@en ;
+    rdfs:isDefinedBy <https://linkedpaperswithcode.com/ontology#> ;
+    skos:definition "This property specifies the paper that introduced a method or a dataset"@en .
+
+lpwcp:usesDataset a owl:ObjectProperty ;
+    rdfs:label "uses dataset"@en ;
+    rdfs:isDefinedBy <https://linkedpaperswithcode.com/ontology#> ;
+    skos:definition "This property specifies the dataset used by a paper"@en .
+
+oco:hasNext a owl:ObjectProperty ;
+    rdfs:label "has next"@en ;
+    rdfs:isDefinedBy <https://w3id.org/oc/ontology> ;
+    skos:definition "This property allows to specify the following entity in a sequence of entities, e.g. a reference pointer in a list of pointers, a role in a sequence of agents' roles of the same type associated with the same bibliographic resource (so as to define, for instance, its ordered list of authors)."@en .
+
+sxv:declarationInferred a owl:AnnotationProperty ;
+    rdfs:label "declaration inferred from usage"@en ;
+    rdfs:comment "True when the term's source ontology could not be fetched or does not declare it; its type was inferred from how the data uses it."@en .
+
+sxv:eventPlace a owl:DatatypeProperty ;
+    rdfs:label "event place"@en ;
+    rdfs:comment "Place where a conference took place, as a free-text string (BibLaTeX location). To be replaced by a proper event/place model in a later iteration."@en ;
+    rdfs:domain lpwc:conference ;
+    rdfs:isDefinedBy <https://w3id.org/scilex/ap/lpwc> ;
+    rdfs:range xsd:string .
+
+sxv:position a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "position"@en ;
+    rdfs:comment "1-based position of an agent role in the ordered name list it comes from (author, editor, bookauthor). Complements the OCDM oco:hasNext chain so that 'first author' is a one-hop query."@en ;
+    rdfs:domain pro:RoleInTime ;
+    rdfs:isDefinedBy <https://w3id.org/scilex/ap/lpwc> ;
+    rdfs:range xsd:integer .
+
+fabio:Expression a owl:Class ;
+    rdfs:label "expression"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/fabio> ;
+    skos:definition "A subclass of FRBR Expression, restricted to expressions of `fabio:Work`."@en .
+
+pro:RoleInTime a owl:Class ;
+    rdfs:label "role in time"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/pro> ;
+    skos:definition "A particular situation that describe a role an agent may have, that can be restricted to a particular time interval."@en .
+
+lpwc:conference a owl:Class ;
+    rdfs:label "Conference"@en ;
+    rdfs:isDefinedBy <https://linkedpaperswithcode.com/ontology#> ;
+    skos:definition "A Conference where Papers are published"@en .
+
+<https://w3id.org/scilex/ap/lpwc> a owl:Ontology ;
+    dcterms:creator "Celian Ringwald" ;
+    dcterms:description """Application profile for the RDF output of SciLEx systematic literature
+reviews. Bibliographic and citation data follow the OpenCitations Data Model (OCDM 2.1.0) on the
+SPAR ontologies (FaBiO, CiTO, C4O, PRO, DataCite); machine-learning content (tasks, datasets,
+models, methods) reuses the Linked Papers With Code (LPWC) ontology; the review's coding scheme is
+expressed in SKOS. Reused terms are declared MIREOT-style (no owl:imports); this ontology adds only
+the few sxv: terms nothing else covers."""@en ;
+    dcterms:license <https://creativecommons.org/licenses/by/4.0/> ;
+    dcterms:modified "2026-11-10"^^xsd:date ;
+    dcterms:title "SciLEx application profile: OpenCitations/SPAR + Linked Papers With Code"@en ;
+    vann:preferredNamespacePrefix "sxv" ;
+    vann:preferredNamespaceUri "https://w3id.org/scilex/vocab#" ;
+    rdfs:seeAlso <https://github.com/metaphacts/linkedpaperswithcode>,
+        <https://github.com/opencitations/metadata/tree/master/documentation> ;
+    owl:priorVersion <https://w3id.org/scilex/ap/lpwc/0.2.0> ;
+    owl:versionIRI <https://w3id.org/scilex/ap/lpwc/0.3.0> ;
+    owl:versionInfo "0.3.0 (iteration 3)" .
+
+skos:Concept a owl:Class ;
+    rdfs:label "Concept"@en ;
+    rdfs:isDefinedBy <http://www.w3.org/2004/02/skos/core> ;
+    skos:definition "An idea or notion; a unit of thought."@en .
+

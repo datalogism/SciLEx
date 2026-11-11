@@ -1,0 +1,161 @@
+# Ancien format, voir scilex.yml.example (racine du dépôt) / `scilex config migrate`.
+# ============================================================================
+# SciLEx API Configuration - Quick Start
+# ============================================================================
+#
+# Copy this file to 'src/api.config.yml' and add your API credentials
+#
+# Only include APIs you actually use. Leave others commented out.
+# For more details, see CLAUDE.md in the project root.
+#
+# ============================================================================
+
+# ============================================================================
+# REQUIRED API KEYS (add credentials for APIs you want to use)
+# ============================================================================
+
+Zotero:
+  api_key: "YOUR_ZOTERO_API_KEY"
+  user_id: "YOUR_ZOTERO_USER_ID"  # Find at https://www.zotero.org/settings/keys
+  user_mode: "user"  # or "group" for group libraries
+
+# Uncomment and fill in for IEEE Xplore
+# IEEE:
+#   api_key: "YOUR_IEEE_API_KEY"
+
+# Uncomment and fill in for Elsevier/ScienceDirect
+# Elsevier:
+#   api_key: "YOUR_ELSEVIER_API_KEY"
+#   inst_token: null  # Optional institutional token, or leave null
+
+# Uncomment and fill in for Springer if you have the same api key for the open access endpoint and for the meta endpoint
+# Springer:
+#   api_key: "YOUR_SPRINGER_API_KEY"
+# Springer:
+#   api_key:
+#     meta_api_key: "YOUR_SPRINGER_OPEN_ACCESS_API_KEY"
+#     openaccess_api_key: "YOUR_SPRINGER_META_API_KEY"
+
+# Uncomment and fill in for Springer if you have api keys for the open access endpoint and for the meta endpoint
+
+# Semantic Scholar (optional but recommended for better rate limits)
+SemanticScholar:
+  api_key: "YOUR_SEMANTIC_SCHOLAR_API_KEY"  # Free tier OK, get at https://www.semanticscholar.org/product/api
+
+# PubMed - Biomedical literature (35M+ papers, ~25% with PMC PDFs)
+# Free tier: 3 req/sec, With API key: 10 req/sec
+# Get key at: https://www.ncbi.nlm.nih.gov/account/settings/
+# PubMed:
+#   api_key: "YOUR_NCBI_API_KEY"  # Optional but recommended for better rate limits
+
+# ORCID integration (optional)
+# ORCID:
+#   client_id: "YOUR_ORCID_CLIENT_ID"
+#   client_secret: "YOUR_ORCID_CLIENT_SECRET"
+#   dir: "YOUR_WORK_DIRECTORY"
+
+# CrossRef - Citation counts for aggregation (batch lookup, much faster than OpenCitations)
+#
+# HOW IT WORKS:
+#   During aggregation, SciLEx fetches citation counts for each paper.
+#   CrossRef supports batch DOI lookup (20 DOIs per request), which is
+#   ~200x faster than OpenCitations (2 requests per DOI at 3 req/sec).
+#   CrossRef is used automatically — no configuration needed.
+#
+# POLITE POOL (recommended):
+#   CrossRef has two access tiers based on whether you provide an email:
+#   - Without email: "public pool"  — 5 requests/sec, 1 concurrent connection
+#   - With email:    "polite pool"  — 10 requests/sec, 3 concurrent connections
+#
+#   The email is sent as a mailto= query parameter. CrossRef uses it only
+#   to contact you in case of problems (e.g., excessive usage). It is never
+#   shared or used for marketing. See: https://www.crossref.org/documentation/
+#
+#   With 20 DOIs per batch request, the effective throughput is:
+#   - Public pool: ~100 DOIs/sec (5 req/sec × 20 DOIs)
+#   - Polite pool: ~200 DOIs/sec (10 req/sec × 20 DOIs)
+#
+# CrossRef:
+#   mailto: "your.email@institution.org"
+
+# ============================================================================
+# FREE APIs (no configuration needed, just enable in scilex.config.yml)
+# ============================================================================
+#
+# These APIs are free to use - no API keys required:
+#   - OpenAlex: Comprehensive open database (https://docs.openalex.org)
+#   - Arxiv: Preprints (https://info.arxiv.org/help/api)
+#   - HAL: French open archive (https://api.archives-ouvertes.fr/docs)
+#   - DBLP: Computer science bibliography (https://dblp.org)
+#   - Istex: French academic archive (https://api.istex.fr/documentation)
+#   - PubMed: Biomedical literature (https://www.ncbi.nlm.nih.gov/home/develop/api/)
+#
+# To enable: Add to 'apis' list in scilex.config.yml
+# Example: apis: [OpenAlex, Arxiv, HAL, DBLP, PubMed]
+#
+
+# OpenAlex - Pass your email as api_key to join the polite pool (faster, stable).
+# OpenAlex is free; the email is sent as the mailto= query parameter, NOT for auth.
+# OpenAlex:
+#   api_key: "your.email@institution.org"
+
+# OpenAIRE - Register for a token to raise rate limit from 0.2 → 1.0 req/s (5x).
+# Token is free; register at: https://develop.openaire.eu/
+# Without token: ~5s between requests, 409 throttle errors common on large runs.
+# With token:    ~1 req/s, much more stable for large collections.
+# OpenAIRE:
+#   api_key: "YOUR_OPENAIRE_ACCESS_TOKEN"
+
+# ============================================================================
+# VPN ROTATION (Optional - rotate NordVPN IP when rate-limited)
+# ============================================================================
+#
+# When an API persistently returns 429/409 (rate limit), SciLEx can rotate
+# your NordVPN IP to bypass per-IP blocks instead of giving up on the query.
+#
+# Requirements:
+#   - NordVPN app installed and logged in (Windows/WSL2: GUI app; Linux: CLI)
+#   - pip install nordvpn-switcher  (optional, only needed for Linux native)
+#   - On WSL2: NordVPN Windows app is used directly via the interop path
+#
+# How it works:
+#   1. Persistent 429 detected after all retries are exhausted
+#   2. NordVPN disconnects then quick-connects to a new server
+#   3. Public IP is verified to have changed (rotation_delay seconds wait)
+#   4. Collection retries from the same page with the new IP
+#   5. If rotation fails or limit is reached, query is marked complete and skipped
+#
+# vpn:
+#   enabled: false            # true to enable
+#   provider: nordvpn
+#   rotate_on_rate_limit:     # APIs to enable rotation for (empty = all)
+#     - Arxiv
+#     - DBLP
+#     - OpenAIRE
+#   rotation_delay: 15        # Seconds to wait after connecting (for IP propagation)
+#   max_rotations_per_session: 10   # Safety cap across all APIs for the run
+
+# ============================================================================
+# RATE LIMITS (Optional - uses sensible defaults if not specified)
+# ============================================================================
+#
+# SciLEx auto-selects rate limits based on whether you have an API key:
+#   PubMed:   3 req/sec (free) → 10 req/sec (with key)
+#   Elsevier: 2 req/sec (free) → 9 req/sec (with key)
+#   Arxiv:    0.33 req/sec (1 per 3 seconds, no key system)
+#
+# You only need to override if you have special access or want lower rates.
+#
+# rate_limits:
+#   SemanticScholar: 1.0      # Same with or without key
+#   OpenAlex: 10.0            # Same with or without key
+#   Arxiv: 0.33               # 1 request per 3 seconds (no key system)
+#   IEEE: 2.0                 # Custom per registration
+#   Elsevier: 9.0             # 9 req/sec with key (2 without)
+#   Springer: 1.67            # 100 req/min
+#   HAL: 10.0                 # No documented limit
+#   DBLP: 1.0                 # 1-2s between requests
+#   Istex: 5.0                # No documented limit
+#   PubMed: 10.0              # 10 req/sec with key (3 without)
+#   OpenAIRE: 0.2             # 5s between requests; 409 Conflict at higher rates
+#   ORKG: 0.5                 # 2s between requests; timeouts at higher rates

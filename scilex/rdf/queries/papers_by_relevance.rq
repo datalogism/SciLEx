@@ -1,0 +1,18 @@
+# List all academic papers ordered by SciLEx relevance score (descending).
+# Returns paper URI, title, relevance score, citation count, and source API.
+
+PREFIX dcterms: <http://purl.org/dc/terms/>
+PREFIX bibo:    <http://purl.org/ontology/bibo/>
+PREFIX schema:  <https://schema.org/>
+PREFIX scilex:  <https://w3id.org/scilex/vocab#>
+
+SELECT ?paper ?title ?score ?citations ?source
+WHERE {
+    VALUES ?paperType { bibo:AcademicArticle bibo:Book bibo:BookSection bibo:Manual bibo:Thesis bibo:Proceedings bibo:Report bibo:Manuscript bibo:Document }
+    ?paper a ?paperType ;
+           dcterms:title ?title .
+    OPTIONAL { ?paper scilex:relevanceScore ?score }
+    OPTIONAL { ?paper schema:citationCount ?citations }
+    OPTIONAL { ?paper scilex:collectedFrom ?source }
+}
+ORDER BY DESC(?score)

@@ -1,0 +1,17 @@
+PREFIX bibo: <http://purl.org/ontology/bibo/>
+PREFIX dcterms: <http://purl.org/dc/terms/>
+
+CONSTRUCT {
+  ?paperA bibo:cites ?paperB .
+  ?paperA dcterms:title ?titleA .
+  ?paperB dcterms:title ?titleB .
+}
+WHERE {
+  VALUES ?typeA { bibo:AcademicArticle bibo:Book bibo:BookSection bibo:Manual bibo:Thesis bibo:Proceedings bibo:Report bibo:Manuscript bibo:Document }
+  VALUES ?typeB { bibo:AcademicArticle bibo:Book bibo:BookSection bibo:Manual bibo:Thesis bibo:Proceedings bibo:Report bibo:Manuscript bibo:Document }
+  ?paperA a ?typeA ;
+          bibo:cites ?paperB ;
+          dcterms:title ?titleA .
+  ?paperB a ?typeB ;
+          dcterms:title ?titleB .
+}

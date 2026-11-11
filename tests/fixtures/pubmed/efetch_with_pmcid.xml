@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE PubmedArticleSet PUBLIC "-//NLM//DTD PubMedArticle, 1st January 2024//EN" "https://dtd.nlm.nih.gov/ncbi/pubmed/out/pubmed_240101.dtd">
+<PubmedArticleSet>
+    <PubmedArticle>
+        <MedlineCitation Status="MEDLINE" Owner="NLM">
+            <PMID Version="1">12345678</PMID>
+            <DateCompleted>
+                <Year>2024</Year>
+                <Month>03</Month>
+                <Day>15</Day>
+            </DateCompleted>
+            <Article PubModel="Electronic">
+                <Journal>
+                    <ISSN IssnType="Electronic">1758-0463</ISSN>
+                    <JournalIssue CitedMedium="Internet">
+                        <Volume>21</Volume>
+                        <Issue>3</Issue>
+                        <PubDate>
+                            <Year>2024</Year>
+                            <Month>Jan</Month>
+                            <Day>15</Day>
+                        </PubDate>
+                    </JournalIssue>
+                    <Title>Database : the journal of biological databases and curation</Title>
+                    <ISOAbbreviation>Database (Oxford)</ISOAbbreviation>
+                </Journal>
+                <ArticleTitle>Machine learning approaches for biomedical knowledge graphs.</ArticleTitle>
+                <Pagination>
+                    <MedlinePgn>123-145</MedlinePgn>
+                </Pagination>
+                <Abstract>
+                    <AbstractText Label="BACKGROUND">Machine learning has revolutionized biomedical research.</AbstractText>
+                    <AbstractText Label="METHODS">We applied deep learning to knowledge graphs.</AbstractText>
+                    <AbstractText Label="RESULTS">Significant improvements were observed.</AbstractText>
+                </Abstract>
+                <AuthorList CompleteYN="Y">
+                    <Author ValidYN="Y">
+                        <LastName>Smith</LastName>
+                        <ForeName>John</ForeName>
+                        <Initials>J</Initials>
+                    </Author>
+                    <Author ValidYN="Y">
+                        <LastName>Doe</LastName>
+                        <ForeName>Jane</ForeName>
+                        <Initials>J</Initials>
+                    </Author>
+                </AuthorList>
+                <Language>eng</Language>
+                <PublicationTypeList>
+                    <PublicationType UI="D016428">Journal Article</PublicationType>
+                </PublicationTypeList>
+                <ArticleDate DateType="Electronic">
+                    <Year>2024</Year>
+                    <Month>01</Month>
+                    <Day>15</Day>
+                </ArticleDate>
+            </Article>
+            <MeshHeadingList>
+                <MeshHeading>
+                    <DescriptorName UI="D000086382" MajorTopicYN="Y">Machine Learning</DescriptorName>
+                </MeshHeading>
+                <MeshHeading>
+                    <DescriptorName UI="D057225" MajorTopicYN="N">Knowledge Bases</DescriptorName>
+                </MeshHeading>
+            </MeshHeadingList>
+        </MedlineCitation>
+        <PubmedData>
+            <ArticleIdList>
+                <ArticleId IdType="pubmed">12345678</ArticleId>
+                <ArticleId IdType="pmc">PMC9876543</ArticleId>
+                <ArticleId IdType="doi">10.1093/database/baad001</ArticleId>
+            </ArticleIdList>
+        </PubmedData>
+    </PubmedArticle>
+</PubmedArticleSet>

@@ -1,0 +1,16 @@
+# Rank corpus papers by incoming citation count (bibo:citedBy).
+# A paper with no citedBy triples will appear with citationCount = 0
+# thanks to the OPTIONAL / COALESCE pattern.
+
+PREFIX bibo: <http://purl.org/ontology/bibo/>
+PREFIX dcterms: <http://purl.org/dc/terms/>
+
+SELECT ?paper ?title (COUNT(?citing) AS ?citationCount)
+WHERE {
+  VALUES ?paperType { bibo:AcademicArticle bibo:Book bibo:BookSection bibo:Manual bibo:Thesis bibo:Proceedings bibo:Report bibo:Manuscript bibo:Document }
+  ?paper a ?paperType ;
+         dcterms:title ?title .
+  OPTIONAL { ?paper bibo:citedBy ?citing }
+}
+GROUP BY ?paper ?title
+ORDER BY DESC(?citationCount)

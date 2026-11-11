@@ -1,0 +1,18 @@
+# Build the full outgoing-references graph from corpus papers.
+# Emits bibo:cites triples for every reference listed in a corpus paper,
+# even when the cited target is not itself in the corpus.
+# Counterpart to construct_cites_from_cited_by.rq (which handles incoming links).
+
+PREFIX bibo: <http://purl.org/ontology/bibo/>
+PREFIX dcterms: <http://purl.org/dc/terms/>
+
+CONSTRUCT {
+  ?paper bibo:cites ?cited .
+  ?paper dcterms:title ?title .
+}
+WHERE {
+  VALUES ?paperType { bibo:AcademicArticle bibo:Book bibo:BookSection bibo:Manual bibo:Thesis bibo:Proceedings bibo:Report bibo:Manuscript bibo:Document }
+  ?paper a ?paperType ;
+         bibo:cites ?cited .
+  OPTIONAL { ?paper dcterms:title ?title }
+}

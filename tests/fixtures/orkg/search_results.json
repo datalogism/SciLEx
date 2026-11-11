@@ -1,0 +1,68 @@
+{
+  "page": {
+    "total_elements": 3,
+    "total_pages": 1,
+    "number": 0,
+    "size": 25
+  },
+  "content": [
+    {
+      "id": "R12345",
+      "title": "Knowledge Graph Embedding for Link Prediction",
+      "identifiers": {
+        "doi": ["10.1234/orkg-kg-2023"]
+      },
+      "publication_info": {
+        "published_year": 2023,
+        "published_in": {
+          "id": "V123",
+          "label": "Journal of Web Semantics"
+        },
+        "url": "https://www.sciencedirect.com/science/article/pii/S1570826823000123"
+      },
+      "authors": [
+        {"id": "A1", "name": "Emma Wilson"},
+        {"id": "A2", "name": "David Chen"},
+        {"id": "A3", "name": "Sarah Johnson"}
+      ],
+      "research_fields": [
+        {"id": "R0", "label": "Computer Science"}
+      ]
+    },
+    {
+      "id": "R67890",
+      "title": "Semantic Web Technologies for Data Integration",
+      "identifiers": {},
+      "publication_info": {
+        "published_year": 2022,
+        "published_in": {
+          "id": "V456",
+          "label": "Proceedings of the International Semantic Web Conference"
+        },
+        "url": ""
+      },
+      "authors": [
+        {"id": "A4", "name": "Michael Park"}
+      ],
+      "research_fields": [
+        {"id": "R0", "label": "Computer Science"}
+      ]
+    },
+    {
+      "id": "R11111",
+      "title": "Ontology Learning from Text",
+      "identifiers": {
+        "doi": ["10.9999/ontology-2021"]
+      },
+      "publication_info": {
+        "published_in": "Artificial Intelligence",
+        "url": "https://example.com/ontology-paper"
+      },
+      "authors": [
+        {"id": "A5", "name": "Laura Martinez"},
+        {"id": "A6", "name": "Tom Baker"}
+      ],
+      "research_fields": []
+    }
+  ]
+}

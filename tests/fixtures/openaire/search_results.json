@@ -1,0 +1,89 @@
+{
+  "response": {
+    "header": {
+      "status": {"@code": "200", "$": "OK"},
+      "query": {"$": "machine learning"},
+      "total": {"$": "2"},
+      "page": {"$": "1"},
+      "pageSize": {"$": "100"}
+    },
+    "results": {
+      "result": [
+        {
+          "header": {
+            "dri:objIdentifier": {"$": "dedup_wf_001::abc123"},
+            "dri:dateOfCollection": {"$": "2024-01-15"},
+            "dri:dateOfTransformation": {"$": "2024-01-15"}
+          },
+          "metadata": {
+            "oaf:entity": {
+              "oaf:result": {
+                "title": {"@classid": "main title", "@classname": "main title", "$": "Machine Learning for Knowledge Graph Completion"},
+                "creator": [
+                  {"@rank": "1", "@name": "Smith", "@surname": "John", "$": "John Smith"},
+                  {"@rank": "2", "@name": "Doe", "@surname": "Jane", "$": "Jane Doe"}
+                ],
+                "dateofacceptance": {"$": "2023-05-15"},
+                "description": {"$": "This paper presents a machine learning approach for knowledge graph completion using neural networks."},
+                "pid": [
+                  {"@classid": "doi", "@classname": "Digital Object Identifier", "$": "10.1234/ml-kg-2023"},
+                  {"@classid": "pmid", "@classname": "PubMed ID", "$": "12345678"}
+                ],
+                "journal": {"@issn": "1234-5678", "$": "Journal of Artificial Intelligence Research"},
+                "language": {"@classid": "eng", "@classname": "English"},
+                "bestaccessright": {"@classid": "OPEN", "@classname": "Open Access"},
+                "resourcetype": {"@classid": "Article", "@classname": "Article"},
+                "resulttype": {"@classid": "publication", "@classname": "publication"},
+                "originalId": "oai:arxiv.org:2301.12345",
+                "children": {
+                  "instance": [
+                    {
+                      "webresource": {
+                        "url": {"$": "https://arxiv.org/abs/2301.12345"}
+                      },
+                      "accessright": {"@classid": "OPEN", "@classname": "Open Access"},
+                      "instancetype": {"@classid": "Article", "@classname": "Article"}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "header": {
+            "dri:objIdentifier": {"$": "dedup_wf_002::def456"},
+            "dri:dateOfCollection": {"$": "2024-01-15"},
+            "dri:dateOfTransformation": {"$": "2024-01-15"}
+          },
+          "metadata": {
+            "oaf:entity": {
+              "oaf:result": {
+                "title": {"@classid": "main title", "@classname": "main title", "$": "Deep Learning for Natural Language Processing"},
+                "creator": {"@rank": "1", "@name": "Brown", "@surname": "Alice", "$": "Alice Brown"},
+                "dateofacceptance": {"$": "2022-11-20"},
+                "description": {"$": "A comprehensive survey of deep learning methods for NLP tasks including classification and generation."},
+                "pid": {"@classid": "doi", "@classname": "Digital Object Identifier", "$": "https://doi.org/10.5678/dl-nlp-2022"},
+                "journal": {"@issn": "9876-5432", "$": "ACM Computing Surveys"},
+                "language": {"@classid": "eng", "@classname": "English"},
+                "bestaccessright": {"@classid": "RESTRICTED", "@classname": "Restricted"},
+                "resourcetype": {"@classid": "Conference object", "@classname": "Conference object"},
+                "resulttype": {"@classid": "publication", "@classname": "publication"},
+                "originalId": ["base_oa::xyz789", "openaire::xyz789"],
+                "children": {
+                  "instance": {
+                    "webresource": {
+                      "url": {"$": "https://dl.acm.org/doi/10.5678/dl-nlp-2022"}
+                    },
+                    "accessright": {"@classid": "RESTRICTED", "@classname": "Restricted"},
+                    "instancetype": {"@classid": "Article", "@classname": "Article"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,33 @@
+tag,nb,datasets,surveys,models,type,new for models,detail
+Task,362,X,X,X,quali,,TO CHECK
+LearningMethod,168,,,X,quali,,TO EXTRACT
+PTM,139,,X,X,quali,,TO CHECK
+Granularity,123,X,X,X,quali,,TO EXTRACT
+Archi,119,,X,X,quali,,TO CHECK
+Lang,118,X,X,X,quali,,TO CHECK
+Source,84,X,,,quali,,TO EXTRACT
+Dataset,78,,X,X,quali,,TO CHECK
+SelectionMethod,63,X,,X,quali,,TO EXTRACT
+Domain,61,X,X,,quali,,TO EXTRACT
+Survey_Methodo_Bin,51,,X,,Bin,,TO EXTRACT
+NbTypeRel,47,X,,X,Scaled,,OPTIONAL
+Input,42,,,X,Quali,,TO EXTRACT
+NbTriples,32,X,,,Scaled,,OPTIONAL
+NbDoc,29,X,,,Scaled,,OPTIONAL
+BenchmarkType,28,,X,,Quali,,TO EXTRACT
+NbModel,27,,X,,Scaled,,OPTIONAL
+NbTypeEntity,23,X,,,Scaled,,OPTIONAL
+NbEntity,21,X,,,Scaled,,OPTIONAL
+NbDataset,21,,X,X,Scaled,,OPTIONAL
+NbSent,20,X,,,Scaled,,OPTIONAL
+UseNegativeExample_Bin,12,X,,X,Bin,,TO EXTRACT
+DatatypeProp,9,X,,X,Quali,,TO EXTRACT
+ObjectProperties_Bin,0,X,,X,Bin,1,TO EXTRACT
+SynthGeneration_Bin,8,X,,X,Bin,,TO EXTRACT
+LinearizedGraph_Bin,4,,,X,Bin,,TO EXTRACT
+DecodingMethod_Bin,4,,,X,Bin,,TO EXTRACT
+LossUpdate_Bin,4,,,X,Bin,,TO EXTRACT
+CostEval_Bin,3,,,X,Bin,,TO EXTRACT
+DATASET_CREATED,0,,,X,quali,,TO EXTRACT
+ManualAnnotation,0,X,X,X,quali,,TO EXTRACT
+Use_NER,0,x,,,quali,,TO EXTRACT

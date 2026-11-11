@@ -1,0 +1,22 @@
+# Overview of all corpus papers with their key metadata.
+# Returns one row per paper; journal title is resolved from the linked Journal node.
+
+PREFIX bibo: <http://purl.org/ontology/bibo/>
+PREFIX dcterms: <http://purl.org/dc/terms/>
+PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+PREFIX schema: <https://schema.org/>
+
+SELECT ?paper ?title ?date ?doi ?journal ?url
+WHERE {
+  VALUES ?paperType { bibo:AcademicArticle bibo:Book bibo:BookSection bibo:Manual bibo:Thesis bibo:Proceedings bibo:Report bibo:Manuscript bibo:Document }
+  ?paper a ?paperType ;
+         dcterms:title ?title .
+  OPTIONAL { ?paper dcterms:date ?date }
+  OPTIONAL { ?paper bibo:doi ?doi }
+  OPTIONAL {
+    ?paper bibo:journal ?journalNode .
+    ?journalNode dcterms:title ?journal .
+  }
+  OPTIONAL { ?paper schema:url ?url }
+}
+ORDER BY ?date ?title

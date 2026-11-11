@@ -1,0 +1,89 @@
+# ============================================================================
+# scilex.yml : one file per literature review (copy it into your working folder)
+# ============================================================================
+#
+# Discovery order: --config PATH > $SCILEX_CONFIG > ./scilex.yml
+# Only write what differs from the defaults: every value below is the default,
+# except the required ones (name, search.keywords / years / apis).
+# API keys never go here: see keys.yml.example.
+# Check this file without running anything:  scilex config check
+# Show the effective values and their origin: scilex config show
+# Convert the old files (scilex.config.yml + scilex.advanced.yml): scilex config migrate
+# ============================================================================
+
+name: my_review                  # required; the collection is written to <output_dir>/<name>
+output_dir: output               # relative to the working folder
+# preset: literature_review      # literature_review | bibliometrics (see below)
+#
+# Presets (code defaults < preset < this file < CLI options):
+#   literature_review: filters.require [abstract, year], filters.citations true, filters.abstract_quality 60
+#   bibliometrics:     filters.require [], filters.citations false, filters.abstract_quality null,
+#                      ranking.max_papers null
+
+# ----------------------------------------------------------------------------
+# 1. COLLECT: what to search and where
+# ----------------------------------------------------------------------------
+search:
+  keywords:                      # required: 1 group (any term) or 2 groups (group 1 AND group 2)
+    - [RAG, Retrieval Augmented Generation]
+    - [Knowledge Graph]
+  bonus_keywords: []             # optional terms that raise the relevance score
+  years: [2023, 2024, 2025]      # required; also accepts "2023-2025"
+  apis: [SemanticScholar, OpenAlex, Arxiv]   # required; see FORMAT_CONVERTERS for all names
+  max_articles_per_query: null   # null = no limit
+  semantic_scholar_mode: regular # regular | bulk (bulk: 10x faster, needs approval)
+  since: null                    # YYYY-MM-DD: incremental re-collection from that date
+
+collect:                         # rare options
+  enabled: true                  # false: skip collection and only aggregate existing data
+  vpn: null                      # VPN rotation block (see scilex/vpn/rotator.py)
+
+# ----------------------------------------------------------------------------
+# 2. AGGREGATE: filters, citations, ranking, reports
+# ----------------------------------------------------------------------------
+filters:
+  item_types: null               # null = all types; otherwise a whitelist, e.g. [journalArticle, conferencePaper]
+  always_keep: [journalArticle, conferencePaper]   # types never removed by the quality filters
+  require: [abstract, year]      # among: abstract, doi, year, open_access
+  min_authors: 2
+  abstract_words: [50, 1000]     # [min, max]
+  abstract_quality: null         # score 0-100; null = no abstract validation
+  check_year_range: true
+  citations: true                # time-aware citation filter
+
+citations:
+  fetch: true                    # fetch citation counts during aggregation
+  fallbacks: [semantic_scholar, openalex]   # extra sources when the main ones miss
+  discrepancy_threshold: 0.5     # relative gap between sources that triggers a warning
+
+ranking:
+  enabled: true
+  max_papers: 1000               # null = no limit
+  weights: {keywords: 0.45, quality: 0.25, itemtype: 0.20, citations: 0.10}
+  itemtype_weights: {}           # partial override of the item-type weights
+  venue_ranking: false           # add a CORE/SJR venue rank column and blend it in the score
+
+llm_screening:                   # optional LLM relevance scoring (needs openrouter.api_key in keys.yml)
+  enabled: false
+  topic: ""                      # research topic description; required when enabled
+  model: deepseek/deepseek-v4-flash
+  threshold: null                # drop papers scoring below this value
+  max_papers: 500                # cap of papers (not cached) sent to the model
+  workers: 16                    # concurrent OpenRouter requests (1-64)
+  price_input_per_m: 0.091       # USD per million tokens, for the cost estimate
+  price_output_per_m: 0.182
+
+report:
+  quality_report: true
+  track_duplicates: true
+  prisma: true                   # write prisma_report.md at the end of scilex-aggregate
+
+# ----------------------------------------------------------------------------
+# 3. ENRICH (optional steps)
+# ----------------------------------------------------------------------------
+enrichment:
+  paperswithcode: false          # Papers with Code (no key): true, or {enabled, fuzzy_match_threshold, cache_path, cache_ttl_days, workers}
+  recover_dois: false            # recover missing DOIs through CrossRef (title + first author)
+  doi_recovery_min_similarity: 0.9
+  unpaywall: false               # add the oa_type column (needs Unpaywall.email in keys.yml)
+  author_hindex: false           # first/last author h-index via Semantic Scholar

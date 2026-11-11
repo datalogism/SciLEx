@@ -1,0 +1,13 @@
+# SciLEx domain template: social-sciences
+# Social sciences and humanities. OpenAlex, HAL and OpenAIRE cover books and non-English output; books and chapters kept, strict citation filter off.
+# Edit name, keywords and years, then run: scilex-collect
+name: social-sciences_review
+search:
+  keywords:
+  - [social network, inequality, public policy]
+  - [qualitative, survey, case study]
+  years: [2022, 2023, 2024, 2025]
+  apis: [OpenAlex, HAL, OpenAIRE, SemanticScholar]
+filters:
+  item_types: [journalArticle, book, bookSection, conferencePaper]
+  citations: false

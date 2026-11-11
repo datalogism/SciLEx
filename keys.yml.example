@@ -1,0 +1,67 @@
+# ============================================================================
+# keys.yml : API keys and rate limits, shared by all your reviews
+# ============================================================================
+#
+# Copy to ~/.config/scilex/keys.yml (never inside a project that you version).
+# Discovery order: --keys PATH > $SCILEX_KEYS > ~/.config/scilex/keys.yml
+#                  > legacy scilex/api.config.yml (deprecated)
+# Environment variables SCILEX_<API>_<FIELD> override the file, for example
+#   SCILEX_SEMANTICSCHOLAR_API_KEY=...   SCILEX_OPENALEX_API_KEY=...
+# Only keep the APIs you use. Free APIs without key: Arxiv, HAL, DBLP, Istex.
+# ============================================================================
+
+# api_key accepts a string, or a list of strings (key pool: round-robin, with
+# automatic fallback on HTTP 429/401/403).
+SemanticScholar:
+  api_key: "YOUR_SEMANTIC_SCHOLAR_API_KEY"   # or ["key1", "key2"]
+
+OpenAlex:
+  api_key: "YOUR_OPENALEX_API_KEY"
+
+IEEE:
+  api_key: "YOUR_IEEE_API_KEY"
+
+Elsevier:
+  api_key: "YOUR_ELSEVIER_API_KEY"
+  inst_token: null               # optional institutional token
+
+Springer:
+  api_key: "YOUR_SPRINGER_API_KEY"     # one key for both endpoints, or:
+  # api_key:
+  #   meta_api_key: "YOUR_SPRINGER_META_KEY"
+  #   openaccess_api_key: "YOUR_SPRINGER_OPEN_ACCESS_KEY"
+
+PubMed:
+  api_key: "YOUR_NCBI_API_KEY"   # optional: 10 req/s instead of 3
+
+CrossRef:
+  mailto: "you@institution.org"  # polite pool: faster batch lookups
+
+Unpaywall:
+  email: "you@institution.org"   # required by enrichment.unpaywall
+
+openrouter:
+  api_key: "sk-or-..."           # llm_screening; OPENROUTER_API_KEY also works
+
+Zotero:
+  api_key: "YOUR_ZOTERO_API_KEY"
+  user_id: "YOUR_ZOTERO_USER_ID"
+  user_mode: user                # user | group
+
+# ORCID:
+#   client_id: "..."
+#   client_secret: "..."
+#   dir: "..."
+
+# Optional overrides of the requests per second (sensible defaults otherwise).
+# rate_limits:
+#   SemanticScholar: 1.0
+#   OpenAlex: 10.0
+#   Arxiv: 0.33
+#   IEEE: 2.0
+#   Elsevier: 9.0
+#   Springer: 1.67
+#   HAL: 10.0
+#   DBLP: 1.0
+#   Istex: 5.0
+#   PubMed: 10.0

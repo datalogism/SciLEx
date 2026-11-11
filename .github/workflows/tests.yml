@@ -1,0 +1,22 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync --extra dev --extra gui
+
+      - name: Run tests (excluding live tests)
+        run: uv run pytest -m "not live" --cov=scilex --cov-report=term-missing

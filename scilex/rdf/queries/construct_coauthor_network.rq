@@ -1,0 +1,23 @@
+# Build a co-authorship graph: two authors are linked when they share at least
+# one corpus paper.  schema:colleague is used as the co-authorship predicate.
+# The STR(?) < STR(?) guard avoids emitting both (A,B) and (B,A) for each pair.
+
+PREFIX bibo: <http://purl.org/ontology/bibo/>
+PREFIX dcterms: <http://purl.org/dc/terms/>
+PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+PREFIX schema: <https://schema.org/>
+
+CONSTRUCT {
+  ?authorA schema:colleague ?authorB .
+  ?authorA foaf:name ?nameA .
+  ?authorB foaf:name ?nameB .
+}
+WHERE {
+  VALUES ?paperType { bibo:AcademicArticle bibo:Book bibo:BookSection bibo:Manual bibo:Thesis bibo:Proceedings bibo:Report bibo:Manuscript bibo:Document }
+  ?paper a ?paperType ;
+         dcterms:creator ?authorA ;
+         dcterms:creator ?authorB .
+  FILTER(?authorA != ?authorB && STR(?authorA) < STR(?authorB))
+  ?authorA foaf:name ?nameA .
+  ?authorB foaf:name ?nameB .
+}

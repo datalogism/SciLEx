@@ -1,0 +1,14 @@
+# SciLEx domain template: machine-learning
+# Machine learning / AI. Conference-driven and preprint-heavy: relaxed citation filter, arXiv and Semantic Scholar first.
+# Edit name, keywords and years, then run: scilex-collect
+name: machine-learning_review
+search:
+  keywords:
+  - [deep learning, neural network, transformer]
+  - [benchmark, evaluation, large language model]
+  years: [2022, 2023, 2024, 2025]
+  apis: [Arxiv, SemanticScholar, OpenAlex, DBLP]
+filters:
+  item_types: [conferencePaper, journalArticle, preprint]
+  citations: false
+ranking: {max_papers: 1500}
