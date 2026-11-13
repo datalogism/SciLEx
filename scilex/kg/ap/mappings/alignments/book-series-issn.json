@@ -1,0 +1,23 @@
+{
+  "description": "iter8 (ORSD VR9): ISSNs of book series that bibliographic exports often present as journals (SciLEx writes the ISSN into Zotero's Series field; chapters are exported as @article). A 'journal' carrying one of these ISSNs is retyped fabio:BookSeries and named (sparql/07-venue-chain.ru). Print and online ISSNs are both listed. Global reference data, not review-specific.",
+  "series": {
+    "0302-9743": "Lecture Notes in Computer Science",
+    "1611-3349": "Lecture Notes in Computer Science",
+    "1613-0073": "CEUR Workshop Proceedings",
+    "1865-0929": "Communications in Computer and Information Science",
+    "1865-0937": "Communications in Computer and Information Science",
+    "1865-1348": "Lecture Notes in Business Information Processing",
+    "1865-1356": "Lecture Notes in Business Information Processing",
+    "1868-4238": "IFIP Advances in Information and Communication Technology",
+    "2194-5357": "Advances in Intelligent Systems and Computing",
+    "2194-5365": "Advances in Intelligent Systems and Computing",
+    "1867-8211": "Lecture Notes of the Institute for Computer Sciences, Social Informatics and Telecommunications Engineering",
+    "2367-3370": "Lecture Notes in Networks and Systems",
+    "2367-3389": "Lecture Notes in Networks and Systems",
+    "1876-1100": "Lecture Notes in Electrical Engineering",
+    "1876-1119": "Lecture Notes in Electrical Engineering",
+    "2190-3018": "Smart Innovation, Systems and Technologies",
+    "1860-949X": "Studies in Computational Intelligence",
+    "0922-6389": "Frontiers in Artificial Intelligence and Applications"
+  }
+}

@@ -83,11 +83,34 @@ API_SPECS: tuple[ApiSpec, ...] = (
         testable=True,
     ),
     ApiSpec(
+        "GitHub",
+        "GitHub (code licences)",
+        field="token",
+        help_url="https://github.com/settings/personal-access-tokens",
+        note="Optional: 5,000 repositories/hour instead of 60 for ⑥ Enrich > "
+        "GitHub licences. A token without any permission is enough.",
+    ),
+    ApiSpec(
+        "Zenodo",
+        "Zenodo (data deposits)",
+        field="token",
+        help_url="https://zenodo.org/account/settings/applications/tokens/new/",
+        note="Optional: a higher request rate for ⑥ Enrich > Zenodo. No scope needed.",
+    ),
+    ApiSpec(
         "openrouter",
         "OpenRouter (LLM screening)",
         help_url="https://openrouter.ai/keys",
         note="Optional, only for LLM screening.",
         testable=True,
+    ),
+    ApiSpec(
+        "LmmAnnotator",
+        "SciLEx Annotator (LLM annotation)",
+        field="token",
+        note="Optional: the token of your SciLEx Annotator service "
+        "(SCILEX_ANNOTATOR_TOKEN), for the LLM annotators of ④ Annotate > "
+        "Campaigns. Its address is set on that page.",
     ),
 )
 ZOTERO_HELP_URL = "https://www.zotero.org/settings/keys"

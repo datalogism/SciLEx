@@ -67,7 +67,8 @@ async def test_run_pipeline_enables_screening(ctx, tmp_path):
 
         # The sidebar unlocks ③ Screen by itself, without reloading the page.
         screen_button = user.find(marker="step-screen").elements.pop()
-        for _ in range(30):
+        # The sidebar polls every second; leave room for a loaded machine.
+        for _ in range(100):
             if screen_button.enabled:
                 break
             await asyncio.sleep(0.1)

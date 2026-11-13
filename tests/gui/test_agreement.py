@@ -106,8 +106,12 @@ def test_plan_copies_needs_two_annotators():
     assert agreement.plan_copies(data) == {"A": ["x", "y"]}
 
 
-def test_study_copies_compute_and_merge(zotero):
-    review = object()
+def test_study_copies_compute_and_merge(zotero, tmp_path):
+    from types import SimpleNamespace
+
+    from scilex.gui.services import journal
+
+    review = SimpleNamespace(folder=tmp_path, collection_dir=tmp_path / "output")
     report = agreement.create_copies(
         review, {"REF1": ["ann", "bob"], "REF2": ["ann", "bob"]}
     )
@@ -158,9 +162,31 @@ def test_study_copies_compute_and_merge(zotero):
         "GRANULARITY:Sentence",
     }
 
+    # SX-4: the study is saved with its sample, measures, codes and merge outcome.
+    (study,) = agreement.load_studies(review.collection_dir)
+    assert study["sample"] == ["REF1", "REF2"] and study["annotators"] == ["ann", "bob"]
+    measures = {m["dimension"]: m for m in study["measures"]}
+    assert measures["TASK"]["alpha"] == 1.0 and measures["TASK"]["distance"] == "masi"
+    assert {
+        "paper": "REF1",
+        "annotator": "bob",
+        "dimension": "GRANULARITY",
+        "value": "Document",
+    } in study["codes"]
+    assert study["merge"]["rule"] == "majority"
+    assert {"paper": "REF1", "code": "GRANULARITY:Document"} in study["merge"][
+        "to_adjudicate"
+    ]
+    events = {e["activity"]: e for e in journal.load(review.folder)}
+    assert {"agreement-copies", "agreement-computed", "agreement-merged"} <= set(events)
+    assert events["agreement-computed"]["generated"]["file"] == study["file"]
 
-def test_copies_are_not_papers(zotero):
-    agreement.create_copies(object(), {"REF1": ["ann", "bob"]})
+
+def test_copies_are_not_papers(zotero, tmp_path):
+    from types import SimpleNamespace
+
+    review = SimpleNamespace(folder=tmp_path, collection_dir=tmp_path / "output")
+    agreement.create_copies(review, {"REF1": ["ann", "bob"]})
     papers = zl.fetch_papers(zotero, None)
     assert {p["key"] for p in papers} == {"REF1", "REF2"}
 
@@ -188,6 +214,7 @@ async def test_card_computes_alpha(ctx, tmp_path, zotero):
             item["data"]["tags"].append({"tag": "TASK:RE"})
     async with user_simulation(build_root(ctx)) as user:
         await user.open(f"/review/{review.id}/annotate")
+        user.find(marker="annotate-tab-progress").click()
         await user.should_see(marker="agreement-card", retries=20)
         await user.should_see("1 papers with two annotators or more (2 copies).")
         user.find(marker="agreement-compute").click()

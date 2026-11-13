@@ -112,12 +112,49 @@ async def test_annotators_card_assigns_papers(ctx, tmp_path):
     svc.save(
         review.folder, [svc.Member(name="Ann", orcid=ORCID_A), svc.Member(name="Bob")]
     )
+    from scilex.gui.services import campaigns
+
+    # ④ Annotate: the Team tab lists the members; a campaign assigns the papers.
+    campaigns.create(review.folder, "", name="all", annotators=[ORCID_A, "Bob"])
     async with user_simulation(build_root(ctx)) as user:
         await user.open(f"/review/{review.id}/annotate")
+        user.find(marker="annotate-tab-team").click()
         await user.should_see(marker="annotators-card", retries=20)
-        user.find(marker="annotators-preview-button").click()
+        await user.should_not_see(marker="annotators-preview-button")
+        user.find(marker="annotate-tab-campaigns").click()
+        await user.should_see(marker="campaign-all", retries=20)
+        user.find(marker="campaign-assign-all").click()
         await user.should_see("3 papers to assign")
-        user.find(marker="annotators-apply").click()
-        await user.should_see(marker="annotators-progress", retries=20)
+        user.find(marker="campaign-assign-confirm").click()
+        await user.should_see("3 papers assigned", retries=20)
     tags = ";".join(str(t) for t in read_results(review.results_path)["tags"])
     assert tags.count(f"ANNOT:{ORCID_A}") + tags.count("ANNOT:Bob") == 3
+
+
+def test_a_person_changing_types_is_recorded_as_their_origin(tmp_path):
+    """SX-17: ③ Screen and Explore change types through apply_tags."""
+    import pandas as pd
+
+    from scilex import paper_types
+    from scilex.gui.services import journal, members
+    from scilex.gui.services.extend import read_results, write_results
+    from scilex.gui.services.workspace import Review
+
+    review = Review(folder=tmp_path, name="r", output_root=tmp_path / "out")
+    review.collection_dir.mkdir(parents=True)
+    write_results(
+        pd.DataFrame(
+            [{"itemType": "journalArticle", "title": "A", "DOI": "10.1/a", "tags": ""}]
+        ),
+        review.results_path,
+    )
+    journal.set_agent("https://orcid.org/0000-0002-1825-0097")
+    try:
+        members.apply_tags(review, {0: (["PAPER_TYPE:Dataset"], [])})
+    finally:
+        journal.set_agent("")
+    data = read_results(review.results_path)
+    assert (
+        data.at[0, paper_types.ORIGIN_COLUMN]
+        == "person:https://orcid.org/0000-0002-1825-0097"
+    )

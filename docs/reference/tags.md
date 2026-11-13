@@ -11,6 +11,7 @@ is visible and editable in Zotero and round-trips through the
 |---|---|
 | `DIMENSION:value` | a code of the annotation grid (`SAT_TASK:RelationExtraction`) |
 | `DIMENSION:?` | placeholder: the dimension is still to code |
+| `DIMENSION-AUTO:value` | an LLM annotator's proposal, to validate by a person ([④ Annotate → Validate](../modules/annotate.md#validate-llm-proposals)); never a code |
 
 The grid (`annotation_grid.csv`) lists the dimensions. Values are normalised when the
 grid is applied (`DIMENSION:DeepLearning`). Only these tags count as codes in the

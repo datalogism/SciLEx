@@ -27,6 +27,7 @@ from scilex.tagging.grid import (
     save_grid,
     tags_for_type,
 )
+from scilex.tagging.guideline import GUIDELINE_FILENAME, Guideline, parse_guideline
 
 REPORT_DIRNAME = "annotations"
 
@@ -91,6 +92,41 @@ def rows_to_grid(
 def save_review_grid(review: Review, grid: pd.DataFrame) -> Path:
     """Write the review's grid."""
     return save_grid(grid, grid_path(review))
+
+
+# -- guideline ------------------------------------------------------------------
+
+
+def guideline_path(review: Review) -> Path:
+    """Where the review's annotation guideline (Markdown) is stored."""
+    return review.folder / GUIDELINE_FILENAME
+
+
+def load_guideline_text(review: Review) -> str:
+    """The review's guideline ("" when it has none)."""
+    try:
+        return guideline_path(review).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return ""
+
+
+def save_guideline_text(review: Review, text: str) -> Path | None:
+    """Write the guideline; an empty text removes it. Return the path written."""
+    path = guideline_path(review)
+    if not text.strip():
+        path.unlink(missing_ok=True)
+        return None
+    tmp = path.with_suffix(".md.tmp")
+    tmp.write_text(text.replace(chr(13) + chr(10), chr(10)), encoding="utf-8")
+    tmp.replace(path)
+    return path
+
+
+def review_guideline(review: Review, grid: pd.DataFrame | None = None) -> Guideline:
+    """The parsed guideline, its sections matched to the grid's dimensions."""
+    grid = load_review_grid(review) if grid is None else grid
+    dims = normalize_grid(grid)[TAG_COLUMN].tolist() if len(grid) else []
+    return parse_guideline(load_guideline_text(review), dims)
 
 
 @dataclass(frozen=True)
@@ -165,9 +201,9 @@ def build_report(review: Review, items: list[dict]) -> AnnotationReport:
     dimensions.to_csv(folder / "tags_by_dimension.csv", index=False)
     annotators.to_csv(folder / "annotator_activity.csv", index=False)
 
-    from scilex.gui.services.overview import record_snapshot, zotero_tags
+    from scilex.gui.services.overview import record_snapshot, zotero_tags_by_key
 
-    record_snapshot(review.folder, zotero_tags(items), "annotate")
+    record_snapshot(review.folder, zotero_tags_by_key(items), "annotate")
     annotation_dims = (
         dimensions[dimensions["category"] == "annotation"]
         if len(dimensions)

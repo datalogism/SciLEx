@@ -83,6 +83,8 @@ async def test_overview_shows_the_flow(ctx, review):
     async with user_simulation(build_root(ctx)) as user:
         await user.open(f"/review/{review.id}")
         await user.should_see(marker="overview-prisma", retries=40)
+        await user.should_see(marker="prisma-funnel")  # shown first
+        user.find(marker="prisma-view").elements.pop().set_value("diagram")
         await user.should_see(marker="prisma-included")
         await user.should_see("Records excluded")
 
@@ -99,7 +101,12 @@ def test_overview_counts_paper_types(review):
 def test_export_figure_and_types_tagged_after_import(review, tmp_path):
     flow = prisma.compute(review, {"apis": ["OpenAlex"]})
     files = prisma.export_figure(flow, tmp_path / "out")
-    assert [f.name for f in files] == ["prisma_flow.svg", "prisma_flow.png"]
+    assert [f.name for f in files] == [
+        "prisma_flow.svg",
+        "prisma_flow.png",
+        "prisma_flow_funnel.svg",
+    ]
+    assert "Included" in files[2].read_text(encoding="utf-8")
     assert "Records identified" in files[0].read_text(encoding="utf-8")
 
     from scilex.gui.services.paper_enrich import tag_types

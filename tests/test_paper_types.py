@@ -37,3 +37,34 @@ def test_annotate_keeps_types_set_by_people():
         "PAPER_TYPE:Model or Method",
     ]
     assert pt.effective_type({"title": "A survey", "tags": ""}) == pt.REVIEW
+
+
+def test_a_paper_can_have_several_types():
+    row = {
+        "title": "X",
+        "tags": "PAPER_TYPE:Model or Method;TASK:RE;PAPER_TYPE:Dataset",
+    }
+    assert pt.types_of(row) == [pt.MODEL, pt.DATASET]
+    assert pt.effective_types(row) == [pt.MODEL, pt.DATASET]
+    assert pt.effective_type(row) == pt.MODEL  # the first one
+    assert pt.effective_types({"title": "A survey of RE"}) == [pt.REVIEW]
+    add, remove = pt.tag_changes(row, [pt.DATASET, pt.BENCHMARK])
+    assert add == ["PAPER_TYPE:Benchmark"]
+    assert remove == ["PAPER_TYPE:Model or Method"]
+
+
+def test_origin_of_the_types_is_recorded():
+    """SX-17: the default guess, a person and a collection role are told apart."""
+    data = pd.DataFrame(
+        [
+            {"title": "A survey of KGs", "tags": ""},
+            {"title": "X", "tags": "PAPER_TYPE:Dataset"},
+        ]
+    )
+    pt.annotate(data)
+    assert data.at[0, pt.ORIGIN_COLUMN] == pt.DEFAULT_GUESS
+    assert data.at[1, pt.ORIGIN_COLUMN] == ""  # set before: origin unknown
+    assert pt.changes_types(["PAPER_TYPE:Dataset"], []) and not pt.changes_types(
+        ["X:1"], []
+    )
+    assert pt.person_origin("https://orcid.org/1") == "person:https://orcid.org/1"

@@ -18,20 +18,28 @@ import scilex
 PACKAGE_DIR = Path(scilex.__file__).parent
 
 # Data files the app needs at runtime (also the PyInstaller ``datas`` list).
-REQUIRED_DATA = {
-    "templates": "*.yml",
-    "rdf/queries": "*.rq",
-    "data/venue_rankings": "*.csv",
-    "tagging": "*.csv",
-    "gui/assets": "*.png",
+# (directory, pattern) pairs: a directory may have several patterns.
+REQUIRED_DATA = [
+    ("templates", "*.yml"),
+    ("rdf/queries", "*.rq"),
+    ("data/venue_rankings", "*.csv"),
+    ("tagging", "*.csv"),
+    ("gui/assets", "*.png"),
+    ("gui/assets/dashboard", "dashboard.*"),
+    ("gui/assets/dashboard/vendor", "*.js"),
     # Pinned scilex-lpwc-ap profile, mapped by ⑧ Export (knowledge graph).
-    "kg/ap": "VERSION.json",
-    "kg/ap/ontology": "*.ttl",
-    "kg/ap/shapes": "*.ttl",
-    "kg/ap/mappings/rml": "*.ttl",
-    "kg/ap/mappings/functions": "*.py",
-    "kg/ap/mappings/sparql": "*.ru",
-}
+    ("kg/ap", "VERSION.json"),
+    ("kg/ap/ontology", "*.ttl"),
+    ("kg/ap/shapes", "*.ttl"),
+    ("kg/ap/mappings/rml", "*.ttl"),
+    ("kg/ap/mappings/functions", "*.py"),
+    ("kg/ap/mappings/sparql", "*.ru"),
+    # Mapping interface (loaded by path), reference profiles, tables, JSON Schemas.
+    ("kg/ap/mappings", "*.py"),
+    ("kg/ap/mappings", "*.json"),
+    ("kg/ap/mappings/collections", "*.json"),
+    ("kg/ap/mappings/alignments", "*.json"),
+]
 
 REQUIRED_MODULES = (
     "nicegui",
@@ -80,7 +88,7 @@ def check_step_pages() -> str:
 def check_data_files() -> str:
     """Check that each data directory exists and is not empty."""
     counts = []
-    for directory, pattern in REQUIRED_DATA.items():
+    for directory, pattern in REQUIRED_DATA:
         files = list((PACKAGE_DIR / directory).glob(pattern))
         if not files:
             raise FileNotFoundError(f"no {pattern} in {PACKAGE_DIR / directory}")

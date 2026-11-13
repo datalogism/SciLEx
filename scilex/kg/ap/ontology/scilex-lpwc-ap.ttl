@@ -19,6 +19,7 @@
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
 @prefix sxv: <https://w3id.org/scilex/vocab#> .
 @prefix vann: <http://purl.org/vocab/vann/> .
+@prefix void: <http://rdfs.org/ns/void#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
 dcat:Dataset a rdfs:Class,
@@ -26,6 +27,11 @@ dcat:Dataset a rdfs:Class,
     rdfs:label "Dataset"@en ;
     rdfs:isDefinedBy <http://www.w3.org/ns/dcat> ;
     skos:definition "A collection of data, published or curated by a single source, and available for access or download in one or more representations."@en .
+
+<http://www.w3.org/ns/oa#Annotation> a rdfs:Class ;
+    rdfs:label "Annotation" ;
+    rdfs:isDefinedBy <http://www.w3.org/ns/oa> ;
+    skos:definition "The class for Web Annotations." .
 
 foaf:Organization a rdfs:Class,
         owl:Class ;
@@ -89,15 +95,30 @@ dcterms:conformsTo a rdf:Property ;
     rdfs:isDefinedBy dcterms: ;
     skos:definition "An established standard to which the described resource conforms."@en .
 
+dcterms:date a rdf:Property ;
+    rdfs:label "Date"@en ;
+    rdfs:isDefinedBy dcterms: ;
+    skos:definition "A point or period of time associated with an event in the lifecycle of the resource."@en .
+
 dcterms:description a rdf:Property ;
     rdfs:label "Description"@en ;
     rdfs:isDefinedBy dcterms: ;
     skos:definition "An account of the resource."@en .
 
+dcterms:format a rdf:Property ;
+    rdfs:label "Format"@en ;
+    rdfs:isDefinedBy dcterms: ;
+    skos:definition "The file format, physical medium, or dimensions of the resource."@en .
+
 dcterms:identifier a rdf:Property ;
     rdfs:label "Identifier"@en ;
     rdfs:isDefinedBy dcterms: ;
     skos:definition "An unambiguous reference to the resource within a given context."@en .
+
+dcterms:isPartOf a rdf:Property ;
+    rdfs:label "Is Part Of"@en ;
+    rdfs:isDefinedBy dcterms: ;
+    skos:definition "A related resource in which the described resource is physically or logically included."@en .
 
 dcterms:language a rdf:Property ;
     rdfs:label "Language"@en ;
@@ -109,6 +130,11 @@ dcterms:rights a rdf:Property ;
     rdfs:isDefinedBy dcterms: ;
     skos:definition "Information about rights held in and over the resource."@en .
 
+dcterms:source a rdf:Property ;
+    rdfs:label "Source"@en ;
+    rdfs:isDefinedBy dcterms: ;
+    skos:definition "A related resource from which the described resource is derived."@en .
+
 dcterms:subject a rdf:Property ;
     rdfs:label "Subject"@en ;
     rdfs:isDefinedBy dcterms: ;
@@ -118,6 +144,11 @@ dcterms:title a rdf:Property ;
     rdfs:label "Title"@en ;
     rdfs:isDefinedBy dcterms: ;
     skos:definition "A name given to the resource."@en .
+
+<http://purl.org/ontology/bibo/presentedAt> a owl:ObjectProperty ;
+    rdfs:label "presentedAt"@en ;
+    rdfs:isDefinedBy <http://purl.org/ontology/bibo/> ;
+    sxv:declarationInferred true .
 
 c4o:BibliographicInformationSource a owl:Class ;
     rdfs:label "bibliographic information source"@en ;
@@ -213,6 +244,11 @@ fabio:ComputerProgram a owl:Class ;
     rdfs:isDefinedBy <http://purl.org/spar/fabio> ;
     skos:definition "A unit of computer code in source or compiled form, employing one or more algorithms to be executed by a digital computer to undertake a particular task. Computer programs are collectively called 'software' to distinguish them from the equipment ('hardware') upon which they run."@en .
 
+fabio:DigitalManifestation a owl:Class ;
+    rdfs:label "digital manifestation"@en ;
+    rdfs:isDefinedBy <http://purl.org/spar/fabio> ;
+    skos:definition "A manifestation that represents data in binary form, encoding the data as a series of 0s and 1s."@en .
+
 fabio:Journal a owl:Class ;
     rdfs:label "journal"@en ;
     rdfs:isDefinedBy <http://purl.org/spar/fabio> ;
@@ -302,21 +338,27 @@ frbr:partOf a owl:ObjectProperty ;
     rdfs:isDefinedBy <http://purl.org/vocab/frbr/core> ;
     skos:definition "An endeavour incorporating an endeavour."@en .
 
+void:inDataset a owl:ObjectProperty ;
+    rdfs:label "inDataset"@en ;
+    rdfs:isDefinedBy <http://rdfs.org/ns/void> ;
+    sxv:declarationInferred true .
+
 literal:hasLiteralValue a owl:DatatypeProperty ;
     rdfs:label "hasLiteralValue"@en ;
     rdfs:isDefinedBy <http://www.essepuntato.it/2010/06/literalreification> ;
     sxv:declarationInferred true .
-
-skos:ConceptScheme a owl:Class ;
-    rdfs:label "Concept Scheme"@en ;
-    rdfs:isDefinedBy <http://www.w3.org/2004/02/skos/core> ;
-    skos:definition "A set of concepts, optionally including statements about semantic relationships between those concepts."@en .
 
 skos:altLabel a rdf:Property,
         owl:AnnotationProperty ;
     rdfs:label "alternative label"@en ;
     rdfs:isDefinedBy <http://www.w3.org/2004/02/skos/core> ;
     skos:definition "An alternative lexical label for a resource."@en .
+
+skos:broader a rdf:Property,
+        owl:ObjectProperty ;
+    rdfs:label "has broader"@en ;
+    rdfs:isDefinedBy <http://www.w3.org/2004/02/skos/core> ;
+    skos:definition "Relates a concept to a concept that is more general in meaning."@en .
 
 skos:exactMatch a rdf:Property,
         owl:ObjectProperty,
@@ -343,14 +385,63 @@ skos:prefLabel a rdf:Property,
     rdfs:isDefinedBy <http://www.w3.org/2004/02/skos/core> ;
     skos:definition "The preferred lexical label for a resource, in a given language."@en .
 
+<http://www.w3.org/ns/oa#classifying> a owl:NamedIndividual,
+        <http://www.w3.org/ns/oa#Motivation> ;
+    rdfs:label "classifying" ;
+    rdfs:isDefinedBy <http://www.w3.org/ns/oa> ;
+    skos:definition "The motivation for when the user intends to that classify the Target as something." .
+
+<http://www.w3.org/ns/oa#hasBody> a rdf:Property ;
+    rdfs:label "hasBody" ;
+    rdfs:isDefinedBy <http://www.w3.org/ns/oa> ;
+    skos:definition "The object of the relationship is a resource that is a body of the Annotation." .
+
+<http://www.w3.org/ns/oa#hasTarget> a rdf:Property ;
+    rdfs:label "hasTarget" ;
+    rdfs:isDefinedBy <http://www.w3.org/ns/oa> ;
+    skos:definition "The relationship between an Annotation and its Target." .
+
+<http://www.w3.org/ns/oa#motivatedBy> a rdf:Property ;
+    rdfs:label "motivatedBy" ;
+    rdfs:isDefinedBy <http://www.w3.org/ns/oa> ;
+    skos:definition "The relationship between an Annotation and a Motivation that describes the reason for the Annotation's creation." .
+
+<http://www.w3.org/ns/oa#tagging> a owl:NamedIndividual,
+        <http://www.w3.org/ns/oa#Motivation> ;
+    rdfs:label "tagging" ;
+    rdfs:isDefinedBy <http://www.w3.org/ns/oa> ;
+    skos:definition "The motivation for when the user intends to associate a tag with the Target." .
+
+prov:Activity a owl:Class ;
+    rdfs:label "Activity" ;
+    rdfs:isDefinedBy <http://www.w3.org/ns/prov-o> .
+
 prov:Entity a owl:Class ;
     rdfs:label "Entity" ;
     rdfs:isDefinedBy <http://www.w3.org/ns/prov-o> .
+
+prov:SoftwareAgent a owl:Class ;
+    rdfs:label "SoftwareAgent" ;
+    rdfs:isDefinedBy <http://www.w3.org/ns/prov-o> .
+
+prov:used a owl:ObjectProperty ;
+    rdfs:label "used" ;
+    rdfs:isDefinedBy <http://www.w3.org/ns/prov-o> ;
+    skos:definition "A prov:Entity that was used by this prov:Activity. For example, :baking prov:used :spoon, :egg, :oven ."@en .
+
+prov:wasAssociatedWith a owl:ObjectProperty ;
+    rdfs:label "wasAssociatedWith" ;
+    rdfs:isDefinedBy <http://www.w3.org/ns/prov-o> ;
+    skos:definition "An prov:Agent that had some (unspecified) responsibility for the occurrence of this prov:Activity."@en .
 
 prov:wasDerivedFrom a owl:ObjectProperty ;
     rdfs:label "wasDerivedFrom" ;
     rdfs:isDefinedBy <http://www.w3.org/ns/prov-o> ;
     skos:definition "The more specific subproperties of prov:wasDerivedFrom (i.e., prov:wasQuotedFrom, prov:wasRevisionOf, prov:hadPrimarySource) should be used when applicable."@en .
+
+prov:wasGeneratedBy a owl:ObjectProperty ;
+    rdfs:label "wasGeneratedBy" ;
+    rdfs:isDefinedBy <http://www.w3.org/ns/prov-o> .
 
 foaf:familyName a rdf:Property,
         owl:DatatypeProperty ;
@@ -441,16 +532,60 @@ oco:hasNext a owl:ObjectProperty ;
     rdfs:isDefinedBy <https://w3id.org/oc/ontology> ;
     skos:definition "This property allows to specify the following entity in a sequence of entities, e.g. a reference pointer in a list of pointers, a role in a sequence of agents' roles of the same type associated with the same bibliographic resource (so as to define, for instance, its ordered list of authors)."@en .
 
+sxv:BinaryValues a owl:NamedIndividual,
+        sxv:ValueType ;
+    rdfs:label "binary"@en ;
+    rdfs:comment "0 / 1, typed xsd:boolean in rdf:value."@en ;
+    rdfs:isDefinedBy <https://w3id.org/scilex/ap/lpwc> .
+
+sxv:ClosedValues a owl:NamedIndividual,
+        sxv:ValueType ;
+    rdfs:label "closed list"@en ;
+    rdfs:comment "Only the values listed in the grid declaration."@en ;
+    rdfs:isDefinedBy <https://w3id.org/scilex/ap/lpwc> .
+
+sxv:IntegerValues a owl:NamedIndividual,
+        sxv:ValueType ;
+    rdfs:label "integer count"@en ;
+    rdfs:comment "An integer count, typed xsd:integer in rdf:value."@en ;
+    rdfs:isDefinedBy <https://w3id.org/scilex/ap/lpwc> .
+
+sxv:MagnitudeValues a owl:NamedIndividual,
+        sxv:ValueType ;
+    rdfs:label "order of magnitude"@en ;
+    rdfs:comment "10^k (rdf:value xsd:double) or an integer count (xsd:integer)."@en ;
+    rdfs:isDefinedBy <https://w3id.org/scilex/ap/lpwc> .
+
+sxv:OpenValues a owl:NamedIndividual,
+        sxv:ValueType ;
+    rdfs:label "open"@en ;
+    rdfs:comment "Any value; new values create new concepts (reconcilable entities)."@en ;
+    rdfs:isDefinedBy <https://w3id.org/scilex/ap/lpwc> .
+
+sxv:OutOfGridValue a owl:Class ;
+    rdfs:label "out-of-grid value"@en ;
+    rdfs:comment "A value of a dimension that its grid declaration does not allow (not binary, not in the closed list, not an order of magnitude). A finding for the review team, reported by the general shape out-of-grid-value."@en ;
+    rdfs:isDefinedBy <https://w3id.org/scilex/ap/lpwc> ;
+    rdfs:subClassOf skos:Concept .
+
 sxv:declarationInferred a owl:AnnotationProperty ;
     rdfs:label "declaration inferred from usage"@en ;
     rdfs:comment "True when the term's source ontology could not be fetched or does not declare it; its type was inferred from how the data uses it."@en .
 
 sxv:eventPlace a owl:DatatypeProperty ;
     rdfs:label "event place"@en ;
-    rdfs:comment "Place where a conference took place, as a free-text string (BibLaTeX location). To be replaced by a proper event/place model in a later iteration."@en ;
-    rdfs:domain lpwc:conference ;
+    rdfs:comment "Place where a conference edition took place, as a free-text string (BibLaTeX location). iter8: on the edition (bibo:Conference), not on the series (lpwc:conference)."@en ;
+    rdfs:domain <http://purl.org/ontology/bibo/Conference> ;
     rdfs:isDefinedBy <https://w3id.org/scilex/ap/lpwc> ;
     rdfs:range xsd:string .
+
+sxv:implies a owl:ObjectProperty ;
+    rdfs:label "implies"@en ;
+    rdfs:comment "Implication rule of a review grid: a paper coded with the subject value must also be coded with the object value or with one of its narrower values (e.g. relation classification implies relation extraction). Unlike skos:broader, the subject is not a kind of the object. Violations: GCQ61."@en ;
+    rdfs:domain skos:Concept ;
+    rdfs:isDefinedBy <https://w3id.org/scilex/ap/lpwc> ;
+    rdfs:range skos:Concept ;
+    rdfs:subPropertyOf skos:semanticRelation .
 
 sxv:position a owl:DatatypeProperty,
         owl:FunctionalProperty ;
@@ -459,6 +594,21 @@ sxv:position a owl:DatatypeProperty,
     rdfs:domain pro:RoleInTime ;
     rdfs:isDefinedBy <https://w3id.org/scilex/ap/lpwc> ;
     rdfs:range xsd:integer .
+
+sxv:valueType a owl:FunctionalProperty,
+        owl:ObjectProperty ;
+    rdfs:label "value type"@en ;
+    rdfs:comment "Value type a grid dimension (its SKOS concept scheme) declares."@en ;
+    rdfs:domain skos:ConceptScheme ;
+    rdfs:isDefinedBy <https://w3id.org/scilex/ap/lpwc> ;
+    rdfs:range sxv:ValueType ;
+    rdfs:subPropertyOf dcterms:type .
+
+<http://purl.org/ontology/bibo/Conference> a owl:Class ;
+    rdfs:label "Conference"@en ;
+    rdfs:isDefinedBy <http://purl.org/ontology/bibo/> ;
+    rdfs:seeAlso lpwc:conference ;
+    sxv:declarationInferred true .
 
 fabio:Expression a owl:Class ;
     rdfs:label "expression"@en ;
@@ -470,32 +620,48 @@ pro:RoleInTime a owl:Class ;
     rdfs:isDefinedBy <http://purl.org/spar/pro> ;
     skos:definition "A particular situation that describe a role an agent may have, that can be restricted to a particular time interval."@en .
 
+skos:ConceptScheme a owl:Class ;
+    rdfs:label "Concept Scheme"@en ;
+    rdfs:isDefinedBy <http://www.w3.org/2004/02/skos/core> ;
+    skos:definition "A set of concepts, optionally including statements about semantic relationships between those concepts."@en .
+
 lpwc:conference a owl:Class ;
     rdfs:label "Conference"@en ;
     rdfs:isDefinedBy <https://linkedpaperswithcode.com/ontology#> ;
     skos:definition "A Conference where Papers are published"@en .
 
-<https://w3id.org/scilex/ap/lpwc> a owl:Ontology ;
-    dcterms:creator "Celian Ringwald" ;
-    dcterms:description """Application profile for the RDF output of SciLEx systematic literature
-reviews. Bibliographic and citation data follow the OpenCitations Data Model (OCDM 2.1.0) on the
-SPAR ontologies (FaBiO, CiTO, C4O, PRO, DataCite); machine-learning content (tasks, datasets,
-models, methods) reuses the Linked Papers With Code (LPWC) ontology; the review's coding scheme is
-expressed in SKOS. Reused terms are declared MIREOT-style (no owl:imports); this ontology adds only
-the few sxv: terms nothing else covers."""@en ;
-    dcterms:license <https://creativecommons.org/licenses/by/4.0/> ;
-    dcterms:modified "2026-11-10"^^xsd:date ;
-    dcterms:title "SciLEx application profile: OpenCitations/SPAR + Linked Papers With Code"@en ;
-    vann:preferredNamespacePrefix "sxv" ;
-    vann:preferredNamespaceUri "https://w3id.org/scilex/vocab#" ;
-    rdfs:seeAlso <https://github.com/metaphacts/linkedpaperswithcode>,
-        <https://github.com/opencitations/metadata/tree/master/documentation> ;
-    owl:priorVersion <https://w3id.org/scilex/ap/lpwc/0.2.0> ;
-    owl:versionIRI <https://w3id.org/scilex/ap/lpwc/0.3.0> ;
-    owl:versionInfo "0.3.0 (iteration 3)" .
+dcterms:type a rdf:Property ;
+    rdfs:label "Type"@en ;
+    rdfs:isDefinedBy dcterms: ;
+    skos:definition "The nature or genre of the resource."@en .
+
+sxv:ValueType a owl:Class ;
+    rdfs:label "value type"@en ;
+    rdfs:comment "The kind of values a dimension of a review grid takes (binary, closed list, order of magnitude, integer count, open). Closest term: dcterms:type on a skos:ConceptScheme."@en ;
+    rdfs:isDefinedBy <https://w3id.org/scilex/ap/lpwc> ;
+    rdfs:seeAlso dcterms:type .
 
 skos:Concept a owl:Class ;
     rdfs:label "Concept"@en ;
     rdfs:isDefinedBy <http://www.w3.org/2004/02/skos/core> ;
     skos:definition "An idea or notion; a unit of thought."@en .
+
+<https://w3id.org/scilex/ap/lpwc> a owl:Ontology ;
+    dcterms:creator "Celian Ringwald" ;
+    dcterms:description """Application profile for the RDF output of SciLEx systematic literature\r
+reviews. Bibliographic and citation data follow the OpenCitations Data Model (OCDM 2.1.0) on the\r
+SPAR ontologies (FaBiO, CiTO, C4O, PRO, DataCite); machine-learning content (tasks, datasets,\r
+models, methods) reuses the Linked Papers With Code (LPWC) ontology; the review's coding scheme is\r
+expressed in SKOS. Reused terms are declared MIREOT-style (no owl:imports); this ontology adds only\r
+the few sxv: terms nothing else covers."""@en ;
+    dcterms:license <https://creativecommons.org/licenses/by/4.0/> ;
+    dcterms:modified "2026-11-12"^^xsd:date ;
+    dcterms:title "SciLEx application profile: OpenCitations/SPAR + Linked Papers With Code"@en ;
+    vann:preferredNamespacePrefix "sxv" ;
+    vann:preferredNamespaceUri "https://w3id.org/scilex/vocab#" ;
+    rdfs:seeAlso <https://github.com/metaphacts/linkedpaperswithcode>,
+        <https://github.com/opencitations/metadata/tree/master/documentation> ;
+    owl:priorVersion <https://w3id.org/scilex/ap/lpwc/0.7.0> ;
+    owl:versionIRI <https://w3id.org/scilex/ap/lpwc/0.8.0> ;
+    owl:versionInfo "0.8.0 (iteration 8)" .
 

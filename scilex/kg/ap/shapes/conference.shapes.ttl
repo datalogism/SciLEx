@@ -1,5 +1,6 @@
-# scilex-lpwc-ap -- iteration 2 -- SHACL, GENERAL level (valid for any SciLEx collection).
-# Conferences (LPWC).
+# scilex-lpwc-ap -- iteration 8 -- SHACL, GENERAL level (valid for any SciLEx collection).
+# Conference series (LPWC conference level, ORSD VR5). iter8: the place moved to the edition
+# (conference-edition.shapes.ttl); a series has one name, other spellings are skos:altLabel.
 # One targeted node shape per file, constraints on the focus node's own triples only
 # (see ../README.md: how X-DigCheck evaluates shapes).
 
@@ -28,9 +29,9 @@
 
 sxsh:ConferenceShape
     a sh:NodeShape ;
-    rdfs:label "Conference (LPWC)"@en ;
+    rdfs:label "Conference series (LPWC conference)"@en ;
     sh:targetClass lpwc:conference ;
     sh:property [ sh:path foaf:name ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
-    sh:property [ sh:path sxv:eventPlace ; sh:datatype xsd:string ] ;
-    sh:property [ sh:path sxv:eventPlace ; sh:maxCount 1 ; sh:severity sh:Warning ;
-        sh:message "Several places for one conference: its eventtitle probably names more than one event (e.g. 'Findings 2021')." ] .
+    sh:property [ sh:path skos:altLabel ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path sxv:eventPlace ; sh:maxCount 0 ;
+        sh:message "The place of a conference belongs to its edition (bibo:Conference), not to the series." ] .

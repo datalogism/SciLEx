@@ -1,0 +1,22 @@
+# scilex-lpwc-ap -- iteration 7 -- RML: venues of the survey bundle (ORSD VR2, VR8; SR1 part
+# `venues`, written by scripts/survey_bundle.py, later by SciLEx itself, SX-1).
+#
+# Run only for a collection whose profile names a survey bundle ({{SURVEY}}); build_iteration
+# skips rml/*survey*.rml.ttl otherwise. SciLEx's Zotero push writes the ISSN into `series` and
+# drops the venue name, so a journal known only by its ISSN has no title. The bundle keeps the
+# name SciLEx collected; this mapping stages it on the paper, and sparql/06-survey-venues.ru
+# names the paper's journal with it. Staging triples are deleted in sparql/99.
+
+@prefix rml:  <http://w3id.org/rml/> .
+@prefix :     <https://w3id.org/scilex/mapping/survey#> .
+
+:venues rml:source "{{SURVEY}}" ;
+        rml:referenceFormulation rml:JSONPath ; rml:iterator "$.venues[*]" .
+
+:VenueOfPaper
+    rml:logicalSource :venues ;
+    rml:subjectMap [ rml:template "{{BASE}}br/{paper}" ] ;
+    rml:predicateObjectMap [ rml:predicate <urn:scilex:staging#venueName> ;
+        rml:objectMap [ rml:reference "journal" ] ] ;
+    rml:predicateObjectMap [ rml:predicate <urn:scilex:staging#venueIssn> ;
+        rml:objectMap [ rml:reference "issn" ] ] .

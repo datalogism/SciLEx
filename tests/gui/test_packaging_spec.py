@@ -29,7 +29,7 @@ def test_spec_never_bundles_local_configs_or_keys():
 
 
 def test_spec_matches_self_test_data_list():
-    assert dict(bundled_scilex_data()) == REQUIRED_DATA
+    assert bundled_scilex_data() == REQUIRED_DATA
 
 
 def test_bundled_patterns_do_not_match_local_config_files():

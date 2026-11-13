@@ -342,6 +342,7 @@ def _tag_field_lines(tags_str) -> list[str]:
 # because author has a mandatory "Unknown" fallback and year is derived.
 _PUBLISHER_TYPES = ("book", "incollection", "inproceedings")
 _ENTRY_FIELDS = [
+    ("shorttitle", "shortTitle", lambda v: escape_bibtex(str(v)), None),
     ("journal", "journalAbbreviation", lambda v: escape_bibtex(v), ("article",)),
     ("booktitle", "conferenceName", lambda v: escape_bibtex(v), ("inproceedings",)),
     ("volume", "volume", lambda v: escape_bibtex(str(v)), None),

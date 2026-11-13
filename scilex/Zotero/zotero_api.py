@@ -9,6 +9,7 @@ import json
 import logging
 import math
 import random
+import re
 import string
 import time
 from typing import Any
@@ -641,6 +642,38 @@ def _log10_bucket(value) -> int | None:
         return None
 
 
+ISSN_PATTERN = re.compile(r"^\s*(\d{4})-?(\d{3}[\dXx])\s*$")
+
+
+def issn_of(value) -> str | None:
+    """``"00044024"`` / ``"0004-4024"`` -> ``"0004-4024"``; None for anything else."""
+    match = ISSN_PATTERN.match(str(value)) if is_valid(value) else None
+    return f"{match.group(1)}-{match.group(2).upper()}" if match else None
+
+
+def _set_venue_fields(item: dict, venue, serie) -> None:
+    """Write the venue into the Zotero fields BibLaTeX exports as the venue (SX-23).
+
+    The corpus column ``journalAbbreviation`` holds the *full* venue name the API
+    returned (journal, OpenAlex source, Semantic Scholar venue), and ``serie`` is an
+    ISSN for OpenAlex and Semantic Scholar records, else a series name:
+
+    - the venue name goes to *Publication* (``publicationTitle``, BibLaTeX
+      ``journaltitle``), not to *Journal Abbr*;
+    - an ISSN goes to the item's *ISSN* field, never to *Series* (else the export
+      has ``series = {0004-4024}`` and no journal name);
+    - *Series* keeps real series names (Lecture Notes in Computer Science...).
+    """
+    if is_valid(venue) and "publicationTitle" in item:
+        item["publicationTitle"] = str(venue)
+    issn = issn_of(serie)
+    if issn:
+        if "ISSN" in item:
+            item["ISSN"] = issn
+    elif is_valid(serie) and "series" in item:
+        item["series"] = str(serie)
+
+
 def prepare_zotero_item(
     row: pd.Series,
     collection_key: str,
@@ -686,13 +719,13 @@ def prepare_zotero_item(
     common_fields = [
         "publisher",
         "title",
+        "shortTitle",
         "date",
         "DOI",
         "archive",
         "url",
         "rights",
         "pages",
-        "journalAbbreviation",
         "conferenceName",
         "volume",
         "issue",
@@ -703,10 +736,9 @@ def prepare_zotero_item(
         if field in item and is_valid(val):
             item[field] = str(val)
 
-    if "series" in item:
-        serie = get_value(row, "serie")
-        if is_valid(serie):
-            item["series"] = str(serie)
+    _set_venue_fields(
+        item, get_value(row, "journalAbbreviation"), get_value(row, "serie")
+    )
 
     if "abstractNote" in item:
         item["abstractNote"] = str(get_value(row, "abstract", ""))

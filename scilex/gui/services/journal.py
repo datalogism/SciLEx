@@ -132,6 +132,7 @@ LABELS = {
     "collect-started": "Collection started",
     "papers-added": "Papers added",
     "annotation-snapshot": "Annotations read",
+    "grid-migration": "Annotations moved to a new grid (automatic)",
 }
 
 
@@ -834,9 +835,13 @@ def record_job(job, message: str, *, failed: bool = False) -> None:
                 generated["columns_written"] = sorted(c for c, g in gains.items() if g)
                 if previous:
                     generated["papers_updated"] = max(gains.values(), default=0)
+        from scilex.gui.services import versions
+
+        config_sha = versions.ensure_current(job.folder, versions.CONFIG)
         append(
             job.folder,
             f"job:{key}",
+            used={"scilex.yml sha256": config_sha} if config_sha else None,
             params=params,
             generated=generated,
             status="failed" if failed else "completed",

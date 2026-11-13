@@ -1,0 +1,85 @@
+{
+  "$schema": "../collection-profile.schema.json",
+  "schemaVersion": 1,
+  "slug": "scilex-defaults",
+  "source": "-",
+  "title": "SciLEx reference tag grammar",
+  "description": "Tags SciLEx writes itself when it pushes a collection to Zotero (scilex/tagging/grid.py AUTOMATION_*, scilex/PapersWithCode/tag_formatter.py). Merged under every collection profile (key 'extends'); a profile's own declaration of the same dimension wins, e.g. TASK is manual grid coding in UCD (ORSD UCR10). Not a collection: build_iteration.py skips files whose name starts with '_'.",
+  "extends": [],
+  "tags": {
+    "dimensions": [
+      {
+        "name": "QUALI_SCORE",
+        "origin": "scilex"
+      },
+      {
+        "name": "REL_SCORE",
+        "origin": "scilex"
+      },
+      {
+        "name": "CITAT",
+        "origin": "scilex"
+      },
+      {
+        "name": "ACQUISITION",
+        "origin": "scilex",
+        "question": "How the paper entered the corpus: api-collect, snowball-backward, snowball-forward, extend, manual, import (ORSD LR3). Written by SciLEx as ACQUISITION:<method>."
+      },
+      {
+        "name": "TASK",
+        "origin": "enrichment",
+        "lpwc": "task"
+      },
+      {
+        "name": "PTM",
+        "origin": "enrichment",
+        "lpwc": "model"
+      },
+      {
+        "name": "ARCHI",
+        "origin": "enrichment",
+        "lpwc": "method"
+      },
+      {
+        "name": "DATASET",
+        "origin": "enrichment",
+        "lpwc": "dataset"
+      },
+      {
+        "name": "FRAMEWORK",
+        "origin": "enrichment"
+      },
+      {
+        "name": "GITHUB_STARS",
+        "origin": "enrichment"
+      },
+      {
+        "name": "CITED_BY_DATASET",
+        "origin": "enrichment"
+      }
+    ],
+    "dimension_patterns": [
+      {
+        "pattern": "COLLECT_KW\\d*",
+        "origin": "scilex"
+      }
+    ],
+    "dimension_aliases": {},
+    "slash_form": false,
+    "plain": {
+      "PRESENCE": [
+        "HavePDF",
+        "HaveHF",
+        "HavePWC",
+        "HaveGithub"
+      ],
+      "ACQUISITION": [
+        "SciLexCollected"
+      ]
+    },
+    "plain_origins": {
+      "PRESENCE": "scilex",
+      "ACQUISITION": "scilex"
+    }
+  }
+}

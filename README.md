@@ -25,7 +25,7 @@
 </p>
 
 ---
-> SciLEx — like the silex stone that early humans relied on to spark fire from raw material — is a lightweight, portable tool designed to ignite research exploration. Rather than navigating fragmented databases, confronting redundant results, and manually sifting through noise, SciLEx strikes directly at the core challenge: it queries heterogeneous digital library APIs, applies smart deduplication and quality filtering, and delivers a clean, curated corpus ready for export to Zotero or BibTeX. It is not a full-scale review platform — it is the essential flint in the researcher's toolkit, engineered to quick-start systematic literature reviews with precision and minimal friction.
+> SciLEx — like the silex stone that early humans relied on to spark fire from raw material — is a lightweight, portable tool designed to ignite research exploration. Rather than navigating fragmented databases, confronting redundant results, and manually sifting through noise, SciLEx strikes directly at the core challenge: it queries heterogeneous digital library APIs, applies smart deduplication and quality filtering, and delivers a clean, curated corpus. It then carries the review on — screening, collaborative annotation in Zotero, enrichment, analyses — up to a knowledge graph that others can query and reuse.
 
 ## Table of Contents
 
@@ -35,6 +35,7 @@
 - [Key Features](#key-features)
 - [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
+- [Related Projects](#related-projects)
 - [Where SciLEx Is Used](#where-scilex-is-used)
 - [Citation](#citation)
 - [Contributing](#contributing)
@@ -99,6 +100,7 @@ Each step of a review is a module (a screen of the desktop app, and for most a `
 - Crossref, Linked Papers With Code and ORKG enrichment; default paper types (Benchmark, Review, Dataset, Model); citation metrics (PageRank, citations per year…)
 - Eligibility criteria (period, coherence, language, access, peer review, DOI, duplicates) as testable rules with exceptions
 - Collaborative annotation in a dedicated Zotero group: annotation grid, balanced assignment, inter-annotator agreement, two-way sync of tags
+- LLM pre-annotation through the [SciLEx Annotator](https://github.com/datalogism/SciLex-LmmAnnotator) prototype: models write `DIMENSION-AUTO:value` proposals that a person accepts, corrects or rejects (human first)
 - Analyses: citation graphs and communities, accessibility and coverage, annotation crossings, cluster summaries, snowball sampling, seed papers, keyword suggestions
 - Export to Zotero (bulk upload), BibTeX (with PDF links), RDF/Turtle, or a knowledge graph with the scilex-lpwc-ap application profile
 - Traceability: PRISMA flow, append-only workflow journal (agent = ORCID iD), per-paper import log
@@ -323,6 +325,15 @@ Then run the tests:
 
 ---
 
+
+## Related Projects
+
+| Project | Role | Status |
+|---|---|---|
+| **[scilex-lpwc-ap](https://codeberg.org/cringwald/scilex-lpwc-ap)** (Codeberg) | Application profile of the SciLEx knowledge graph. It builds on [Linked Papers With Code](https://linkedpaperswithcode.com) and reuses SPAR (FaBiO, CiTO, PRO), BIBO, PROV-O, DCAT and VoID. Each iteration ships RML mappings, SPARQL rules, SHACL shapes and competency questions. SciLEx pins a copy in `scilex/kg/ap/` (refresh with `python -m scilex.kg.sync_profile`), runs it in ⑧ Export → Knowledge graph / `scilex-build-kg`, and checks the result with its shapes. | Iteration 8 (0.8.0), pre-release |
+| **[SciLEx Annotator](https://github.com/datalogism/SciLex-LmmAnnotator)** (GitHub) | LLM-assisted annotation of a SciLEx collection. For each paper it reads the full text, asks one question per grid dimension, and checks that each answer has values, verbatim evidence and a confidence level. It runs as a web app, a command line, or an HTTP service that ④ Annotate → Campaigns calls (`scilex-annotator api --port 8001`). Hosted LLMs, Ollama models and GLiNER2 decision models. | Prototype |
+
+---
 
 ## Where SciLEx Is Used
 

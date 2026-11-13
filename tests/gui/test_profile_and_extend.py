@@ -74,6 +74,7 @@ def test_step_order():
     assert [step.key for step in PIPELINE_STEPS] == [
         "overview",
         "explore",
+        "dashboard",
         "configure",
         "collect",
         "criteria",
@@ -103,6 +104,9 @@ async def test_extend_collect_page(ctx, tmp_path):
     review = ctx.workspace.create_review(tmp_path / "r", name="r")
     review.collection_dir.mkdir(parents=True)
     review.results_path.write_text("title\nA\n")
+    from scilex.gui.services import zotero_library as _zl
+
+    _zl.save_source(review.folder, _zl.ZoteroSource("42", "group", None, ""))
     async with user_simulation(build_root(ctx)) as user:
         await user.open(f"/review/{review.id}/extend")
         await user.should_see(marker="extend-title")
@@ -110,11 +114,16 @@ async def test_extend_collect_page(ctx, tmp_path):
         await user.should_see(marker="extend-reaggregate")
         for tab in ("new-collect", "snowball", "keywords", "bibtex", "zotero"):
             await user.should_see(marker=f"extend-tab-{tab}")
-        await user.should_see(marker="extend-no-group")  # no Zotero group yet
         # Collect is part of Extend once the review has papers.
         await user.should_not_see(marker="step-collect")
         await user.open(f"/review/{review.id}/collect")
         await user.should_see(marker="extend-title")
+
+        # Without a Zotero group, the review cannot be extended.
+        (review.folder / "zotero_source.yml").unlink()
+        await user.open(f"/review/{review.id}/extend")
+        await user.should_see(marker="extend-no-group")
+        await user.should_not_see(marker="extend-tab-snowball")
 
 
 async def test_extend_target_defaults_to_a_new_collection(ctx, tmp_path):
@@ -188,6 +197,9 @@ def test_pipeline_extension_adds_to_existing_results(ctx, tmp_path):
     import time
 
     review = ctx.workspace.create_review(tmp_path / "r", name="r")
+    from scilex.gui.services import zotero_library as _zl
+
+    _zl.save_source(review.folder, _zl.ZoteroSource("42", "group", None, ""))
     review.collection_dir.mkdir(parents=True, exist_ok=True)
     review.results_path.write_text(
         "itemType;title;DOI;date;relevance_score\n"

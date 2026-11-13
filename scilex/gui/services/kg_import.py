@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from rdflib import Graph, URIRef
-from rdflib.namespace import DCTERMS, FOAF, RDF, SKOS, Namespace
+from rdflib.namespace import DCTERMS, FOAF, RDF, SKOS, VOID, Namespace
 
 from scilex.crawlers.utils import sanitize_secrets
 
@@ -130,9 +130,11 @@ def describe(path: Path, graph: Graph | None = None) -> KgInfo:
     graph = graph if graph is not None else read_graph(path)
     dataset = _main_dataset(graph)
     title = _text(graph.value(dataset, DCTERMS.title)) if dataset else ""
-    profile = ", ".join(
-        sorted(str(o) for o in graph.objects(dataset, DCTERMS.conformsTo))
-    ) if dataset else ""
+    profile = (
+        ", ".join(sorted(str(o) for o in graph.objects(dataset, DCTERMS.conformsTo)))
+        if dataset
+        else ""
+    )
     return KgInfo(
         path=Path(path),
         title=title.removeprefix("SciLEx review: ") or Path(path).stem,
@@ -152,7 +154,10 @@ def _subcorpora(graph: Graph) -> dict[str, set[URIRef]]:
             continue
         title = _text(graph.value(dataset, DCTERMS.title))
         if title:
-            parts[title] = set(graph.objects(dataset, DCTERMS.hasPart))
+            # dcterms:hasPart (SciLEx, profiles up to iteration 3), void:inDataset (iter4+)
+            parts[title] = set(graph.objects(dataset, DCTERMS.hasPart)) | set(
+                graph.subjects(VOID.inDataset, dataset)
+            )
     return parts
 
 
@@ -189,7 +194,11 @@ def _creators(graph: Graph, paper) -> tuple[list[dict], str]:
         family = _text(graph.value(agent, FOAF.familyName))
         creator_type = "author" if kind == PRO.author else "editor"
         if family:
-            entry = {"creatorType": creator_type, "firstName": given, "lastName": family}
+            entry = {
+                "creatorType": creator_type,
+                "firstName": given,
+                "lastName": family,
+            }
         else:
             entry = {"creatorType": creator_type, "name": name}
         roles[creator_type].append((order, str(role), entry))
@@ -228,7 +237,9 @@ def _concept_tag(graph: Graph, concept) -> str:
     prefix = f"{dimension}:" if dimension else ""
 
     def rank(notation: str) -> tuple:
-        value = notation[len(prefix):] if prefix and notation.startswith(prefix) else None
+        value = (
+            notation[len(prefix) :] if prefix and notation.startswith(prefix) else None
+        )
         return (
             value is None,  # DIMENSION:Value first
             value != label if value is not None else True,  # exactly the label
@@ -244,7 +255,9 @@ def _concept_tag(graph: Graph, concept) -> str:
 def _citation_note(graph: Graph, paper, dois: dict) -> str:
     """The SciLEx citation note (``{'citing': [...], 'cited': [...]}``) of a paper."""
     cited = sorted({d for t in graph.objects(paper, CITO.cites) if (d := dois.get(t))})
-    citing = sorted({d for s in graph.subjects(CITO.cites, paper) if (d := dois.get(s))})
+    citing = sorted(
+        {d for s in graph.subjects(CITO.cites, paper) if (d := dois.get(s))}
+    )
     if not cited and not citing:
         return ""
     return repr({"citing": citing, "cited": cited})
@@ -308,7 +321,8 @@ def graph_to_items(graph: Graph) -> list[dict]:
     papers = corpus_papers(graph)
     dois = {
         resource: doi
-        for resource in set(graph.subjects(CITO.cites, None)) | set(graph.objects(None, CITO.cites))
+        for resource in set(graph.subjects(CITO.cites, None))
+        | set(graph.objects(None, CITO.cites))
         if (doi := _doi(graph, resource))
     }
     membership: dict = defaultdict(list)

@@ -3,11 +3,15 @@
 import contextlib
 import json
 
-from nicegui import events, run, ui
+from nicegui import background_tasks, events, run, ui
 
+from scilex import paper_types, review_tags
 from scilex.constants import doi_to_url
 from scilex.gui.components import criteria_panel
+from scilex.gui.components import eligibility_filter as elig
 from scilex.gui.components.errors import show_error
+from scilex.gui.services import criteria as criteria_service
+from scilex.gui.services import members
 from scilex.gui.services.screening import (
     EXCLUDE,
     FACETS,
@@ -31,6 +35,28 @@ FILTER_OPTIONS = {
 }
 DECISION_COLOURS = {INCLUDE: "positive", EXCLUDE: "negative", MAYBE: "warning"}
 KEY_DECISIONS = {"i": INCLUDE, "e": EXCLUDE, "m": MAYBE}
+# Keys 1-4 set the paper type (PAPER_TYPE tag).
+KEY_TYPES = {str(n): kind for n, kind in enumerate(paper_types.TYPES, start=1)}
+
+# Bulk actions on the ticked papers: (label, icon, tag kind, add, button props).
+BULK_ACTIONS = (
+    ("Validate", "task_alt", review_tags.VALIDATED, True, "dense no-caps"),
+    ("Unvalidate", "remove_done", review_tags.VALIDATED, False, "flat dense no-caps"),
+    (
+        "Delete",
+        "delete_outline",
+        review_tags.DELETED,
+        True,
+        "dense no-caps color=negative",
+    ),
+    ("Restore", "restore_from_trash", review_tags.DELETED, False, "flat dense no-caps"),
+)
+BULK_VERBS = {
+    (review_tags.VALIDATED, True): "validated",
+    (review_tags.VALIDATED, False): "unvalidated",
+    (review_tags.DELETED, True): "deleted",
+    (review_tags.DELETED, False): "restored",
+}
 
 COLLECTION = "collection"  # facet with its own toolbar selector
 COLUMN_DEFS = [
@@ -50,6 +76,13 @@ COLUMN_DEFS = [
     },
     {"field": "venue", "headerName": "Venue", "flex": 1, "minWidth": 100},
     {"field": "item_type", "headerName": "Type", "width": 130, "minWidth": 100},
+    {
+        "field": "paper_type",
+        "headerName": "Paper type",
+        "width": 150,
+        "minWidth": 110,
+        "headerTooltip": "PAPER_TYPE tag (else the default type); keys 1-4 change it",
+    },
     {
         "field": "imported",
         "headerName": "Imported",
@@ -72,6 +105,14 @@ COLUMN_DEFS = [
         "width": 90,
         "minWidth": 90,
         "filter": "agNumberColumnFilter",
+    },
+    elig.CRITERIA_COLUMN,
+    {
+        "field": "status",
+        "headerName": "Status",
+        "width": 120,
+        "minWidth": 100,
+        "headerTooltip": "Annotation status: validated, deleted (discarded)…",
     },
     {
         "field": "decision",
@@ -107,6 +148,8 @@ def render(ctx: AppContext, review: Review) -> None:
         # Reading the CSV and computing the paper keys must not block the loop.
         try:
             session = await run.io_bound(ScreeningSession, review)
+            items = criteria_panel.load_criteria(review)
+            verdicts = await run.io_bound(elig.compute_eligibility, session, items)
         except Exception as exc:
             if container.is_deleted:
                 return  # the user left the page while the file was loading
@@ -123,7 +166,11 @@ def render(ctx: AppContext, review: Review) -> None:
         loading.delete()
         with container:
             ui.add_css(GRID_CSS)
-            ScreenPage(session).build()
+            ScreenPage(
+                session,
+                eligibility=(items, verdicts),
+                me=getattr(ctx.profile, "orcid", "") or "",
+            ).build()
 
     ui.timer(0, load_and_build, once=True)
 
@@ -131,9 +178,20 @@ def render(ctx: AppContext, review: Review) -> None:
 class ScreenPage:
     """UI state of the Screen step; all decisions go through the session."""
 
-    def __init__(self, session: ScreeningSession):
-        """Bind the page to an in-memory screening session."""
+    def __init__(
+        self,
+        session: ScreeningSession,
+        eligibility: tuple[list, dict] | None = None,
+        me: str = "",
+    ):
+        """Bind the page to an in-memory screening session.
+
+        ``eligibility``: ``(criteria, verdicts)`` already computed (else here).
+        ``me``: the user's ORCID iD, written by the bulk validate / delete.
+        """
         self.session = session
+        self.me = me
+        self.checked: list[str] = []  # keys ticked in the grid
         self.decision_filter = FILTER_ALL
         self.query = ""
         self.facet_filters: dict[str, set[str]] = {}
@@ -142,7 +200,12 @@ class ScreenPage:
         self._clearing = False
         self.current: str | None = None
         self.order: list[str] = []  # keys in the grid's displayed order
-        self.criteria = criteria_panel.load_criteria(session.review)
+        if eligibility is None:
+            self.criteria = criteria_panel.load_criteria(session.review)
+            self.verdicts = elig.compute_eligibility(session, self.criteria)
+        else:
+            self.criteria, self.verdicts = eligibility
+        self.eligibility_filter = elig.ELIGIBLE_ALL
 
     # -- layout ---------------------------------------------------------
 
@@ -159,6 +222,16 @@ class ScreenPage:
                 js_handler="() => document.activeElement?.blur()",
             )
             self.collection_filter()
+            if elig.enabled(self.criteria):
+                keys = [row["paper_key"] for row in self.session.rows]
+                ui.select(
+                    elig.options(keys, self.criteria, self.verdicts),
+                    value=elig.ELIGIBLE_ALL,
+                    label="Eligibility",
+                    on_change=self.on_eligibility,
+                ).props("dense outlined").classes("w-72").mark("screen-eligibility").on(
+                    "popup-hide", js_handler="() => document.activeElement?.blur()"
+                )
             ui.input(
                 placeholder="Search title or abstract",
                 on_change=self.on_search,
@@ -166,13 +239,16 @@ class ScreenPage:
                 "text-search"
             )
         self.facet_panel()
+        self.bulk_bar()
         ui.label(
             "Shortcuts: I include, E exclude, M maybe (then jump to the next "
-            "undecided paper), ↑/↓ or K/J previous/next (disabled while typing "
+            "undecided paper), "
+            + ", ".join(f"{n} {kind}" for n, kind in KEY_TYPES.items())
+            + " (switch a paper type on or off), ↑/↓ or K/J previous/next (disabled while typing "
             "in the note)"
         ).classes("text-xs text-gray-500")
 
-        rows = self.session.visible_rows()
+        rows = self.filtered_rows()
         self.order = [row["paper_key"] for row in rows]
         self.grid = (
             ui.aggrid(
@@ -180,10 +256,14 @@ class ScreenPage:
                     "columnDefs": COLUMN_DEFS,
                     "rowData": rows,
                     ":getRowId": "(params) => params.data.paper_key",
+                    # Checkboxes pick papers for the bulk actions; a click
+                    # on a row opens it in the detail panel.
                     "rowSelection": {
-                        "mode": "singleRow",
-                        "checkboxes": False,
-                        "enableClickSelection": True,
+                        "mode": "multiRow",
+                        "checkboxes": True,
+                        "headerCheckbox": True,
+                        "selectAll": "filtered",
+                        "enableClickSelection": False,
                     },
                     "defaultColDef": {
                         "sortable": True,
@@ -197,7 +277,8 @@ class ScreenPage:
             .style("height: max(260px, 42vh)")  # detail stays visible on small screens
             .mark("screen-grid")
         )
-        self.grid.on("selectionChanged", self.on_grid_selection)
+        self.grid.on("selectionChanged", self.on_checked)
+        self.grid.on("cellClicked", self.on_row_click)
         self.grid.on("sortChanged", self.sync_order)
         self.grid.on("filterChanged", self.sync_order)
 
@@ -307,6 +388,7 @@ class ScreenPage:
             ui.label(f"Origin: {origin}").classes("text-xs text-gray-500")
             if detail["tags"]:
                 ui.label(f"Tags: {detail['tags']}").classes("text-xs text-gray-500")
+            self.type_picker(self.current)
             ui.label(detail["abstract"] or "No abstract.").classes(
                 "text-sm whitespace-pre-wrap max-h-48 overflow-auto"
             )
@@ -314,10 +396,19 @@ class ScreenPage:
                 key = self.current
 
                 async def change(add: list[str], remove: list[str]) -> None:
-                    if await criteria_panel.write_tags(
+                    if not await criteria_panel.write_tags(
                         self.session.review, self.session, key, add, remove
                     ):
-                        self.detail_panel.refresh()
+                        return
+                    if any(
+                        t.startswith(f"{criteria_service.KEEP}:") for t in add + remove
+                    ):
+                        # An exception changed: judge the corpus again.
+                        self.verdicts = await run.io_bound(
+                            elig.compute_eligibility, self.session, self.criteria
+                        )
+                        self.refill(force=True)
+                    self.detail_panel.refresh()
 
                 criteria_panel.render_criteria(
                     self.session.record(key),
@@ -350,6 +441,55 @@ class ScreenPage:
                 .mark("decision-note")
             )
             self.note.on("blur", self.save_note)
+
+    def type_picker(self, key: str) -> None:
+        """Paper types of ``key``: one button per type, several can be on.
+
+        Without a PAPER_TYPE tag, the default type is shown outlined; the first
+        click sets the clicked type.
+        """
+        record = self.session.record(key)
+        tagged = paper_types.types_of(record)
+        default = None if tagged else paper_types.effective_type(record)
+        with ui.row().classes("items-center gap-1").mark("paper-type-picker"):
+            ui.label("Paper type").classes("text-sm font-medium")
+            for n, kind in KEY_TYPES.items():
+                button = (
+                    ui.button(
+                        f"{kind} ({n})",
+                        on_click=lambda _, k=key, t=kind: self.toggle_type(k, t),
+                    )
+                    .props("dense no-caps size=sm")
+                    .mark(f"paper-type-{n}")
+                )
+                if kind not in tagged:
+                    button.props("outline" if kind == default else "flat")
+                if kind == default:
+                    button.tooltip("Default type (no PAPER_TYPE tag yet)")
+            ui.label("several types allowed").classes("text-xs text-gray-500")
+
+    async def toggle_type(self, key: str, kind: str) -> None:
+        """Switch type ``kind`` of paper ``key`` on or off (PAPER_TYPE tags)."""
+        record = self.session.record(key)
+        tagged = paper_types.types_of(record)
+        if not tagged:
+            wanted = [kind]  # the first choice replaces the default
+        elif kind in tagged:
+            wanted = [t for t in tagged if t != kind]  # none left: the default
+        else:
+            wanted = [*tagged, kind]
+        add, remove = paper_types.tag_changes(record, wanted)
+        if not (add or remove):
+            return
+        if not await criteria_panel.write_tags(
+            self.session.review, self.session, key, add, remove
+        ):
+            return
+        self.grid.run_row_method(
+            key, "setDataValue", "paper_type", self.session.row(key)["paper_type"]
+        )
+        if key == self.current:
+            self.detail_panel.refresh()
 
     @ui.refreshable_method
     def orphans_panel(self) -> None:
@@ -397,16 +537,87 @@ class ScreenPage:
         self.detail_panel.refresh()
         script = (
             f"const g = getElement({self.grid.id}).api; const n = g.getRowNode({json.dumps(key)});"
-            "if (n) { n.setSelected(true); g.ensureNodeVisible(n); }"
+            "if (n) { g.ensureNodeVisible(n);"
+            " g.setFocusedCell(n.rowIndex, 'title'); }"
         )
         ui.run_javascript(script)
 
-    async def on_grid_selection(self, _: events.GenericEventArguments) -> None:
-        """A row was clicked in the grid."""
-        row = await self.grid.get_selected_row()
-        if row and row["paper_key"] != self.current:
+    def on_row_click(self, event: events.GenericEventArguments) -> None:
+        """A row was clicked in the grid (not its checkbox): show it."""
+        args = event.args or {}
+        if str(args.get("colId", "")).startswith("ag-Grid-"):
+            return  # the selection checkbox
+        key = (args.get("data") or {}).get("paper_key")
+        if key and key != self.current:
             self.save_note()
-            self.current = row["paper_key"]
+            self.current = key
+            self.detail_panel.refresh()
+
+    async def on_checked(self, _: events.GenericEventArguments) -> None:
+        """The ticked papers changed."""
+        rows = await self.grid.get_selected_rows()
+        self.checked = [row["paper_key"] for row in rows]
+        self.bulk_bar.refresh()
+
+    # -- bulk actions -----------------------------------------------------
+
+    @ui.refreshable_method
+    def bulk_bar(self) -> None:
+        """Validate or delete the ticked papers at once (with the user's ORCID)."""
+        count = len(self.checked)
+        with ui.row().classes("items-center gap-2 w-full").mark("bulk-bar"):
+            ui.label(
+                f"{count} paper(s) ticked"
+                if count
+                else "Tick papers to validate or delete several at once"
+            ).classes("text-sm" + ("" if count else " text-gray-500")).mark(
+                "bulk-count"
+            )
+            if not count:
+                return
+            for label, icon, kind, add, props in BULK_ACTIONS:
+                button = (
+                    ui.button(
+                        label,
+                        icon=icon,
+                        on_click=lambda _, k=kind, a=add: self.bulk(k, a),
+                    )
+                    .props(props)
+                    .mark(f"bulk-{label.lower()}")
+                )
+                if not self.me:
+                    button.disable()
+                    button.tooltip("Set your ORCID iD in your profile first")
+            ui.button(
+                "Untick all",
+                on_click=lambda: self.grid.run_grid_method("deselectAll"),
+            ).props("flat dense no-caps").mark("bulk-untick")
+            ui.label(
+                "Deleted papers stay in the corpus but leave the analyses "
+                "(DELETED_BY tag); validation writes ANNOT_VALID_BY."
+            ).classes("text-xs text-gray-500")
+
+    async def bulk(self, kind: str, add: bool) -> None:
+        """Add (or remove) ``<kind>:<my ORCID>`` on every ticked paper."""
+        keys = list(self.checked)
+        if not keys or not self.me:
+            return
+        mine = review_tags.tag(kind, self.me)
+        changes = {key: ([mine], []) if add else ([], [mine]) for key in keys}
+        try:
+            new = await run.io_bound(
+                members.apply_tags_by_key, self.session.review, changes
+            )
+        except Exception as exc:
+            show_error("Cannot change the tags", exc)
+            return
+        for key, tags in new.items():
+            self.session.set_tags(key, tags)
+            self.grid.run_row_method(
+                key, "setDataValue", "status", self.session.row(key)["status"]
+            )
+        ui.notify(f"{len(new)} paper(s) {BULK_VERBS[kind, add]}", type="positive")
+        if self.current in new:
             self.detail_panel.refresh()
 
     async def sync_order(self, _: events.GenericEventArguments) -> None:
@@ -472,13 +683,23 @@ class ScreenPage:
 
     # -- filters and keyboard -------------------------------------------
 
-    def refill(self) -> None:
+    def filtered_rows(self) -> list[dict]:
+        """Grid rows passing every filter, with their Criteria column."""
+        return [
+            elig.criteria_cells(row, self.verdicts.get(row["paper_key"], {}))
+            for row in self.session.visible_rows(
+                self.decision_filter, self.query, self.facet_filters
+            )
+            if elig.matches(
+                self.eligibility_filter, self.verdicts.get(row["paper_key"], {})
+            )
+        ]
+
+    def refill(self, force: bool = False) -> None:
         """Reload the grid rows from the current filters."""
-        rows = self.session.visible_rows(
-            self.decision_filter, self.query, self.facet_filters
-        )
+        rows = self.filtered_rows()
         order = [row["paper_key"] for row in rows]
-        if order == self.order:
+        if order == self.order and not force:
             return  # same papers shown: do not resend every row to the browser
         self.order = order
         self.grid.options["rowData"] = rows
@@ -493,6 +714,11 @@ class ScreenPage:
     def on_filter(self, event: events.ValueChangeEventArguments) -> None:
         """Decision filter changed."""
         self.decision_filter = event.value
+        self.refill()
+
+    def on_eligibility(self, event: events.ValueChangeEventArguments) -> None:
+        """Eligibility filter changed."""
+        self.eligibility_filter = event.value or elig.ELIGIBLE_ALL
         self.refill()
 
     def on_facet(self, facet: str, value) -> None:
@@ -539,6 +765,8 @@ class ScreenPage:
         key = str(event.key.name).lower()
         if key in KEY_DECISIONS:
             self.decide(KEY_DECISIONS[key])
+        elif key in KEY_TYPES and self.current is not None:
+            background_tasks.create(self.toggle_type(self.current, KEY_TYPES[key]))
         elif key in ("arrowdown", "j"):
             self.move(1)
         elif key in ("arrowup", "k"):

@@ -33,15 +33,15 @@ def render_badges(record: dict) -> None:
     from scilex import paper_types
     from scilex.gui.services import coverage
 
-    tagged = paper_types.type_of(record)
-    kind = tagged or paper_types.effective_type(record)
+    tagged = paper_types.types_of(record)
     access = coverage.access_of(record)
     with ui.row().classes("items-center gap-1").mark("paper-badges"):
-        ui.badge(kind, color="primary").props("outline").tooltip(
-            "Paper type (PAPER_TYPE tag)"
-            if tagged
-            else "Default paper type (no PAPER_TYPE tag yet: ⑥ Enrich > Paper types)"
-        ).mark("paper-type")
+        for kind in paper_types.effective_types(record):
+            ui.badge(kind, color="primary").props("outline").tooltip(
+                "Paper type (PAPER_TYPE tag)"
+                if tagged
+                else "Default paper type (no PAPER_TYPE tag yet: ⑥ Enrich > Paper types)"
+            ).mark("paper-type")
         ui.badge(access, color=ACCESS_COLORS.get(access, "grey")).props(
             "outline"
         ).tooltip("Access").mark("paper-access")

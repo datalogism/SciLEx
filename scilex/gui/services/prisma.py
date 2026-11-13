@@ -50,6 +50,8 @@ class Prisma:
     included: Box = field(default_factory=lambda: Box("Studies included"))
     pending: Box = field(default_factory=lambda: Box("Still to screen"))
     enrichment: Box = field(default_factory=lambda: Box("Enrichments"))
+    # Papers left once rules and people discarded theirs (the funnel's "Eligible").
+    kept: int | None = None
 
     @property
     def empty(self) -> bool:
@@ -145,14 +147,16 @@ def compute(review, main: dict | None = None) -> Prisma:
     discarded: Counter = Counter()
     kept_keys = []
     for row in rows:
-        tags = review_tags.split_tags(row.get("tags"))
-        reason = next(
-            (
-                t[len(review_tags.DELETED) + 1 :]
-                for t in tags
-                if t.startswith(review_tags.DELETED + ":")
-            ),
-            None,
+        state = review_tags.workflow(row.get("tags"))
+        # A screened-in paper (KEEP:screened) is kept despite the rules.
+        reason = (
+            next(
+                w
+                for w in state.deleted_by
+                if not (state.screened and w.startswith(review_tags.FILTER_PREFIX))
+            )
+            if state.deleted
+            else None
         )
         if reason is None:
             kept_keys.append(row["paper_key"])
@@ -167,6 +171,7 @@ def compute(review, main: dict | None = None) -> Prisma:
     )
     flow.screened.count = len(rows)
     flow.screened.lines.append(f"{len(kept_keys)} kept in the corpus")
+    flow.kept = len(kept_keys)
     excluded = counts.get(screening.EXCLUDE, 0)
     flow.excluded.count = excluded + sum(discarded.values())
     if excluded:
@@ -178,7 +183,11 @@ def compute(review, main: dict | None = None) -> Prisma:
     if discarded.get("by a filter"):
         from scilex.gui.services import criteria
 
-        per = criteria.excluded_by_criterion(row.get("tags") for row in rows)
+        per = criteria.excluded_by_criterion(
+            row.get("tags")
+            for row in rows
+            if not review_tags.workflow(row.get("tags")).screened
+        )
         named = {c.id: c.name for c in criteria.load(review.folder, main)}
         for cid, count in sorted(per.items()):
             label = f"{cid} – {named[cid]}" if cid in named else cid
@@ -188,6 +197,7 @@ def compute(review, main: dict | None = None) -> Prisma:
     if maybe:
         flow.included.lines.append(f"plus {maybe} marked maybe")
     flow.pending.count = counts.get("undecided", 0)
+    _screened_stage(flow, review, data, kept_keys, decisions)
 
     done = [s for s in card.enrichments if s.status == "completed"]
     flow.enrichment.count = len(done)
@@ -201,11 +211,50 @@ def compute(review, main: dict | None = None) -> Prisma:
     return flow
 
 
+def _screened_stage(flow: Prisma, review, data, kept_keys, decisions) -> None:
+    """Second stage: people move papers into screened-results collections.
+
+    With such collections (``collection_roles.yml``), the included studies are
+    their papers, counted per collection and paper type; the papers kept by
+    the automatic stage but in no screened collection are still to screen.
+    """
+    from scilex.gui.services import collection_roles, screening
+
+    roles = collection_roles.load(review.folder)
+    if not collection_roles.configured(roles):
+        return
+    mask = collection_roles.scope_mask(data, roles)
+    summary = collection_roles.summary(data[mask], roles)
+    screened_keys = set(data.loc[mask, "paper_key"])
+    flow.included.title = "Studies included (screened collections)"
+    flow.included.count = summary["screened"]
+    flow.included.lines = [
+        f"{path}: {count}" for path, count in sorted(summary["per_collection"].items())
+    ]
+    if summary["per_type"]:
+        flow.included.lines.append(
+            "types: "
+            + ", ".join(f"{t} {n}" for t, n in sorted(summary["per_type"].items()))
+        )
+    if summary["with_filter_tag"]:
+        flow.included.lines.append(
+            f"{summary['with_filter_tag']} kept despite an eligibility rule"
+        )
+    flow.pending.count = sum(
+        1
+        for key in kept_keys
+        if key not in screened_keys
+        and getattr(decisions.get(key), "decision", None) != screening.EXCLUDE
+    )
+    flow.pending.lines = ["kept by the automatic stage, in no screened collection"]
+
+
 EXPORT_BASENAME = "prisma_flow"
 
 
 def export_figure(flow: Prisma, out_dir: Path) -> list[Path]:
-    """Draw the flow as a PRISMA-style figure: ``prisma_flow.svg`` and ``.png``."""
+    """Draw the flow as a PRISMA-style figure: ``prisma_flow.svg`` and ``.png``,
+    and as a funnel: ``prisma_flow_funnel.svg``."""
     import textwrap
 
     import matplotlib
@@ -300,4 +349,11 @@ def export_figure(flow: Prisma, out_dir: Path) -> list[Path]:
         fig.savefig(path, dpi=150, bbox_inches="tight")
         files.append(path)
     plt.close(fig)
+    from scilex.gui.services import prisma_funnel
+
+    funnel = prisma_funnel.svg(prisma_funnel.stages(flow))
+    if funnel:
+        path = out_dir / f"{EXPORT_BASENAME}_funnel.svg"
+        path.write_text(funnel, encoding="utf-8")
+        files.append(path)
     return files

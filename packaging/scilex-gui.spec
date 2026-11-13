@@ -22,6 +22,9 @@ SCILEX_DATA = [
     ("data/venue_rankings", "*.csv"),
     ("tagging", "*.csv"),
     ("gui/assets", "*.png"),
+    # Dashboard step: its script and style, and the pinned D3 / crossfilter.
+    ("gui/assets/dashboard", "dashboard.*"),
+    ("gui/assets/dashboard/vendor", "*.js"),
     # Pinned scilex-lpwc-ap profile, mapped by Export (knowledge graph).
     ("kg/ap", "VERSION.json"),
     ("kg/ap/ontology", "*.ttl"),
@@ -29,6 +32,11 @@ SCILEX_DATA = [
     ("kg/ap/mappings/rml", "*.ttl"),
     ("kg/ap/mappings/functions", "*.py"),
     ("kg/ap/mappings/sparql", "*.ru"),
+    # iteration 4+: mapping interface, reference profiles, tables, JSON Schemas
+    ("kg/ap/mappings", "*.py"),
+    ("kg/ap/mappings", "*.json"),
+    ("kg/ap/mappings/collections", "*.json"),
+    ("kg/ap/mappings/alignments", "*.json"),
 ]
 ASSETS = SCILEX / "gui" / "assets"
 

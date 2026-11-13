@@ -7,15 +7,24 @@ from scilex import tag_analysis as tags
 
 def _frame(rows):
     return pd.DataFrame(
-        [{"title": f"P{i}", "date": date, "tags": ";".join(t)} for i, (date, t) in enumerate(rows)]
+        [
+            {"title": f"P{i}", "date": date, "tags": ";".join(t)}
+            for i, (date, t) in enumerate(rows)
+        ]
     )
 
 
 CORPUS = _frame(
     [
-        ("2020", ["Ontology:CIDOC-CRM", "Tool:Metashape", "LifecycleStep:3", "HavePDF"]),
+        (
+            "2020",
+            ["Ontology:CIDOC-CRM", "Tool:Metashape", "LifecycleStep:3", "HavePDF"],
+        ),
         ("2021", ["ONTOLOGY:CIDOC CRM", "Tool:MetaShape", "LIFECYCLESTEP:4"]),
-        ("2021", ["Ontology:None", "Tool:Blender", "LifecycleStep:3", "Collect_KW1:rdf"]),
+        (
+            "2021",
+            ["Ontology:None", "Tool:Blender", "LifecycleStep:3", "Collect_KW1:rdf"],
+        ),
         ("2022", ["Ontology:?", "Tool:Blendr"]),
         ("2022", ["REL_SCORE:3"]),
     ]
@@ -32,12 +41,16 @@ def test_spellings_are_merged_and_dimensions_unified():
     assert ontology.absent == 1
     tool = analysis.dimensions["TOOL"]
     assert sum(tool.values.values()) == 4
-    assert set(tool.variants[next(v for v in tool.values if v.lower() == "metashape")]) == {
+    assert set(
+        tool.variants[next(v for v in tool.values if v.lower() == "metashape")]
+    ) == {
         "Metashape",
         "MetaShape",
     }
     # Automation tags are no dimension; the paper with REL_SCORE only is not annotated.
-    assert "REL_SCORE" not in analysis.dimensions and "HAVEPDF" not in analysis.dimensions
+    assert (
+        "REL_SCORE" not in analysis.dimensions and "HAVEPDF" not in analysis.dimensions
+    )
     assert analysis.annotated == 4
 
 
@@ -52,7 +65,9 @@ def test_close_spellings_are_suggested_unless_rejected():
 
 def test_synonyms_merge_values(tmp_path):
     path = tmp_path / "tag_synonyms.csv"
-    tags.add_merge_rows(path, [{"dimension": "Tool", "value": "Blendr", "merge_into": "Blender"}])
+    tags.add_merge_rows(
+        path, [{"dimension": "Tool", "value": "Blendr", "merge_into": "Blender"}]
+    )
     synonyms = tags.load_synonyms(path)
     analysis = tags.analyse_tags(CORPUS, synonyms)
     assert analysis.dimensions["TOOL"].values["Blender"] == 2
@@ -92,7 +107,11 @@ def _item(key, tag_list, version=7):
     return {
         "key": key,
         "version": version,
-        "data": {"title": key, "itemType": "journalArticle", "tags": [{"tag": t} for t in tag_list]},
+        "data": {
+            "title": key,
+            "itemType": "journalArticle",
+            "tags": [{"tag": t} for t in tag_list],
+        },
     }
 
 
@@ -104,7 +123,10 @@ def test_plan_tag_cleaning_rewrites_spellings_only():
         {"key": "N", "data": {"itemType": "note"}},
     ]
     frame = pd.DataFrame(
-        [{"title": i["key"], "tags": ";".join(t["tag"] for t in i["data"]["tags"])} for i in items[:3]]
+        [
+            {"title": i["key"], "tags": ";".join(t["tag"] for t in i["data"]["tags"])}
+            for i in items[:3]
+        ]
     )
     analysis = tags.analyse_tags(frame)
     plan = tags.plan_tag_cleaning(items, analysis)

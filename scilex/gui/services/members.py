@@ -39,6 +39,9 @@ class Member:
     zotero_id: str = ""
     orcid: str = ""
     role: str = "manual"  # see ROLES; "contributor": seen editing items only
+    # The member agrees to be named in a public knowledge-graph dump (SX-6, ORSD
+    # SR17, D36). Without it, a public dump shows a pseudonymous agent/<n>.
+    consent_public: bool = False
 
     @property
     def identifier(self) -> str:
@@ -66,10 +69,22 @@ def load(folder: Path) -> list[Member]:
         return []
     fields = set(Member.__dataclass_fields__)
     return [
-        Member(**{k: str(v or "") for k, v in m.items() if k in fields})
+        Member(
+            **{
+                k: (_flag(v) if k == "consent_public" else str(v or ""))
+                for k, v in m.items()
+                if k in fields
+            }
+        )
         for m in raw
         if isinstance(m, dict)
     ]
+
+
+def _flag(value) -> bool:
+    if isinstance(value, str):
+        return value.strip().casefold() in ("true", "yes", "1", "x")
+    return bool(value)
 
 
 def save(folder: Path, members: list[Member]) -> None:
@@ -316,12 +331,18 @@ def apply_tags(review: Review, changes: dict[int, tuple[list[str], list[str]]]) 
         data["tags"] = ""
     data["tags"] = data["tags"].astype(object)
     changed = 0
+    from scilex import paper_types
+    from scilex.gui.services.journal import current_agent
+
     for index, (add, remove) in changes.items():
         old = data.at[index, "tags"]
         new = review_tags.with_tags(old, add, remove)
         if new != review_tags.with_tags(old):
             data.at[index, "tags"] = new
             changed += 1
+            if paper_types.changes_types(add, remove):
+                origin = paper_types.person_origin(current_agent()["id"])
+                paper_types.set_origin(data, index, origin)
     if changed:
         backup(review.results_path)
         # Only the changed tag cells: an enricher running meanwhile keeps its work.

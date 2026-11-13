@@ -25,9 +25,7 @@ CITO = Namespace("http://purl.org/spar/cito/")
 LPWCP = Namespace("https://linkedpaperswithcode.com/property/")
 BASE = "https://w3id.org/scilex/data/my-review/"
 
-HAS_KG_DEPS = all(
-    importlib.util.find_spec(m) for m in ("morph_kgc", "pyoxigraph")
-)
+HAS_KG_DEPS = all(importlib.util.find_spec(m) for m in ("morph_kgc", "pyoxigraph"))
 
 BIB = r"""
 @inproceedings{doe_first_2021,
@@ -78,7 +76,9 @@ def test_bib2json_keeps_tex_ligatures_and_verbatim_fields(bib_file):
 
 
 def test_bib2json_repeated_field_keeps_first_value(bib_file):
-    first = next(e for e in bib2json.convert(bib_file)["entries"] if e["ID"] == "doe_first_2021")
+    first = next(
+        e for e in bib2json.convert(bib_file)["entries"] if e["ID"] == "doe_first_2021"
+    )
     assert first["annotation"] == "first remark"
     assert first["author"] == "Doe, Jane and Smith, John"  # enclosing braces removed
 
@@ -152,24 +152,49 @@ def test_prepare_mapping_fills_the_templates_for_the_review(tmp_path):
     assert source.resolve().as_posix() in texts[0]
     assert any('A \\"quoted\\" title' in t for t in texts)  # escaped in SPARQL strings
     assert any("source/my%20review.bib" in t for t in texts)  # IRI-safe source name
-    assert mapping.udfs.read_text(encoding="utf-8").isascii()  # morph-kgc: locale encoding
+    assert mapping.udfs.read_text(
+        encoding="utf-8"
+    ).isascii()  # morph-kgc: locale encoding
     # The collection profile the functions read (SCILEX_PROFILE).
-    profile = json.loads(Path(mapping.env["SCILEX_PROFILE"]).read_text(encoding="utf-8"))
-    assert profile["slug"] == "my-review"
-    assert {"SAT_TASK", "SAT_LANG", "QUALI_SCORE"} <= set(profile["tags"]["dimensions"])
-    assert r"COLLECT_KW\d+" in profile["tags"]["dimension_patterns"]
-    lifting = [p for p in mapping.sparql if p.name.startswith("90-")]
-    assert lifting and f"<{BASE}coding/SAT_TASK> lpwcp:hasTask" in lifting[0].read_text()
+    profile = json.loads(
+        Path(mapping.env["SCILEX_PROFILE"]).read_text(encoding="utf-8")
+    )
+    assert profile["slug"] == "my-review" and profile["effective"]
+    dims = {d["name"]: d for d in profile["tags"]["dimensions"]}
+    assert {"SAT_TASK", "SAT_LANG", "QUALI_SCORE"} <= set(dims)
+    assert dims["SAT_TASK"]["lpwc"] == "task" and "lpwc" not in dims["SAT_LANG"]
+    assert any(
+        p["pattern"].startswith("COLLECT_KW")
+        for p in profile["tags"]["dimension_patterns"]
+    )
+    # iter4+: the profile's own sparql/04 lifts the grid into LPWC (no SciLEx file)
+    coding = next(p for p in mapping.sparql if p.name.startswith("04-"))
+    assert f"<{BASE}coding/SAT_TASK> lpwcp:hasTask" in coding.read_text(
+        encoding="utf-8"
+    )
+    assert not any(p.name.startswith("90-") for p in mapping.sparql)
+    # no bundle: the survey mappings are not run
+    assert not any("survey" in p.name for p in mapping.rml)
 
 
-def test_prepare_mapping_refuses_a_base_the_profile_cannot_use(tmp_path):
-    from scilex.kg.profile import ProfileError
-
+def test_prepare_mapping_keeps_any_base_iri(tmp_path):
+    """iter4+: the base is a key of the collection profile (stable IRIs, SX-11)."""
     source = tmp_path / "source.json"
     source.write_text("{}", encoding="utf-8")
-    with pytest.raises(ProfileError, match="slug"):
+    mapping = prepare_mapping(
+        tmp_path / "m",
+        base_iri="https://example.org/kg/my-review/",
+        source_json=source,
+        source_name="x.bib",
+        dimensions=[],
+    )
+    profile = json.loads(Path(mapping.env["SCILEX_PROFILE"]).read_text("utf-8"))
+    assert profile["base"] == "https://example.org/kg/my-review/"
+    with pytest.raises(ValueError, match="end with"):
         prepare_mapping(
-            tmp_path / "m", base_iri="https://example.org/kg/", source_json=source,
+            tmp_path / "n",
+            base_iri="https://example.org/kg",
+            source_json=source,
             source_name="x.bib",
         )
 
@@ -178,11 +203,18 @@ def test_dimensions_are_deduced_without_a_grid(tmp_path):
     from scilex.kg.profile import deduce_dimensions
 
     source = tmp_path / "s.json"
-    source.write_text(json.dumps({"lists": [
-        {"field": "keywords", "value": "SAT_TASK:NER"},
-        {"field": "keywords", "value": "free keyword"},
-        {"field": "keywords", "value": "Collect_KW1:rag"},
-    ]}), encoding="utf-8")
+    source.write_text(
+        json.dumps(
+            {
+                "lists": [
+                    {"field": "keywords", "value": "SAT_TASK:NER"},
+                    {"field": "keywords", "value": "free keyword"},
+                    {"field": "keywords", "value": "Collect_KW1:rag"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
     assert deduce_dimensions(source) == ["COLLECT_KW1", "SAT_TASK"]
 
 
@@ -197,7 +229,10 @@ def test_ascii_source_keeps_the_meaning_of_constants():
 
 
 def test_default_base_iri():
-    assert default_base_iri("My RE review!") == "https://w3id.org/scilex/data/my-re-review/"
+    assert (
+        default_base_iri("My RE review!")
+        == "https://w3id.org/scilex/data/my-re-review/"
+    )
 
 
 # --- choosing the files of a profile version ----------------------------------
@@ -232,7 +267,9 @@ def test_select_files_maps_the_profile_layout():
 # --- end to end ------------------------------------------------------------------
 
 
-@pytest.mark.skipif(not HAS_KG_DEPS, reason="needs the 'kg' extra (morph-kgc, pyoxigraph)")
+@pytest.mark.skipif(
+    not HAS_KG_DEPS, reason="needs the 'kg' extra (morph-kgc, pyoxigraph)"
+)
 def test_build_knowledge_graph_end_to_end(bib_file, tmp_path):
     from scilex.kg.build import build_knowledge_graph
 
@@ -248,12 +285,19 @@ def test_build_knowledge_graph_end_to_end(bib_file, tmp_path):
     # iter3+ profiles map SciLEx's own tags (HavePDF, QUALI_SCORE...): none dropped.
     assert report.papers == 2 and report.dropped_tags == 0 and report.notes_cleaned == 1
     graph = Graph().parse(output)
-    first, second = URIRef(f"{BASE}br/doe_first_2021"), URIRef(f"{BASE}br/roe_second_2022")
+    first, second = (
+        URIRef(f"{BASE}br/doe_first_2021"),
+        URIRef(f"{BASE}br/roe_second_2022"),
+    )
     # citations survive the extra lines of the note, and DOI stubs merge into papers
     assert (second, CITO.cites, first) in graph
     # the review grid's SAT_TASK is lifted into LPWC
     assert (first, LPWCP.hasTask, URIRef(f"{BASE}coding/SAT_TASK/ner")) in graph
-    assert (second, LPWCP.usesDataset, URIRef(f"{BASE}coding/SAT_DATASET/tacred")) in graph
+    assert (
+        second,
+        LPWCP.usesDataset,
+        URIRef(f"{BASE}coding/SAT_DATASET/tacred"),
+    ) in graph
     dataset = URIRef(BASE)
     assert (dataset, DCTERMS.conformsTo, URIRef(read_version()["version_iri"])) in graph
     assert not any("re-slr" in str(t) for triple in graph for t in triple)

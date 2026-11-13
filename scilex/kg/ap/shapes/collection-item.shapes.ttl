@@ -12,6 +12,7 @@
 @prefix skos:     <http://www.w3.org/2004/02/skos/core#> .
 @prefix fabio:    <http://purl.org/spar/fabio/> .
 @prefix frbr:     <http://purl.org/vocab/frbr/core#> .
+@prefix bibo:     <http://purl.org/ontology/bibo/> .
 @prefix cito:     <http://purl.org/spar/cito/> .
 @prefix c4o:      <http://purl.org/spar/c4o/> .
 @prefix pro:      <http://purl.org/spar/pro/> .
@@ -54,11 +55,25 @@ sxsh:CollectionItemShape
         sh:path datacite:hasIdentifier ;
         sh:qualifiedValueShape [ sh:pattern "/id/doi/" ] ; sh:qualifiedMaxCount 1 ;
         sh:message "A collection item has at most one DOI." ] ;
-    sh:property [ sh:path frbr:embodiment ; sh:maxCount 1 ; sh:class fabio:Manifestation ] ;
+    sh:property [ sh:path frbr:embodiment ; sh:class fabio:Manifestation ] ;
+    # iter5 (fixes the iter4 regression): one bibliographic embodiment (re/1) and at most one
+    # digital copy (re/pdf, fabio:DigitalManifestation, from the Zotero `PDF URL:` line).
+    sh:property [
+        sh:path frbr:embodiment ;
+        sh:qualifiedValueShape [ sh:not [ sh:class fabio:DigitalManifestation ] ] ;
+        sh:qualifiedMaxCount 1 ;
+        sh:message "A collection item has at most one bibliographic embodiment." ] ;
+    sh:property [
+        sh:path frbr:embodiment ;
+        sh:qualifiedValueShape [ sh:class fabio:DigitalManifestation ] ;
+        sh:qualifiedMaxCount 1 ;
+        sh:message "A collection item has at most one digital copy (PDF URL)." ] ;
     sh:property [
         sh:path frbr:partOf ; sh:maxCount 1 ; sh:nodeKind sh:IRI ;
         sh:message "A collection item is part of at most one venue (journal, proceedings or book)." ] ;
     sh:property [ sh:path pro:isDocumentContextFor ; sh:class pro:RoleInTime ] ;
+    # iter8 (ORSD VR4): the conference edition the item was presented at
+    sh:property [ sh:path bibo:presentedAt ; sh:maxCount 1 ; sh:class bibo:Conference ] ;
     sh:property [ sh:path cito:cites ; sh:nodeKind sh:IRI ] ;
     sh:property [
         sh:path c4o:hasGlobalCitationFrequency ; sh:minCount 1 ; sh:maxCount 1 ;

@@ -8,7 +8,14 @@ from pathlib import Path
 from nicegui import run, ui
 
 from scilex.gui.components.errors import show_error
-from scilex.gui.services import consistency, journal, prisma, provenance
+from scilex.gui.services import (
+    consistency,
+    journal,
+    prisma,
+    prisma_funnel,
+    provenance,
+    workflow_map,
+)
 from scilex.gui.services import overview as service
 from scilex.gui.services.workspace import Review, Workspace, adopt_folder
 from scilex.gui.state import AppContext
@@ -277,13 +284,16 @@ def render(ctx: AppContext, review: Review) -> None:
 
     async def load() -> None:
         try:
-            data, issues, events, card, flow = await run.io_bound(_gather, review)
+            data, issues, events, card, flow, steps = await run.io_bound(
+                _gather, review
+            )
         except Exception as exc:
             with body:
                 show_error("Cannot read the review", exc)
             return
         body.clear()
         with body:
+            _workflow(review, steps)
             _prisma(review, flow)
             _review_card(card)
             _issues(review, issues)
@@ -302,13 +312,94 @@ def _gather(review: Review):
     except Exception:  # an invalid scilex.yml is reported by the other steps
         main = None
     journal.backfill(review.folder)
+    events = journal.load(review.folder)
+    flow = prisma.compute(review, main)
+    try:
+        steps = workflow_map.compute(review, flow, events, main)
+    except Exception:  # the map is a summary: never block the Overview
+        steps = []
     return (
         service.compute(review),
         consistency.check(review, main),
-        journal.load(review.folder),
+        events,
         provenance.review_card(review.folder),
-        prisma.compute(review, main),
+        flow,
+        steps,
     )
+
+
+def _workflow(review: Review, steps: list[workflow_map.StepState]) -> None:
+    """The review workflow map; a click on a step shows its detail."""
+    if not steps:
+        return
+    by_key = {step.key: step for step in steps}
+    # The first step still to finish is selected first.
+    state = {
+        "selected": next(
+            (s.key for s in steps if s.progress is not None and s.progress < 100),
+            steps[0].key,
+        )
+    }
+    with ui.card().classes("w-full gap-2").mark("overview-workflow"):
+        ui.label("Review workflow").classes("font-bold")
+        ui.label(
+            "Ten steps, three loops back (blue) and what applies at every step. "
+            "The bar under each step is how far it is; select a step."
+        ).classes("text-xs text-gray-500")
+
+        @ui.refreshable
+        def drawing() -> None:
+            ui.html(workflow_map.svg(steps, state["selected"]), sanitize=False).classes(
+                "w-full"
+            ).mark("workflow-map")
+
+        @ui.refreshable
+        def detail() -> None:
+            step = by_key[state["selected"]]
+            with ui.column().classes("w-full gap-1").mark("workflow-detail"):
+                with ui.row().classes("items-baseline gap-2"):
+                    ui.label(f"{step.code} {step.name}").classes("text-lg font-bold")
+                    if step.progress is not None:
+                        ui.label(f"{step.progress} %").style(
+                            f"color:{workflow_map.tone(step.progress)}"
+                        ).classes("font-bold")
+                ui.label(step.purpose).classes("text-sm text-gray-600")
+                with ui.row().classes("w-full gap-8 items-start"):
+                    with ui.column().classes("gap-0"):
+                        ui.label("Where it stands").classes(
+                            "text-xs font-medium text-gray-600"
+                        )
+                        for fact in [step.value, *step.facts]:
+                            if fact:
+                                ui.label(fact).classes("text-sm")
+                    if step.todo:
+                        with ui.column().classes("gap-0"):
+                            ui.label("To do").classes(
+                                "text-xs font-medium text-gray-600"
+                            )
+                            for item in step.todo:
+                                ui.label(f"• {item}").classes("text-sm text-orange-800")
+                    ui.space()
+                    ui.button(
+                        f"Open {step.name}",
+                        icon="arrow_forward",
+                        on_click=lambda: ui.navigate.to(
+                            f"/review/{review.id}/{state['selected']}"
+                        ),
+                    ).props("outline dense no-caps").mark("workflow-open")
+
+        drawing()
+        ui.separator()
+        detail()
+
+    def select(event) -> None:
+        key = event.args if isinstance(event.args, str) else None
+        if key in by_key:
+            state["selected"] = key
+            drawing.refresh()
+            detail.refresh()
+
+    ui.on("scilex_workflow_stage", select)
 
 
 PHASE_CLASSES = "text-xs font-bold uppercase tracking-wide text-primary self-center"
@@ -353,6 +444,15 @@ def _prisma(review: Review, flow: prisma.Prisma) -> None:
         with ui.row().classes("w-full items-center"):
             ui.label("PRISMA flow").classes("font-bold")
             ui.space()
+            funnel_svg = (
+                "" if flow.empty else prisma_funnel.svg(prisma_funnel.stages(flow))
+            )
+            view = (
+                ui.toggle({"funnel": "Funnel", "diagram": "Diagram"}, value="funnel")
+                .props("dense no-caps size=sm")
+                .mark("prisma-view")
+            )
+            view.set_visibility(bool(funnel_svg))
             if not flow.empty:
                 ui.button("Export (SVG, PNG)", icon="download", on_click=export).props(
                     "flat dense no-caps"
@@ -363,7 +463,19 @@ def _prisma(review: Review, flow: prisma.Prisma) -> None:
                 "extensions, the filters, the screening and the enrichments."
             ).classes("text-sm text-gray-600")
             return
-        with ui.grid(columns="7rem 1fr 1fr").classes("w-full gap-2 items-stretch"):
+        funnel = (
+            ui.html(funnel_svg, sanitize=False).classes("w-full").mark("prisma-funnel")
+        )
+        diagram = ui.column().classes("w-full gap-0")
+        funnel.bind_visibility_from(view, "value", value="funnel")
+        if funnel_svg:
+            diagram.bind_visibility_from(view, "value", value="diagram")
+        else:
+            funnel.set_visibility(False)
+        with (
+            diagram,
+            ui.grid(columns="7rem 1fr 1fr").classes("w-full gap-2 items-stretch"),
+        ):
             ui.label("Identification").classes(PHASE_CLASSES)
             _box(flow.identification, "prisma-identification")
             _box(flow.other_sources, "prisma-extensions")

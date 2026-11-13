@@ -106,13 +106,25 @@ def _render_network(view: service.GraphView, source=None) -> None:
             .classes("w-56")
             .mark("graph-color-by")
         )
-    chart = (
-        ui.echart(service.chart_options(view))
-        .classes("w-full border rounded")
-        .style("height: 520px")
-        .mark("graph-chart")
-    )
-    details = ui.column().classes("w-full gap-0").mark("graph-details")
+    # The notice of the clicked paper sits beside the network (below it on
+    # narrow screens), so it is seen without scrolling.
+    with ui.element("div").classes("w-full grid gap-3 lg:grid-cols-5"):
+        chart = (
+            ui.echart(service.chart_options(view))
+            .classes("w-full border rounded lg:col-span-3")
+            .style("height: 520px")
+            .mark("graph-chart")
+        )
+        with (
+            ui.column()
+            .classes("lg:col-span-2 min-w-0 gap-0 overflow-auto")
+            .style("max-height: 520px")
+        ):
+            details = ui.column().classes("w-full gap-0").mark("graph-details")
+            with details:
+                ui.label("Click a paper of the network to read its notice.").classes(
+                    "text-sm text-gray-500"
+                )
 
     @ui.refreshable
     def legend() -> None:
@@ -161,6 +173,10 @@ def _render_network(view: service.GraphView, source=None) -> None:
             return
         node = event.data
         details.clear()
+        ui.run_javascript(
+            f"getElement({details.id})?.$el?.scrollIntoView"
+            "({block: 'nearest', behavior: 'smooth'})"
+        )
         record = view.records.get(node.get("id", ""))
         if record is not None:
             # The full notice: badges, Zotero links, abstract, annotations.

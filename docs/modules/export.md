@@ -46,22 +46,62 @@ annotations, Extra with the citation lists) and maps it with the
 
 - the coding dimensions come from the review's `annotation_grid.csv` (deduced from the
   `DIMENSION:value` tags when there is none), plus SciLEx's own tags (`Collect_KW*`,
-  `QUALI_SCORE`, `REL_SCORE`, `CITAT`, `HavePDF`…);
-- sub-collections become sub-corpora (`dcat:Dataset`);
+  `QUALI_SCORE`, `REL_SCORE`, `CITAT`, `HavePDF`…). Optional grid columns declare more
+  (see [the grid declaration](#grid-declaration));
+- sub-collections become sub-corpora (`void:subset`);
 - your ORCID iD is the creator; the base IRI is
-  `https://w3id.org/scilex/data/<review-slug>/`;
-- discarded papers and agreement copies are left out; no API key ever reaches the
-  graph;
+  `https://w3id.org/scilex/data/<review-slug>/` at the first export, then kept in
+  `review_state.yml` (`kg_base`): renaming the review does not change it;
+- agreement copies are left out. Discarded papers are left out too, until the profile
+  maps the bundle's exclusions; they are then kept and flagged;
+- no API key ever reaches the graph: the values of your keys file and key-like texts
+  are looked for, and the export warns if one is found;
 - the graph is checked against the profile's SHACL shapes.
 
-Written to `output/<name>/kg/`: `<name>.ttl`, the `.bib` it came from, and
-`<name>.shacl.ttl/.txt`. A knowledge graph can start a new review
-(**New review → From a knowledge graph**, see [Workspace](workspace.md#reviews)).
+### Survey bundle
+
+Besides the bibliography, the export writes `kg/bundle/survey.json`: what the review
+records and Zotero does not. It holds the configuration and criteria versions, the grid,
+the collection roles, the members, the screening decisions (with who decided), the
+exclusions and their causes, the assignments, the paper types and who set them, the
+agreement studies, the journal, the annotation history, the paper log, the venues,
+scores, metrics and enrichment values. Its `parts` list says, for each part, whether it
+is present, absent (step never run), empty or withheld. The profile maps the parts it
+knows (iteration 8: the venues, which names the journals known only by their ISSN).
+
+**Disclosure** chooses what the bundle shows:
+
+| Level | Shows | For |
+|---|---|---|
+| Public (default) | members named only with their consent (else `agent/<n>`); no screening note; no annotator's own codes; no event parameters | a file you share or publish |
+| Team | names, notes, each annotator's codes of the agreement studies | the review team |
+| Full | also the parameters of every journal event | yourself, a backup |
+
+A member agrees to be named in ④ Annotate → Annotators (**Named in public dumps**).
+
+### Grid declaration
+
+Optional columns of `annotation_grid.csv` declare the values of each dimension (profile
+iteration 6):
+
+| Column | Content |
+|---|---|
+| `type` | `binary`, `closed`, `magnitude`, `integer` or `open` |
+| `values` | the values of a `closed` dimension: `a, b, c` (else the `Allowed values` column) |
+| `broader` | value hierarchy: `ner > ie; re > ie` |
+| `implies` | rules: `dataset-created > dataset; …` (a paper with the left value must have the right ones) |
+| `other_to` | for a `binary` dimension, the dimension its other values go to |
+| `lpwc` | LPWC role: `task`, `dataset`, `model` or `method` (default: from the name, `SAT_TASK` → `task`) |
+
+Written to `output/<name>/kg/`: `<name>.ttl`, the `.bib` it came from,
+`bundle/survey.json` and `<name>.shacl.ttl/.txt`. A knowledge graph can start a new
+review (**New review → From a knowledge graph**, see [Workspace](workspace.md#reviews)).
 
 ```bash
 scilex-build-kg                      # from the review folder
 scilex-build-kg --bib export.bib     # map a BibLaTeX file instead of exporting from Zotero
 scilex-build-kg --orcid 0000-0002-1825-0097 --no-validate --output-dir DIR
+scilex-build-kg --disclosure team    # public (default), team or full
 ```
 
 ### The application profile
@@ -71,9 +111,12 @@ commit). Maintainers refresh it with `python -m scilex.kg.sync_profile` (latest 
 else newest tag, else the default branch; `--check` only compares; `--local DIR`
 installs from a local checkout), review the diff, and run `pytest tests/test_kg.py`.
 
-From iteration 3 on, the profile's mapping is a set of templates (`{{BASE}}`,
-`{{JSON}}`, `{{TITLE}}`…) driven by a *collection profile* that SciLEx generates for
-each review. For iteration 1 profiles, SciLEx rewrites the sample review's values
-instead. Either way it stops with an error if a profile version no longer has the
+From iteration 4 on, the profile ships its mapping interface
+(`mappings/ap_profile.py`): SciLEx writes the review's *collection profile* (its grid,
+creator, configuration hash, survey bundle), and the profile's own code merges it with
+the profile's defaults and fills every template placeholder. The dataset description,
+creator and sub-corpora then come from the mapping itself. Iteration 3 profiles are
+templates SciLEx fills; for iteration 1 profiles, SciLEx rewrites the sample review's
+values instead. Either way it stops with an error if a profile version no longer has the
 shape it expects. Status, metric and agreement terms not yet in the profile are
 proposed in the [provenance proposal](../kg/provenance-proposal.md).

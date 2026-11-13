@@ -33,6 +33,7 @@ class Step:
 PIPELINE_STEPS = (
     Step("overview", "Overview", "dashboard"),
     Step("explore", "Explore", "manage_search", needs_results=True),
+    Step("dashboard", "Dashboard", "space_dashboard", needs_results=True),
     Step("configure", "① Configure", "tune"),
     Step("collect", "② Collect", "travel_explore", hidden_with_results=True),
     Step("criteria", "Eligibility criteria", "rule", needs_results=True),
@@ -62,15 +63,51 @@ def is_enabled(step: Step, review: Review) -> bool:
     return review.has_results or not step.needs_results
 
 
+# Collapsed sidebar: icons only, the step names as tooltips (title attribute).
+# SIDEBAR_CLASS goes on the whole left column (review name, folder, steps);
+# HIDDEN_WHEN_FOLDED on what is left out when it is folded.
+SIDEBAR_CLASS, HIDDEN_WHEN_FOLDED = "scilex-sidebar", "scilex-sidebar-hide"
+SIDEBAR_CSS = """
+.scilex-sidebar { width: 13rem; transition: width .15s; }
+.scilex-sidebar.collapsed { width: 2.75rem; }
+.scilex-sidebar.collapsed .q-btn__content > .block,
+.scilex-sidebar.collapsed .scilex-sidebar-hide { display: none; }
+.scilex-sidebar.collapsed .scilex-sidebar-wrap { flex-wrap: wrap; }
+.scilex-sidebar.collapsed .q-btn { padding-left: 0; padding-right: 0; }
+.scilex-sidebar.collapsed .q-btn__content { justify-content: center; }
+"""
+SIDEBAR_KEY = "scilex.sidebarCollapsed"  # browser localStorage: kept per browser
+# Run in the browser: no round trip, and the choice survives page changes.
+TOGGLE_SIDEBAR_JS = (
+    "() => { const s = document.querySelector('.scilex-sidebar');"
+    " const c = s.classList.toggle('collapsed');"
+    f" try {{ localStorage.setItem('{SIDEBAR_KEY}', c ? '1' : '0'); }} catch (e) {{}} }}"
+)
+RESTORE_SIDEBAR_JS = (
+    f"try {{ if (localStorage.getItem('{SIDEBAR_KEY}') === '1')"
+    " document.querySelector('.scilex-sidebar')?.classList.add('collapsed'); }"
+    " catch (e) {}"
+)
+
+
 def render_sidebar(review: Review, active: str) -> None:
     """Draw the steps of ``review``, highlighting ``active``.
 
+    Draw it inside a column of class :data:`SIDEBAR_CLASS`. The menu folds to its icons (toggle at its top) to leave the page more
+    room; the browser remembers the choice.
     Steps that need results unlock by themselves as soon as the aggregation
     writes its results file (checked every second), without a page reload.
     """
+    ui.add_head_html(f"<style>{SIDEBAR_CSS}</style>")
     locked: list[ui.button] = []
-    with ui.column().classes("w-52 gap-1 shrink-0"):
-        render_logo("w-36 mb-2 cursor-pointer").on("click", lambda: ui.navigate.to("/"))
+    with ui.column().classes("w-full gap-1").mark("sidebar"):
+        with ui.row().classes("w-full items-center no-wrap gap-0"):
+            ui.button(icon="menu_open").props(
+                'flat round dense title="Fold or unfold the menu"'
+            ).on("click", js_handler=TOGGLE_SIDEBAR_JS).mark("sidebar-toggle")
+            render_logo(f"w-32 mb-2 cursor-pointer {HIDDEN_WHEN_FOLDED}").on(
+                "click", lambda: ui.navigate.to("/")
+            )
         for step in PIPELINE_STEPS:
             if step.hidden_with_results and review.has_results and step.key != active:
                 continue
@@ -80,7 +117,8 @@ def render_sidebar(review: Review, active: str) -> None:
             _step_button(review, step, active, locked)
         ui.button(
             "My reviews", icon="folder_open", on_click=lambda: ui.navigate.to("/")
-        ).props("flat align=left no-caps").classes("w-full")
+        ).props('flat align=left no-caps title="My reviews"').classes("w-full")
+    ui.timer(0, lambda: ui.run_javascript(RESTORE_SIDEBAR_JS), once=True)
 
     if not locked:
         return
@@ -108,6 +146,7 @@ def _step_button(
         icon=step.icon,
         on_click=lambda: ui.navigate.to(f"/review/{review.id}/{step.key}"),
     ).props("align=left no-caps" + ("" if step.key == active else " flat"))
+    button.props(f'title="{step.label_for(review)}"')
     button.classes("w-full").mark(f"step-{step.key}")
     if review.error and step.key not in USABLE_WHEN_INVALID:
         # Never unlocked by the results timer: the config must be fixed first.

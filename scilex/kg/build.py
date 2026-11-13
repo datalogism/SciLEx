@@ -40,7 +40,11 @@ from scilex.kg.profile import (
     read_version,
     shapes_paths,
 )
-from scilex.tagging.grid import is_automation_tag
+from scilex.tagging.grid import (
+    METRIC_TAG_PREFIXES,
+    WORKFLOW_TAG_PREFIXES,
+    is_automation_tag,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +74,13 @@ OCDM_FOLDERS = ("br", "ar", "ra", "id", "coding")
 # Keys of the citation dict SciLEx writes in Zotero's Extra (two generations).
 CITATION_KEYS = {"citing", "cited", "citing_dois", "cited_dois"}
 
-KG_EXTRA_HINT ="Building a knowledge graph needs the 'kg' extra: pip install 'scilex[kg]'"
+# Tags the survey bundle carries as parts (screening, team, metrics): never keywords
+# of a graph built with a bundle (scilex.tagging.grid).
+BUNDLE_TAG_PREFIXES = (*WORKFLOW_TAG_PREFIXES, *METRIC_TAG_PREFIXES)
+
+KG_EXTRA_HINT = (
+    "Building a knowledge graph needs the 'kg' extra: pip install 'scilex[kg]'"
+)
 
 
 class KgDependencyError(ImportError):
@@ -90,6 +100,8 @@ class BuildReport:
     conforms: bool | None = None  # None: not validated
     validation_report: Path | None = None
     stage_seconds: dict[str, float] = field(default_factory=dict)
+    # Values that look like a credential (SX-14); must be empty before sharing.
+    suspect_literals: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -126,7 +138,9 @@ def citation_dict_line(note: str) -> str | None:
     return None
 
 
-def clean_tables(data: dict, drop_automation_tags: bool = True) -> tuple[dict, int, int]:
+def clean_tables(
+    data: dict, drop_automation_tags: bool = True
+) -> tuple[dict, int, int]:
     """Drop SciLEx automation tags and isolate the citation dict of each note.
 
     Profiles from iteration 3 map SciLEx's own tags (``Collect_KW1:...``,
@@ -219,9 +233,17 @@ def run_rml(mapping: PreparedMapping) -> Graph:
 def _store_to_ntriples(store, pyoxigraph) -> str:
     buffer = io.BytesIO()
     try:  # pyoxigraph >= 0.4
-        store.dump(buffer, format=pyoxigraph.RdfFormat.N_TRIPLES, from_graph=pyoxigraph.DefaultGraph())
+        store.dump(
+            buffer,
+            format=pyoxigraph.RdfFormat.N_TRIPLES,
+            from_graph=pyoxigraph.DefaultGraph(),
+        )
     except (AttributeError, TypeError):  # pyoxigraph 0.3 (pinned by morph-kgc 2.10)
-        store.dump(buffer, mime_type="application/n-triples", from_graph=pyoxigraph.DefaultGraph())
+        store.dump(
+            buffer,
+            mime_type="application/n-triples",
+            from_graph=pyoxigraph.DefaultGraph(),
+        )
     return buffer.getvalue().decode("utf-8")
 
 
@@ -241,9 +263,23 @@ def run_sparql(mapping: PreparedMapping, graph: Graph) -> Graph:
         before, started = len(store), time.perf_counter()
         store.update(ru.read_text(encoding="utf-8"))
         logger.info(
-            "%s: %d -> %d triples (%.1fs)", ru.name, before, len(store), time.perf_counter() - started
+            "%s: %d -> %d triples (%.1fs)",
+            ru.name,
+            before,
+            len(store),
+            time.perf_counter() - started,
         )
     return Graph().parse(data=_store_to_ntriples(store, pyoxigraph), format="nt")
+
+
+def generator_name() -> str:
+    """The software that runs the mapping, with its version ({{GENERATOR}})."""
+    try:
+        from importlib.metadata import version
+
+        return f"SciLEx {version('scilex')}"
+    except Exception:  # not installed as a distribution
+        return "SciLEx"
 
 
 # ---------------------------------------------------------------------------
@@ -251,7 +287,9 @@ def run_sparql(mapping: PreparedMapping, graph: Graph) -> Graph:
 # ---------------------------------------------------------------------------
 
 
-def describe_subcorpora(graph: Graph, base_iri: str, subcorpora: dict[str, list[str]]) -> None:
+def describe_subcorpora(
+    graph: Graph, base_iri: str, subcorpora: dict[str, list[str]]
+) -> None:
     """Add one ``dcat:Dataset`` per sub-corpus (Zotero collection) with its papers.
 
     ``subcorpora`` maps a collection path (``Parent / Child``) to the citation
@@ -289,7 +327,9 @@ def describe_dataset(
     for prop in (DCTERMS.title, DCTERMS.description):
         graph.remove((dataset, prop, None))
     graph.add((dataset, RDF.type, DCAT.Dataset))
-    graph.add((dataset, DCTERMS.title, Literal(f"SciLEx review: {review_name}", lang="en")))
+    graph.add(
+        (dataset, DCTERMS.title, Literal(f"SciLEx review: {review_name}", lang="en"))
+    )
     graph.add(
         (
             dataset,
@@ -309,11 +349,19 @@ def describe_dataset(
     for source in graph.objects(dataset, PROV.wasDerivedFrom):
         graph.remove((source, RDFS.label, None))
         graph.add(
-            (source, RDFS.label, Literal(f"{source_name} (Zotero BibLaTeX export of the review)", lang="en"))
+            (
+                source,
+                RDFS.label,
+                Literal(
+                    f"{source_name} (Zotero BibLaTeX export of the review)", lang="en"
+                ),
+            )
         )
 
 
-def validate(graph: Graph, report_path: Path, profile_dir: Path = PROFILE_DIR) -> bool | None:
+def validate(
+    graph: Graph, report_path: Path, profile_dir: Path = PROFILE_DIR
+) -> bool | None:
     """Validate ``graph`` against the profile's general shapes; write the report.
 
     Returns:
@@ -326,7 +374,9 @@ def validate(graph: Graph, report_path: Path, profile_dir: Path = PROFILE_DIR) -
     try:
         from pyshacl import validate as shacl_validate
     except ImportError:
-        logger.warning("pyshacl is not installed: validation skipped (%s)", KG_EXTRA_HINT)
+        logger.warning(
+            "pyshacl is not installed: validation skipped (%s)", KG_EXTRA_HINT
+        )
         return None
     shapes_graph = Graph()
     for path in shapes:
@@ -355,6 +405,10 @@ def build_knowledge_graph(
     profile_dir: Path = PROFILE_DIR,
     creator: str | None = None,
     subcorpora: dict[str, list[str]] | None = None,
+    grid: dict[str, dict] | None = None,
+    config_hash: str = "",
+    survey: Path | None = None,
+    secrets: list[str] | None = None,
 ) -> BuildReport:
     """Build the knowledge graph of one review from its BibLaTeX export.
 
@@ -369,6 +423,14 @@ def build_knowledge_graph(
         profile_dir: Folder of the pinned profile.
         creator: IRI of the user's ORCID iD (``dcterms:creator`` of the dataset).
         subcorpora: ``{collection path: [citation keys]}``, one sub-dataset each.
+        grid: Grid declaration (:func:`scilex.kg.profile.grid_declaration`):
+            value types, hierarchy and rules of the dimensions (profile iter6+).
+        config_hash: ``sha256:<hex>`` of the configuration in force (iter4+).
+        survey: The review's survey bundle (``survey.json``, iter7+). Its
+            workflow and metric tags (``ANNOT:``, ``DELETED_BY:``, ``CITATIONS:``...)
+            then leave the keywords: the bundle carries them as parts.
+        secrets: Values of the keys file; the graph is scanned for them and for
+            key-like texts (:func:`scilex.kg.bundle.find_secrets`).
 
     Raises:
         KgDependencyError: If the ``kg`` extra is not installed.
@@ -388,7 +450,24 @@ def build_knowledge_graph(
         data, report.dropped_tags, report.notes_cleaned = clean_tables(
             data, drop_automation_tags=not is_templated(profile_dir)
         )
+        if survey:
+            data["lists"] = [
+                row
+                for row in data["lists"]
+                if not (
+                    row["field"] == "keywords"
+                    and str(row["value"]).startswith(BUNDLE_TAG_PREFIXES)
+                )
+            ]
         report.papers = len(data["entries"])
+        # iter4+: the profile maps the sub-corpora itself, from this table.
+        keys = {entry["ID"] for entry in data["entries"]}
+        data["subcorpora"] = [
+            {"entry": key, "position": position, "value": path}
+            for path, cited in sorted((subcorpora or {}).items())
+            for position, key in enumerate(dict.fromkeys(cited), start=1)
+            if key in keys
+        ]
         source_json = work / "source.json"
         source_json.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
         report.stage_seconds["bib2json"] = time.perf_counter() - started
@@ -405,6 +484,13 @@ def build_knowledge_graph(
                 f"Bibliographic records, citation links and review coding of the SciLEx "
                 f"review '{review_name}'."
             ),
+            contract={
+                "creator": creator or "",
+                "generator": generator_name(),
+                "config_hash": config_hash,
+                "survey": survey,
+                "grid": grid,
+            },
         )
         started = time.perf_counter()
         graph = run_rml(mapping)  # sources are absolute paths: no chdir needed
@@ -415,9 +501,11 @@ def build_knowledge_graph(
         graph = run_sparql(mapping, graph)
         report.stage_seconds["sparql"] = time.perf_counter() - started
 
-    describe_dataset(graph, base_iri, review_name, bib_path.name, profile, creator)
-    if subcorpora:
-        describe_subcorpora(graph, base_iri, subcorpora)
+    if not mapping.contract:
+        # Profiles before iteration 4 describe a sample dataset: SciLEx rewrites it.
+        describe_dataset(graph, base_iri, review_name, bib_path.name, profile, creator)
+        if subcorpora:
+            describe_subcorpora(graph, base_iri, subcorpora)
     for prefix, namespace in PREFIXES.items():
         graph.bind(prefix, namespace, override=True)
     for folder in OCDM_FOLDERS:
@@ -425,6 +513,15 @@ def build_knowledge_graph(
     graph.serialize(output, format="turtle", encoding="utf-8")
     scrub_file(output)
     report.triples = len(graph)
+    from scilex.kg.bundle import find_secrets
+
+    report.suspect_literals = find_secrets(graph, secrets or [])
+    if report.suspect_literals:
+        logger.warning(
+            "%d values of the graph look like credentials: check %s before sharing it",
+            len(report.suspect_literals),
+            output.name,
+        )
 
     if run_validation:
         report.validation_report = output.with_name(output.stem + ".shacl.ttl")

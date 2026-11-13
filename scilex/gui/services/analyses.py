@@ -182,6 +182,29 @@ ANALYSES = (
         group="enrich",
     ),
     AnalysisInfo(
+        "github",
+        "GitHub licences",
+        "Add the licence of each paper's code (SPDX id: MIT, Apache-2.0…) from its "
+        "GitHub repository, found by Papers with Code or Linked Papers With Code "
+        "(run them first). Papers that already have a code licence are not looked "
+        "up again. 60 repositories an hour without a GitHub token (Keys).",
+        "results",
+        "Stops between papers; what was fetched is cached and written.",
+        group="enrich",
+    ),
+    AnalysisInfo(
+        "zenodo",
+        "Zenodo",
+        "Find the Zenodo deposits of the papers' data or code: records the paper "
+        "links to (Zenodo DOI or link in its DOI, URL or abstract) and records "
+        "naming the paper's DOI among their related identifiers. Adds their "
+        "licence, type (dataset, software…), size and downloads; a software "
+        "licence also fills the code licence. Papers already looked up are kept.",
+        "results",
+        "Stops between papers; what was fetched is cached and written.",
+        group="enrich",
+    ),
+    AnalysisInfo(
         "search_keywords",
         "Search keywords",
         "Tag each paper with the search keywords of scilex.yml found in its title or "
@@ -201,6 +224,19 @@ ANALYSES = (
         "cue words of its title and abstract. A type already set (by a person, "
         "in Zotero or SciLEx) is kept. The analyses use these types to compare "
         "the papers. No network needed.",
+        "results",
+        "Runs in a few seconds; nothing is written when cancelled.",
+        group="enrich",
+    ),
+    AnalysisInfo(
+        "short_titles",
+        "Short titles",
+        "Give each paper without a short title the acronym its title names: the "
+        "prefix before a colon or a dash (BERT: Pre-training of…, SQuAD: 100,000+ "
+        "Questions…) or an acronym in parentheses spelled by the words before it "
+        "(Holistic Evaluation of Language Models (HELM)). Plain words and prefixes "
+        "starting several titles (topics such as COVID-19) are left out. Papers "
+        "that already have a short title are never changed. No network needed.",
         "results",
         "Runs in a few seconds; nothing is written when cancelled.",
         group="enrich",
@@ -252,8 +288,11 @@ RESULTS_MODE = {
     "crossref": "write",
     "lpwc": "write",
     "orkg": "write",
+    "github": "write",
+    "zenodo": "write",
     "search_keywords": "write",
     "paper_types": "write",
+    "short_titles": "write",
     "metrics": "write",
 }
 
@@ -275,11 +314,14 @@ SCOPED = (
     "crossref",
     "lpwc",
     "orkg",
+    "github",
+    "zenodo",
     "tags",
     "search_keywords",
     "metrics",
     "coverage",
     "paper_types",
+    "short_titles",
 )
 
 
@@ -503,7 +545,9 @@ def run_paper_types(
         return AnalysisResult("Cancelled; nothing was written.")
     if tagged:
         results_store.write_changes(path, before, after)
-    counts = Counter(paper_types.type_of(r) for r in after.to_dict("records"))
+    counts = Counter(
+        kind for r in after.to_dict("records") for kind in paper_types.types_of(r)
+    )
     spread = ", ".join(f"{t}: {counts.get(t, 0)}" for t in paper_types.TYPES)
     others = sum(n for t, n in counts.items() if t not in paper_types.TYPES)
     message = f"{tagged} papers tagged with their default type ({spread}" + (
@@ -511,6 +555,31 @@ def run_paper_types(
     )
     progress(100, message)
     return AnalysisResult(message, [path] if tagged else [])
+
+
+def run_short_titles(
+    config: SciLExConfig,
+    progress: ProgressFn,
+    *,
+    row_filter: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
+    cancel_event: CancelEvent = None,
+) -> AnalysisResult:
+    """Fill the empty short titles from the titles (see :mod:`scilex.short_titles`)."""
+    from scilex import short_titles
+    from scilex.gui.services import results_store
+
+    row_filter = _active(row_filter)  # discarded papers left out
+    path, data = _read_for_enrichment(config)
+    before = data.copy()
+    progress(30, "Looking for acronyms in the titles…")
+    report = short_titles.annotate(data, row_filter=row_filter)
+    if _cancelled(cancel_event):
+        return AnalysisResult("Cancelled; nothing was written.")
+    if report.filled:
+        results_store.write_changes(path, before, data)
+    message = report.message()
+    progress(100, message)
+    return AnalysisResult(message, [path] if report.filled else [])
 
 
 def run_coverage(
@@ -939,10 +1008,17 @@ def run_snowball(
     min_frequency: int = 2,
     dry_run: bool = False,
     add_to_collection: bool = True,
+    collections: list[str] | None = None,
+    paper_types: list[str] | None = None,
+    eligible_only: bool = False,
     cancel_event: CancelEvent = None,
     review=None,
 ) -> AnalysisResult:
     """Extend the corpus through citation links (``scilex-snowball``).
+
+    The seeds can be narrowed to Zotero ``collections``, ``paper_types`` and
+    the papers meeting the eligibility criteria (``eligible_only``, needs
+    ``review``); see :mod:`~scilex.gui.services.snowball_scope`.
 
     With ``review`` (and papers added to the collection), the new papers get
     their own Zotero collection (see :mod:`~scilex.gui.services.extension_collection`).
@@ -958,6 +1034,13 @@ def run_snowball(
     from scilex.snowball.filter import apply_snowball_filters
     from scilex.snowball.merge import merge_with_corpus, write_snowball_output
 
+    if review is not None and add_to_collection and not dry_run:
+        from scilex.gui.services import extension_collection
+
+        try:  # every extension goes into a Zotero collection
+            extension_collection.group_required(review)
+        except extension_collection.ExtensionNeedsGroupError as exc:
+            raise AnalysisError(str(exc)) from exc
     collect_dir = collect_dir_of(config)
     try:
         corpus_df = load_aggregated_data(config.main, preserve_missing_marker=True)
@@ -966,6 +1049,17 @@ def run_snowball(
         raise AnalysisError(str(exc)) from exc
     if _cancelled(cancel_event):
         return AnalysisResult("Cancelled.")
+    from scilex.gui.services import snowball_scope
+
+    scope = snowball_scope.describe(collections, paper_types, eligible_only)
+    seed_df = snowball_scope.seeds(
+        corpus_df, collections, paper_types, eligible_only, review
+    )
+    seed_dois = extract_corpus_dois(seed_df)
+    if scope and not seed_dois:
+        raise AnalysisError(
+            f"No paper with a DOI to start from ({scope}): widen the seeds."
+        )
     progress(10, "Looking for candidates…")
     candidates = extract_candidates(
         references,
@@ -974,12 +1068,18 @@ def run_snowball(
         direction=direction,
         top_k=top_k,
         min_frequency=min_frequency,
+        seed_dois=seed_dois,
     )
+    seeds_note = f" Seeds: {len(seed_dois)} papers ({scope})." if scope else ""
     if not candidates:
-        return AnalysisResult("No candidates found. Try a lower minimum frequency.")
+        return AnalysisResult(
+            "No candidates found. Try a lower minimum frequency." + seeds_note
+        )
     if dry_run:
         preview = "\n".join(f"{doi}  ({freq})" for doi, freq in candidates[:50])
-        return AnalysisResult(f"{len(candidates)} candidates (dry run).\n{preview}")
+        return AnalysisResult(
+            f"{len(candidates)} candidates (dry run).{seeds_note}\n{preview}"
+        )
     if _cancelled(cancel_event):
         return AnalysisResult("Cancelled.")
     progress(30, f"Fetching metadata of {len(candidates)} candidates…")
@@ -1004,7 +1104,7 @@ def run_snowball(
         if add_to_collection
         else f"written to {Path(output_csv).name} (collection unchanged)"
     )
-    message = f"{added} new papers {where} ({len(merged)} in total)."
+    message = f"{added} new papers {where} ({len(merged)} in total).{seeds_note}"
     if add_to_collection and added > 0:
         from scilex.gui.services.paper_enrich import tag_types
 
@@ -1034,16 +1134,32 @@ def _read_for_enrichment(config: SciLExConfig) -> tuple[Path, pd.DataFrame]:
     return path, data
 
 
+def _datasets(
+    row_filter: Callable[[pd.DataFrame], pd.DataFrame],
+) -> Callable[[pd.DataFrame], pd.DataFrame]:
+    """``row_filter`` keeping only the dataset papers (``PAPER_TYPE:Dataset``)."""
+    from scilex.paper_types import DATASET, effective_types
+
+    def apply(df: pd.DataFrame) -> pd.DataFrame:
+        df = row_filter(df)
+        if df.empty:
+            return df
+        return df[[DATASET in effective_types(r) for r in df.to_dict("records")]]
+
+    return apply
+
+
 def run_linked(
     config: SciLExConfig,
     progress: ProgressFn,
     source: str,
     *,
     limit: int | None = None,
+    datasets_only: bool = False,
     row_filter: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
     cancel_event: CancelEvent = None,
 ) -> AnalysisResult:
-    """Enrich the aggregated CSV from Crossref, Linked Papers With Code or ORKG.
+    """Enrich the aggregated CSV from Crossref, LPWC, ORKG, GitHub or Zenodo.
 
     See :mod:`scilex.linked_enrichment`. Results already fetched are written even
     when the run is cancelled (they are also cached for the next run).
@@ -1058,6 +1174,11 @@ def run_linked(
     kwargs = {}
     if source == "crossref":
         kwargs["mailto"] = config.api.get("CrossRef", {}).get("mailto")
+    elif source in ("github", "zenodo"):
+        block = config.api.get("GitHub" if source == "github" else "Zenodo") or {}
+        kwargs["token"] = block.get("token") or None
+    if datasets_only:
+        row_filter = _datasets(row_filter)
     try:
         report = linked_enrichment.ENRICHERS[source](
             data,
@@ -1072,7 +1193,7 @@ def run_linked(
         return AnalysisResult("Cancelled; what was fetched is cached for the next run.")
     # Only the cells this source filled: other enrichers may write meanwhile.
     results_store.write_changes(path, before, data)
-    if report.looked_up == 0 and report.failed:
+    if report.looked_up == 0 and report.failed and not report.rate_limited:
         raise AnalysisError(
             f"{report.source} could not be reached: check your connection."
         )
@@ -1294,6 +1415,9 @@ OPTION_CASTS: dict[str, dict[str, Callable]] = {
         "min_frequency": int,
         "dry_run": bool,
         "add_to_collection": bool,
+        "collections": list,
+        "paper_types": list,
+        "eligible_only": bool,
     },
     "graph": {"graph_type": str, "resolution": float, "min_weight": int, "fmt": str},
     "summaries": {"clusters": str, "compare_by": str},
@@ -1304,12 +1428,15 @@ OPTION_CASTS: dict[str, dict[str, Callable]] = {
         "compare_by": str,
     },
     "crossref": {"limit": int},
+    "github": {"limit": int},
+    "zenodo": {"limit": int, "datasets_only": bool},
     "lpwc": {"limit": int},
     "orkg": {"limit": int},
     "search_keywords": {},
     "metrics": {"tags": bool},
     "coverage": {"compare_by": str},
     "paper_types": {},
+    "short_titles": {},
 }
 
 
@@ -1340,8 +1467,15 @@ RUNNERS: dict[str, Callable[..., AnalysisResult]] = {
     ),
     "lpwc": lambda config, progress, **kw: run_linked(config, progress, "lpwc", **kw),
     "orkg": lambda config, progress, **kw: run_linked(config, progress, "orkg", **kw),
+    "github": lambda config, progress, **kw: run_linked(
+        config, progress, "github", **kw
+    ),
+    "zenodo": lambda config, progress, **kw: run_linked(
+        config, progress, "zenodo", **kw
+    ),
     "search_keywords": run_search_keywords,
     "metrics": run_metrics,
     "coverage": run_coverage,
     "paper_types": run_paper_types,
+    "short_titles": run_short_titles,
 }

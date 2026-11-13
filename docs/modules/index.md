@@ -39,6 +39,7 @@ papers kept).
 | <a href="workspace.html"><img src="../_static/modules/workspace.png" height="40" alt="Workspace"></a> | Reviews, ORCID iD, API keys, running jobs | `scilex init`, `scilex config` |
 | <a href="overview.html"><img src="../_static/modules/overview.png" height="40" alt="Overview"></a> | State of a review: PRISMA flow, provenance, history | — |
 | <a href="explore.html"><img src="../_static/modules/explore.png" height="40" alt="Explore"></a> | Browse, filter and read every paper | — |
+| [Dashboard](dashboard.md) | Cross-filtered statistics, charts and citation network | — |
 | <a href="configure.html"><img src="../_static/modules/configure.png" height="40" alt="Configure"></a> | Edit `scilex.yml`: search, filters, citations, VPN | `scilex config check/show` |
 | <a href="collect.html"><img src="../_static/modules/collect.png" height="40" alt="Collect"></a> | Query 14 APIs, deduplicate, filter, rank | `scilex-collect`, `scilex-aggregate` |
 | <a href="criteria.html"><img src="../_static/modules/criteria.png" height="40" alt="Criteria"></a> | Eligibility criteria as testable rules | — |

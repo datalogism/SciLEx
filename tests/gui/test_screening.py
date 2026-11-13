@@ -265,3 +265,27 @@ def test_collection_filter_takes_subcollections(tmp_path):
 def test_no_collection_selector_when_it_would_change_nothing(tmp_path):
     review = make_review(tmp_path)
     assert screening.ScreeningSession(review).collection_options() == []
+
+
+def test_decision_records_who_decided_and_old_files_still_load(tmp_path):
+    """SX-5: decided_by is the ORCID iD of the app user; old rows keep it empty."""
+    from scilex.gui.services import journal
+
+    review = make_review(tmp_path)
+    old = screening.screening_path(review)
+    old.write_text(
+        "paper_key,decision,note,updated_at\ndoi:10.1/old,exclude,,2026-01-01\n",
+        encoding="utf-8",
+    )
+    assert screening.load_decisions(review)["doi:10.1/old"].decided_by == ""
+    journal.set_agent("https://orcid.org/0000-0002-1825-0097", "Ada")
+    try:
+        screening.set_decision(review, "doi:10.1/abc", screening.INCLUDE)
+    finally:
+        journal.set_agent("")
+    decisions = screening.load_decisions(review)
+    assert (
+        decisions["doi:10.1/abc"].decided_by == "https://orcid.org/0000-0002-1825-0097"
+    )
+    assert decisions["doi:10.1/old"].decided_by == ""  # kept as it was
+    assert "decided_by" in old.read_text(encoding="utf-8").splitlines()[0]

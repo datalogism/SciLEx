@@ -161,6 +161,9 @@ async def test_running_an_analysis_turns_it_green(ctx, tmp_path, monkeypatch):
 
 async def test_collect_extend_and_export_show_chips(ctx, tmp_path):
     review = _review(ctx, tmp_path)
+    from scilex.gui.services import zotero_library as _zl
+
+    _zl.save_source(review.folder, _zl.ZoteroSource("42", "group", None, ""))
     async with user_simulation(build_root(ctx)) as user:
         # A review with papers: Collect is Extend > New collect.
         await user.open(f"/review/{review.id}/collect")

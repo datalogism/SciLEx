@@ -224,8 +224,10 @@ def _open_dialog(ctx: AppContext, review: Review, current: dict, refresh) -> Non
                     "From SciLEx",
                     status.local_changed,
                     [
-                        f"{status.local_unlinked} papers are not in Zotero: push them "
-                        "in ⑧ Export, then link again"
+                        f"{status.local_unlinked} papers are not linked to a Zotero "
+                        "item: their screening decision and tags (SCREEN:, "
+                        "DELETED_BY:, ANNOT_VALID_BY:…) are not in Zotero. Push the "
+                        "missing ones in ⑧ Export, then link them here."
                         if status.local_unlinked
                         else "",
                     ],
@@ -235,6 +237,14 @@ def _open_dialog(ctx: AppContext, review: Review, current: dict, refresh) -> Non
                     lambda: act("push to Zotero", sync.push, status),
                     "sync-push",
                 )
+                if status.local_unlinked:
+                    ui.button(
+                        "Link papers pushed to Zotero",
+                        icon="link",
+                        on_click=lambda: act(
+                            "link the new papers", sync.link_new, reload=True
+                        ),
+                    ).props("outline no-caps").mark("sync-link-new")
 
         with ui.row().classes("w-full items-center justify-end gap-2"):
             spinner = ui.spinner(size="sm")

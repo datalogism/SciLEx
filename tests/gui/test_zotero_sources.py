@@ -3,7 +3,7 @@
 import importlib.util
 
 import pytest
-from rdflib import Graph, URIRef
+from rdflib import Graph, Namespace, URIRef
 from rdflib.namespace import DCTERMS
 
 from scilex.gui.services import exports, zotero_library
@@ -29,7 +29,11 @@ COLLECTIONS = [
 def _item(key, collections):
     return {
         "key": key,
-        "data": {"itemType": "journalArticle", "title": f"Paper {key}", "collections": collections},
+        "data": {
+            "itemType": "journalArticle",
+            "title": f"Paper {key}",
+            "collections": collections,
+        },
     }
 
 
@@ -69,13 +73,18 @@ def test_collection_with_subcollections_gives_each_paper_once_with_its_sub_corpo
     items = fetch_source_papers(FakeApi(), source, COLLECTIONS)
     assert sorted(i["key"] for i in items) == ["p1", "p2", "p3"]
     p3 = next(i for i in items if i["key"] == "p3")
-    assert p3["_scilex_collections"] == ["Survey / Datasets", "Survey / Datasets / Biomed"]
+    assert p3["_scilex_collections"] == [
+        "Survey / Datasets",
+        "Survey / Datasets / Biomed",
+    ]
     groups = split_by_collection(items)
     assert sorted(i["key"] for i in groups["Survey / Datasets"]) == ["p2", "p3"]
 
 
 def test_single_collection_without_subcollections():
-    source = ZoteroSource("42", "group", "A", "Survey / Datasets", include_subcollections=False)
+    source = ZoteroSource(
+        "42", "group", "A", "Survey / Datasets", include_subcollections=False
+    )
     items = fetch_source_papers(FakeApi(), source, COLLECTIONS)
     assert sorted(i["key"] for i in items) == ["p2", "p3"]
 
@@ -104,7 +113,9 @@ def test_source_round_trip_and_legacy_file(tmp_path):
 def test_push_goes_to_the_review_collection(ctx, tmp_path, monkeypatch):
     review = ctx.workspace.create_review(tmp_path / "r", name="r")
     review.collection_dir.mkdir(parents=True)
-    review.results_path.write_text("itemType;title;DOI;url\njournalArticle;T;10.1/x;https://e.org\n")
+    review.results_path.write_text(
+        "itemType;title;DOI;url\njournalArticle;T;10.1/x;https://e.org\n"
+    )
     save_source(review.folder, ZoteroSource("42", "group", "COLL", "Survey"))
     seen = {}
 
@@ -120,9 +131,13 @@ def test_push_goes_to_the_review_collection(ctx, tmp_path, monkeypatch):
 
     monkeypatch.setattr(push, "prefetch_templates", lambda data: {})
     monkeypatch.setattr(
-        push, "push_new_items_to_zotero", lambda data, api, key, *a: {"success": 1, "key": key}
+        push,
+        "push_new_items_to_zotero",
+        lambda data, api, key, *a: {"success": 1, "key": key},
     )
-    result = exports.push_to_zotero(review, ctx.workspace.load_config(review), "all", Api())
+    result = exports.push_to_zotero(
+        review, ctx.workspace.load_config(review), "all", Api()
+    )
     assert seen["key"] == "COLL" and result["key"] == "COLL"
 
 
@@ -142,13 +157,24 @@ def test_knowledge_graph_has_creator_and_sub_corpora(tmp_path):
     base = "https://w3id.org/scilex/data/s/"
     out = tmp_path / "s.ttl"
     build_knowledge_graph(
-        bib, out, review_name="s", base_iri=base, run_validation=False,
+        bib,
+        out,
+        review_name="s",
+        base_iri=base,
+        run_validation=False,
         creator="https://orcid.org/0000-0002-1825-0097",
         subcorpora={"Survey / Datasets": ["p3"]},
     )
     graph = Graph().parse(out)
     dataset = URIRef(base)
-    assert (dataset, DCTERMS.creator, URIRef("https://orcid.org/0000-0002-1825-0097")) in graph
+    assert (
+        dataset,
+        DCTERMS.creator,
+        URIRef("https://orcid.org/0000-0002-1825-0097"),
+    ) in graph
     part = URIRef(f"{base}subcorpus/survey-datasets")
-    assert (dataset, DCTERMS.hasPart, part) in graph
-    assert (part, DCTERMS.hasPart, URIRef(f"{base}br/p3")) in graph
+    # profile iteration 4+ maps the sub-corpora itself (VoID)
+    void = Namespace("http://rdfs.org/ns/void#")
+    assert (dataset, void.subset, part) in graph
+    assert (URIRef(f"{base}br/p3"), void.inDataset, part) in graph
+    assert (URIRef(f"{base}br/p1"), void.inDataset, part) not in graph

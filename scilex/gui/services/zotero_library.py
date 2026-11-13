@@ -478,9 +478,13 @@ def split_by_collection(items: list[dict]) -> dict[str, list[dict]]:
 
 
 def export_source_biblatex(
-    api, source: ZoteroSource, collections=None
+    api, source: ZoteroSource, collections=None, *, keep_discarded: bool = False
 ) -> tuple[str, dict]:
     """Return the BibLaTeX export of the review's Zotero source and its sub-corpora.
+
+    Agreement copies are always left out. Discarded papers (``DELETED_BY:``) are
+    left out too, unless ``keep_discarded``: the survey bundle then flags them
+    (SX-3, ORSD D31).
 
     Returns:
         ``(biblatex text, {collection path: [citation keys]})``; the mapping is
@@ -508,7 +512,12 @@ def export_source_biblatex(
         keys = descendant_keys(collections, source.collection_key)
         full = None
     else:
-        return drop_excluded_entries(export(source.collection_key))[0], {}
+        return (
+            drop_excluded_entries(
+                export(source.collection_key), keep_discarded=keep_discarded
+            )[0],
+            {},
+        )
     paths = {c.key: c.path for c in collections or []}
     # The agreement study's copies are not sub-corpora of the review.
     keys = [k for k in keys if paths.get(k, "").split("/")[0].strip() != "agreement"]
@@ -522,7 +531,7 @@ def export_source_biblatex(
             subcorpora[paths.get(key, key)] = cited
     # Duplicated entries (a paper in two collections) are dropped by bib2json.
     text, dropped = drop_excluded_entries(
-        full if full is not None else "\n".join(parts)
+        full if full is not None else "\n".join(parts), keep_discarded=keep_discarded
     )
     if dropped:
         subcorpora = {
@@ -538,11 +547,27 @@ _ENTRY_START = re.compile(r"^@\w+\s*\{\s*([^,\s]+)\s*,", re.MULTILINE)
 _KEYWORDS = re.compile(r"^\s*keywords\s*=\s*(.*)$", re.IGNORECASE | re.MULTILINE)
 
 
-def drop_excluded_entries(text: str) -> tuple[str, set[str]]:
+_PERSON_DISCARD = re.compile(r"DELETED_BY:(?!filter:)")
+
+
+def _excluded_keywords(keywords: str, keep_discarded: bool = False) -> bool:
+    """A discarded paper or an annotator's copy; a paper of a screened-results
+    collection (``KEEP:screened``) stays despite the automatic discards."""
+    if "AGREEMENT_COPY:" in keywords:
+        return True
+    if keep_discarded or "DELETED_BY:" not in keywords:
+        return False
+    return "KEEP:screened" not in keywords or bool(_PERSON_DISCARD.search(keywords))
+
+
+def drop_excluded_entries(
+    text: str, *, keep_discarded: bool = False
+) -> tuple[str, set[str]]:
     """Remove from a Zotero BibLaTeX export the discarded papers and the copies.
 
     Entries whose ``keywords`` (the Zotero tags) hold ``DELETED_BY:`` (discarded,
-    see :mod:`scilex.review_tags`) or ``AGREEMENT_COPY:`` (an annotator's copy)
+    see :mod:`scilex.review_tags`; not with ``KEEP:screened`` when only rules
+    discarded it) or ``AGREEMENT_COPY:`` (an annotator's copy)
     leave the knowledge graph. The other entries are kept byte for byte.
 
     Returns:
@@ -557,7 +582,7 @@ def drop_excluded_entries(text: str) -> tuple[str, set[str]]:
         end = starts[index + 1].start() if index + 1 < len(starts) else len(text)
         entry = text[match.start() : end]
         keywords = " ".join(_KEYWORDS.findall(entry))
-        if any(prefix in keywords for prefix in EXCLUDED_TAG_PREFIXES):
+        if _excluded_keywords(keywords, keep_discarded):
             dropped.add(match.group(1))
         else:
             kept.append(entry)
@@ -654,6 +679,7 @@ def item_to_row(item: dict) -> dict:
     venue = next((data[f] for f in VENUE_FIELDS if data.get(f)), "")
     row = {
         "title": data.get("title", ""),
+        "shortTitle": data.get("shortTitle", ""),
         "publisher": data.get("publisher", ""),
         "itemType": data.get("itemType", ""),
         "authors": _authors(data.get("creators", [])),
@@ -869,9 +895,9 @@ def create_review_from_items(
             save_grid(grid, folder / GRID_FILENAME)
         if finish is not None:
             finish(review)
-        from scilex.gui.services.overview import record_snapshot, zotero_tags
+        from scilex.gui.services.overview import record_snapshot, zotero_tags_by_key
 
-        record_snapshot(folder, zotero_tags(papers), snapshot_origin)
+        record_snapshot(folder, zotero_tags_by_key(papers), snapshot_origin)
         from scilex.gui.services import journal
 
         journal.append(

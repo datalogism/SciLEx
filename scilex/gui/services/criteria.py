@@ -21,6 +21,7 @@ defaults follow a common SLR table and the review's ``scilex.yml``.
 from __future__ import annotations
 
 import datetime as dt
+import math
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -43,7 +44,43 @@ KINDS = {
     "duplicates": "Duplicates (a more recent version exists)",
     "text": "Custom: title or abstract matches a pattern",
     "quality": "Quality filters of scilex.yml (abstract, type, authors…)",
+    "metric": "Metrics: citations, PageRank, quality, venue rank…",
 }
+# Rules judged on the whole corpus (a row alone cannot tell).
+CORPUS_KINDS = {"duplicates", "metric"}
+
+# Metrics a ``metric`` criterion can test: label, and the columns read in turn
+# (the first one set wins). Citation metrics come from Enrich › Citation
+# metrics (``metric_*``) or from the collection (``nb_citation``…).
+METRICS = {
+    "citations": (
+        "Citations",
+        (
+            "canonical_citation_count",
+            "nb_citation",
+            "metric_citations",
+            "ss_citation_count",
+        ),
+    ),
+    "citations_year": ("Citations per year", ("metric_citations_year",)),
+    "cited_in_corpus": ("Citations from the corpus", ("metric_cited_in_corpus",)),
+    "pagerank": ("PageRank (citation graph)", ("metric_pagerank", "pagerank")),
+    "quality": ("Quality score", ("metric_quality", "quality_score")),
+    "venue_rank": (
+        "Venue rank (A*=10, A=8, B=6, C=4; Q1=10 … Q4=2.5)",
+        ("metric_venue_rank", "venue_rank", "core_rank", "sjr_quartile"),
+    ),
+    "relevance": ("Relevance score", ("relevance_score",)),
+    "column": ("Another numeric column", ()),
+}
+OPERATORS = {
+    ">=": "at least",
+    "<=": "at most",
+    "top_percent": "in the top % of the corpus",
+    "top_n": "in the top N of the corpus",
+    "age_aware": "enough for its age (time-aware citations)",
+}
+RANK_OPERATORS = {"top_percent", "top_n"}
 PREPRINT_TYPES = {"preprint", "report", "manuscript", "thesis", "webpage", "blogpost"}
 _ENGLISH = re.compile(
     r"\b(the|and|of|for|with|this|that|we|is|are|on|in|to|from|by)\b", re.I
@@ -88,6 +125,7 @@ class TestResult:
     checked: int = 0
     excluded: list[Excluded] = field(default_factory=list)
     spared: list[Excluded] = field(default_factory=list)  # kept by an exception
+    notes: list[str] = field(default_factory=list)  # e.g. metric coverage
 
     def message(self) -> str:
         text = (
@@ -185,6 +223,23 @@ def defaults(main: dict | None = None) -> list[Criterion]:
             enabled=bool(main.get("quality_filters")),
             params={"quality_filters": dict(main.get("quality_filters") or {})},
         ),
+        Criterion(
+            "C9",
+            "Impact",
+            "metric",
+            "Too few citations for its age",
+            "Cited enough for its age (none required in its first 18 months)",
+            "Inclusion: little cited but central in the corpus (PageRank top 10 %)",
+            enabled=False,  # needs citation counts: enable after Enrich
+            params={
+                "match": "any",
+                "missing": "keep",
+                "conditions": [
+                    {"metric": "citations", "op": "age_aware"},
+                    {"metric": "pagerank", "op": "top_percent", "value": 10},
+                ],
+            },
+        ),
     ]
 
 
@@ -202,6 +257,23 @@ def load(folder: Path, main: dict | None = None) -> list[Criterion]:
     return [Criterion(**{k: v for k, v in item.items() if k in names}) for item in raw]
 
 
+def _check_conditions(criterion: Criterion) -> None:
+    """Refuse a ``metric`` condition SciLEx cannot check."""
+    for condition in (criterion.params or {}).get("conditions") or []:
+        metric, op = condition.get("metric"), condition.get("op", ">=")
+        where = f"{criterion.id}: "
+        if metric not in METRICS:
+            raise ValueError(f"{where}unknown metric {metric!r}")
+        if op not in OPERATORS:
+            raise ValueError(f"{where}unknown operator {op!r}")
+        if metric == "column" and not str(condition.get("column") or "").strip():
+            raise ValueError(f"{where}name the column to test")
+        if op == "age_aware" and metric != "citations":
+            raise ValueError(f"{where}'enough for its age' applies to citations")
+        if op != "age_aware" and _number(condition.get("value")) is None:
+            raise ValueError(f"{where}a value is needed for {_label(condition)}")
+
+
 def save(folder: Path, criteria: list[Criterion]) -> Path:
     """Write ``criteria.yml`` (refuses duplicate or empty ids, unknown kinds)."""
     seen = set()
@@ -212,14 +284,16 @@ def save(folder: Path, criteria: list[Criterion]) -> Path:
             raise ValueError(f"Two criteria are named {criterion.id}.")
         if criterion.kind not in KINDS:
             raise ValueError(f"Unknown kind {criterion.kind!r}")
+        if criterion.kind == "metric":
+            _check_conditions(criterion)
         seen.add(criterion.id)
     path = path_of(folder)
-    path.write_text(
-        yaml.safe_dump(
-            [asdict(c) for c in criteria], sort_keys=False, allow_unicode=True
-        ),
-        encoding="utf-8",
-    )
+    rows = [asdict(c) for c in criteria]
+    text = yaml.safe_dump(rows, sort_keys=False, allow_unicode=True)
+    path.write_text(text, encoding="utf-8")
+    from scilex.gui.services import versions
+
+    versions.record_criteria(folder, text, rows)  # criteria_history/<sha256>.yml
     return path
 
 
@@ -265,13 +339,165 @@ def _duplicates_causes(data: pd.DataFrame) -> dict[int, str]:
     return causes
 
 
-def cause_of(criterion: Criterion, row: dict) -> str | None:
+def metric_value(row: dict, metric: str, column: str = "") -> float | None:
+    """The value of ``metric`` for the paper ``row`` (None: unknown)."""
+    from scilex.pipeline.venue_ranking import RANK_SCORES
+
+    columns = (column,) if metric == "column" else METRICS.get(metric, ("", ()))[1]
+    for name in columns:
+        value = row.get(name) if name else None
+        if not is_valid(value):
+            continue
+        if metric == "venue_rank":
+            score = RANK_SCORES.get(str(value).strip().upper())
+            if score is not None:
+                return score
+            continue
+        number = _number(value)
+        if number is not None:
+            return number
+    return None
+
+
+def _label(condition: dict) -> str:
+    metric = condition.get("metric", "")
+    if metric == "column":
+        return str(condition.get("column") or "column")
+    return METRICS.get(metric, (metric,))[0].split(" (")[0]
+
+
+def _number(value) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    number = pd.to_numeric(value, errors="coerce")
+    return None if pd.isna(number) else float(number)
+
+
+def _fmt(value: float) -> str:
+    return f"{value:g}" if abs(value) >= 0.01 or value == 0 else f"{value:.2e}"
+
+
+def metric_cutoffs(criterion: Criterion, data: pd.DataFrame) -> dict[int, float]:
+    """For each ranking condition (top % / top N), the lowest value it keeps.
+
+    Computed over the papers whose metric is known: ``{condition index: value}``.
+    """
+    cutoffs = {}
+    conditions = (criterion.params or {}).get("conditions") or []
+    records = data.to_dict("records")
+    for i, condition in enumerate(conditions):
+        if condition.get("op") not in RANK_OPERATORS:
+            continue
+        metric, column = condition.get("metric", ""), condition.get("column", "")
+        values = sorted(
+            (
+                v
+                for row in records
+                if (v := metric_value(row, metric, column)) is not None
+            ),
+            reverse=True,
+        )
+        size = _number(condition.get("value")) or 0
+        if not values or size <= 0:
+            continue
+        keep = (
+            math.ceil(len(values) * min(size, 100) / 100)
+            if condition["op"] == "top_percent"
+            else int(size)
+        )
+        cutoffs[i] = values[min(max(keep, 1), len(values)) - 1]
+    return cutoffs
+
+
+UNKNOWN_VALUE = object()  # the paper has no value for the metric
+UNDECIDED = object()  # a ranking condition judged on one paper alone
+
+
+def _condition_failure(condition: dict, row: dict, cutoff: float | None):
+    """Why the paper fails ``condition`` (a text), None when it passes, or
+    :data:`UNKNOWN_VALUE` / :data:`UNDECIDED`."""
+    op = condition.get("op", ">=")
+    label = _label(condition)
+    value = metric_value(row, condition.get("metric", ""), condition.get("column", ""))
+    if value is None:
+        return UNKNOWN_VALUE
+    threshold = _number(condition.get("value"))
+    if op == "age_aware":
+        from scilex.pipeline.citation_filter import (
+            calculate_paper_age_months,
+            calculate_required_citations,
+        )
+
+        months = calculate_paper_age_months(row.get("date"))
+        required = calculate_required_citations(months)
+        if value < required:
+            age = f"{months} months old" if months is not None else "age unknown"
+            return f"{label} {_fmt(value)} < {required} required ({age})"
+        return None
+    if op in RANK_OPERATORS:
+        if cutoff is None:
+            return UNDECIDED
+        if value < cutoff:
+            where = (
+                f"top {_fmt(threshold or 0)} %"
+                if op == "top_percent"
+                else f"top {int(threshold or 0)}"
+            )
+            return f"{label} {_fmt(value)} not in the {where} (>= {_fmt(cutoff)})"
+        return None
+    if threshold is None:
+        return None
+    if op == ">=" and value < threshold:
+        return f"{label} {_fmt(value)} < {_fmt(threshold)}"
+    if op == "<=" and value > threshold:
+        return f"{label} {_fmt(value)} > {_fmt(threshold)}"
+    return None
+
+
+def _metric_cause(
+    criterion: Criterion, row: dict, cutoffs: dict[int, float] | None
+) -> str | None:
+    """``match: all`` excludes when one condition fails; ``any`` when all fail.
+
+    A paper whose metric is unknown passes that condition unless
+    ``missing: exclude``. Without ``cutoffs`` (one paper alone), ranking
+    conditions are not judged (they pass).
+    """
+    params = criterion.params or {}
+    conditions = params.get("conditions") or []
+    exclude_unknown = params.get("missing") == "exclude"
+    match_any = params.get("match", "all") == "any"
+    failures = []
+    for i, condition in enumerate(conditions):
+        if not condition.get("metric"):
+            continue
+        failure = _condition_failure(condition, row, (cutoffs or {}).get(i))
+        if failure is UNKNOWN_VALUE:
+            failure = f"{_label(condition)} unknown" if exclude_unknown else None
+        elif failure is UNDECIDED:
+            failure = None
+        if match_any:
+            if failure is None:
+                return None
+            failures.append(failure)
+        elif failure is not None:
+            return failure
+    return " and ".join(failures) if match_any and failures else None
+
+
+def cause_of(
+    criterion: Criterion, row: dict, context: dict | None = None
+) -> str | None:
     """Why ``criterion`` excludes the paper ``row`` (None: it passes).
 
-    ``duplicates`` is checked on the whole corpus (see :func:`test`).
+    ``duplicates`` is checked on the whole corpus (see :func:`test`); the
+    ranking conditions of ``metric`` (top % / top N) need ``context``
+    (:func:`metric_cutoffs`), else they are not judged.
     """
     params = criterion.params or {}
     kind = criterion.kind
+    if kind == "metric":
+        return _metric_cause(criterion, row, context)
     if kind == "period":
         year = extract_year(row.get("date"))
         start, end = params.get("start"), params.get("end")
@@ -338,14 +564,16 @@ def exception_of(criterion: Criterion, row: dict, included: bool) -> str | None:
     tags = review_tags.split_tags(row.get("tags"))
     if f"{KEEP}:{criterion.id}".casefold() in {t.casefold() for t in tags}:
         return f"{KEEP}:{criterion.id} tag"
+    if review_tags.SCREENED_KEEP.casefold() in {t.casefold() for t in tags}:
+        return "in a screened-results collection"
     if included:
         return "included in ③ Screen"
     if criterion.keep_types:
-        from scilex.paper_types import effective_type
+        from scilex.paper_types import effective_types
 
-        kind = effective_type(row)
-        if kind in criterion.keep_types:
-            return f"{kind} paper"
+        for kind in effective_types(row):
+            if kind in criterion.keep_types:
+                return f"{kind} paper"
     return None
 
 
@@ -358,6 +586,9 @@ def test(
     included = included or set()
     result = TestResult(criterion)
     duplicates = _duplicates_causes(data) if criterion.kind == "duplicates" else {}
+    cutoffs = metric_cutoffs(criterion, data) if criterion.kind == "metric" else None
+    if criterion.kind == "metric":
+        result.notes = coverage_notes(criterion, data)
     for index, row in zip(data.index, data.to_dict("records"), strict=True):
         state = review_tags.workflow(row.get("tags"))
         if any(
@@ -368,7 +599,7 @@ def test(
         cause = (
             duplicates.get(index)
             if criterion.kind == "duplicates"
-            else cause_of(criterion, row)
+            else cause_of(criterion, row, cutoffs)
         )
         if cause is None:
             continue
@@ -379,6 +610,53 @@ def test(
         else:
             result.excluded.append(paper)
     return result
+
+
+PASS, EXCLUDED, KEPT = "pass", "excluded", "kept"
+
+
+def eligibility(
+    criteria: list[Criterion], data: pd.DataFrame, included: set[str] | None = None
+) -> dict[str, dict[str, tuple[str, str]]]:
+    """Each paper's verdict for each enabled criterion, judged on the corpus.
+
+    ``{paper key: {criterion id: (state, cause)}}``, state ``excluded`` or
+    ``kept`` (by an exception); a criterion the paper passes is absent.
+    Papers discarded by a person are not judged.
+    """
+    verdicts: dict[str, dict[str, tuple[str, str]]] = {}
+    for criterion in criteria:
+        if not criterion.enabled:
+            continue
+        try:
+            result = test(criterion, data, included)
+        except Exception:  # a broken rule (bad pattern…): not judged
+            continue
+        for state, papers in ((EXCLUDED, result.excluded), (KEPT, result.spared)):
+            for paper in papers:
+                verdicts.setdefault(paper.paper_key, {})[criterion.id] = (
+                    state,
+                    paper.cause,
+                )
+    return verdicts
+
+
+def coverage_notes(criterion: Criterion, data: pd.DataFrame) -> list[str]:
+    """How many papers have each metric of a ``metric`` criterion."""
+    notes = []
+    records = data.to_dict("records")
+    seen = set()
+    for condition in (criterion.params or {}).get("conditions") or []:
+        key = (condition.get("metric"), condition.get("column", ""))
+        if not key[0] or key in seen:
+            continue
+        seen.add(key)
+        known = sum(metric_value(row, key[0], key[1]) is not None for row in records)
+        note = f"{_label(condition)}: known for {known} of {len(records)} papers"
+        if known < len(records) and key[0] != "column":
+            note += " (Enrich › Citation metrics computes citations, PageRank…)"
+        notes.append(note + ".")
+    return notes
 
 
 def _criterion_tags(tags, criterion_id: str) -> list[str]:
@@ -428,9 +706,15 @@ def apply(review, criteria: list[Criterion]) -> dict[str, int]:
                     data.at[index, "tags"], new, old
                 )
     results_store.write_changes(review.results_path, before, data)
+    from scilex.gui.services import versions
+
     journal.append(
         review.folder,
         "criteria",
+        # the criteria version applied: DELETED_BY:filter:<C> tags point to it (SX-8)
+        used={
+            "criteria.yml sha256": versions.ensure_current(review.folder, "criteria")
+        },
         params={
             "category": "filtering",
             "criteria": [c.id for c in criteria if c.enabled],
@@ -474,3 +758,60 @@ def excluded_by_criterion(tags_column) -> dict[str, int]:
         for cid in ids:
             counts[cid] = counts.get(cid, 0) + 1
     return counts
+
+
+# Metric -> word of an impact-filter code (``IF-Citation``).
+_METRIC_WORDS = {"citations": "citation", "cited_in_corpus": "citation"}
+
+
+def exclusion_codes(criteria: list[Criterion], values: list[str]) -> dict[str, str]:
+    """Criterion id -> exclusion code of the annotation grid.
+
+    ``values`` are the grid's ``EXCLUSION`` values (``C3-Language``,
+    ``IF-Citation``…). A criterion takes the value starting with its id
+    (``C3`` -> ``C3-Language``); a metric criterion the ``IF-`` value naming its
+    metric (citations -> ``IF-Citation``). Others keep their id.
+    """
+    codes: dict[str, str] = {}
+    for criterion in criteria:
+        prefix = f"{criterion.id}-".casefold()
+        code = next((v for v in values if v.casefold().startswith(prefix)), None)
+        if code is None and criterion.kind == "metric":
+            words = {
+                _METRIC_WORDS.get(c.get("metric", ""), c.get("metric", ""))
+                for c in criterion.params.get("conditions", [])
+                if isinstance(c, dict)
+            } - {""}
+            code = next(
+                (
+                    v
+                    for v in values
+                    if v.casefold().startswith("if-")
+                    and any(v[3:].casefold().startswith(w.casefold()) for w in words)
+                ),
+                None,
+            )
+        codes[criterion.id] = code or criterion.id
+    return codes
+
+
+def review_codes(folder: Path) -> tuple[dict[str, str], list[str]]:
+    """Exclusion codes (:func:`exclusion_codes`) and protocol order of a review.
+
+    The codes come from the ``EXCLUSION`` dimension of the review's annotation
+    grid; without one, the criterion ids are the codes.
+    """
+    from scilex.tagging.grid import dimension_values, load_grid
+
+    try:
+        criteria = load(Path(folder))
+    except Exception:  # an unreadable criteria.yml: ids only
+        return {}, []
+    values: list[str] = []
+    grid = Path(folder) / "annotation_grid.csv"
+    if grid.is_file():
+        try:
+            values = dimension_values(load_grid(grid), "EXCLUSION")
+        except Exception:
+            values = []
+    return exclusion_codes(criteria, values), [c.id for c in criteria]

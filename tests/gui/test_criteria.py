@@ -74,7 +74,9 @@ def test_defaults_follow_the_review():
         "C6",
         "C7",
         "C8",
+        "C9",
     ]
+    assert not by_id(cr.defaults(MAIN))["C9"].enabled  # needs citation counts
 
 
 def test_each_rule():
@@ -209,3 +211,107 @@ async def test_screen_offers_keep_as_exception(ctx, review):
     )
     assert "KEEP:C1" in str(read_results(review.results_path).loc[2, "tags"])
     assert cr.apply(review, cr.defaults(MAIN))["C1"] == 0
+
+
+METRIC_ROWS = [
+    {
+        "title": "a",
+        "date": "2018",
+        "DOI": "10.1/a",
+        "nb_citation": 50,
+        "metric_pagerank": 0.01,
+        "venue_rank": "A",
+    },
+    {
+        "title": "b",
+        "date": "2018",
+        "DOI": "10.1/b",
+        "nb_citation": 1,
+        "metric_pagerank": 0.5,
+        "venue_rank": "Q4",
+    },
+    {
+        "title": "c",
+        "date": "2018",
+        "DOI": "10.1/c",
+        "nb_citation": 2,
+        "metric_pagerank": 0.001,
+    },
+    {"title": "d", "date": "2026-10", "DOI": "10.1/d", "nb_citation": 0},
+]
+
+
+def metric(conditions, **params):
+    return cr.Criterion(
+        "C9", "Impact", "metric", params={"conditions": conditions, **params}
+    )
+
+
+def test_metric_thresholds_and_unknown_values():
+    data = pd.DataFrame(METRIC_ROWS)
+    at_least = metric([{"metric": "citations", "op": ">=", "value": 5}])
+    assert [p.title for p in cr.test(at_least, data).excluded] == ["b", "c", "d"]
+    venue = metric([{"metric": "venue_rank", "op": ">=", "value": 6}])
+    assert [p.title for p in cr.test(venue, data).excluded] == ["b"]
+    venue.params["missing"] = "exclude"
+    causes = {p.title: p.cause for p in cr.test(venue, data).excluded}
+    assert causes["c"] == "Venue rank unknown"
+
+
+def test_metric_age_aware_and_top_percent_combined():
+    data = pd.DataFrame(METRIC_ROWS)
+    age = metric([{"metric": "citations", "op": "age_aware"}])
+    # The recent paper is in its grace period.
+    assert [p.title for p in cr.test(age, data).excluded] == ["b", "c"]
+    top = metric([{"metric": "pagerank", "op": "top_percent", "value": 34}])
+    assert [p.title for p in cr.test(top, data).excluded] == ["c"]
+    # any: excluded only when every condition fails (b is central).
+    both = metric(
+        [
+            {"metric": "citations", "op": "age_aware"},
+            {"metric": "pagerank", "op": "top_n", "value": 1},
+        ],
+        match="any",
+    )
+    result = cr.test(both, data)
+    assert [p.title for p in result.excluded] == ["c"]
+    assert "PageRank: known for 3 of 4 papers" in " ".join(result.notes)
+    # One paper alone: ranking conditions are not judged.
+    assert cr.cause_of(top, METRIC_ROWS[2]) is None
+
+
+def test_eligibility_per_paper(tmp_path):
+    data = pd.DataFrame(ROWS)
+    verdicts = cr.eligibility(cr.defaults(MAIN), data)
+    assert verdicts["doi:10.1/c"]["C1"][0] == cr.EXCLUDED
+    assert verdicts["doi:10.1/b"]["C1"][0] == cr.KEPT  # dataset paper
+    assert "doi:10.1/a" not in verdicts  # meets all criteria
+
+
+def test_save_refuses_bad_metric_conditions(tmp_path):
+    with pytest.raises(ValueError, match="enough for its age"):
+        cr.save(tmp_path, [metric([{"metric": "pagerank", "op": "age_aware"}])])
+    with pytest.raises(ValueError, match="value is needed"):
+        cr.save(tmp_path, [metric([{"metric": "citations", "op": ">="}])])
+    cr.save(tmp_path, [metric([{"metric": "citations", "op": "age_aware"}])])
+    assert cr.load(tmp_path)[0].params["conditions"][0]["op"] == "age_aware"
+
+
+def test_aggregation_applies_the_saved_criteria(review):
+    import threading
+    from types import SimpleNamespace
+
+    from scilex.gui.services.jobs import JobRunner
+
+    job = SimpleNamespace(cancel_event=threading.Event(), message="")
+    # Never saved: the aggregation leaves the papers as they are.
+    assert JobRunner._apply_criteria(job, review) == ""
+    assert "DELETED_BY" not in read_results(review.results_path).to_csv()
+    cr.save(review.folder, cr.defaults(MAIN))
+    message = JobRunner._extend(job, review, None, None)
+    assert message.startswith("Eligibility criteria applied: C1 1")
+    tags = read_results(review.results_path)["tags"].fillna("").tolist()
+    # The paper type is tagged first, then the exclusion.
+    assert tags[2].endswith(
+        ";DELETED_BY:filter:C1 published in 2010, outside 2019-2024"
+    )

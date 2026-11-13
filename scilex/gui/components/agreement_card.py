@@ -37,7 +37,7 @@ class AgreementCard:
         with ui.card().classes("w-full gap-2").mark("agreement-card"):
             ui.label("Agreement study").classes("text-lg font-bold")
             ui.label(
-                "Papers assigned to two annotators or more (Annotators card, "
+                "Papers assigned to two annotators or more (a campaign's "
                 '"Annotators per paper") are copied into agreement/<annotator> in '
                 "Zotero: each annotator codes their own copy, without seeing the "
                 "others' codes. SciLEx then measures Krippendorff's alpha (MASI "
@@ -51,6 +51,14 @@ class AgreementCard:
                 ui.button(
                     "Compute agreement", icon="analytics", on_click=self.compute
                 ).props("dense no-caps").mark("agreement-compute")
+                self.include_llm = (
+                    ui.checkbox("Count the LLM annotators too", value=False)
+                    .tooltip(
+                        "Each model's answers on the same papers count as one more "
+                        "annotator (llm:<model>). They are measured, never merged."
+                    )
+                    .mark("agreement-include-llm")
+                )
             self.results = ui.column().classes("w-full gap-2").mark("agreement-results")
             JobPanel(ctx, review, JOB_KIND, show_logs=False)
         self.refresh_plan()
@@ -93,7 +101,11 @@ class AgreementCard:
 
     async def compute(self) -> None:
         try:
-            report, self.studied = await run.io_bound(service.compute, self.review)
+            report, self.studied = await run.io_bound(
+                lambda: service.compute(
+                    self.review, include_llm=bool(self.include_llm.value)
+                )
+            )
         except (ValueError, ConnectionError) as exc:
             show_error("Cannot read the copies", exc, expected=True)
             return

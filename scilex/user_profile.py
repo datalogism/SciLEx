@@ -91,7 +91,9 @@ def lookup_name(orcid: str, timeout: float = 10) -> str | None:
 
     url = f"{ORCID_PUBLIC_API}/{normalize_orcid(orcid)}/person"
     try:
-        response = requests.get(url, headers={"Accept": "application/json"}, timeout=timeout)
+        response = requests.get(
+            url, headers={"Accept": "application/json"}, timeout=timeout
+        )
     except requests.RequestException as exc:
         raise ConnectionError(f"orcid.org cannot be reached ({exc})") from exc
     if response.status_code == 404:
@@ -150,6 +152,8 @@ class UserProfile:
         self.name = name.strip()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(
-            yaml.safe_dump({"orcid": self.orcid, "name": self.name}, allow_unicode=True),
+            yaml.safe_dump(
+                {"orcid": self.orcid, "name": self.name}, allow_unicode=True
+            ),
             encoding="utf-8",
         )

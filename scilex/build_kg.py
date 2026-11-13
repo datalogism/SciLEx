@@ -9,7 +9,9 @@ citation lists), or from a BibLaTeX file given with ``--bib``. The coding
 dimensions come from the review's ``annotation_grid.csv``.
 
 Writes ``{output_dir}/{collect_name}/kg/<review>.ttl``, the BibLaTeX export it
-was built from and, unless ``--no-validate``, a SHACL report.
+was built from, the survey bundle (``bundle/survey.json``: what the review
+records besides its bibliography, at the ``--disclosure`` level) and, unless
+``--no-validate``, a SHACL report.
 
 An ORCID iD is required (``--orcid``, else the one saved by the desktop app):
 it is written as the creator of the graph.
@@ -52,14 +54,26 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "--bib", type=Path, metavar="FILE",
+        "--bib",
+        type=Path,
+        metavar="FILE",
         help="BibLaTeX export to map instead of exporting from Zotero",
     )
-    parser.add_argument("--orcid", help="your ORCID iD (default: the one saved by the app)")
+    parser.add_argument(
+        "--orcid", help="your ORCID iD (default: the one saved by the app)"
+    )
     parser.add_argument("--base-iri", help="base IRI of the review's resources")
     parser.add_argument("--output-dir", type=Path, metavar="DIR", help="where to write")
     parser.add_argument(
         "--no-validate", action="store_true", help="skip the SHACL validation"
+    )
+    parser.add_argument(
+        "--disclosure",
+        choices=("public", "team", "full"),
+        default="public",
+        help="what the survey bundle shows: public (default; members named only "
+        "with their consent, no notes), team (notes, names, per-annotator codes) "
+        "or full (also the parameters of every journal event)",
     )
     add_config_arguments(parser)
     return parser
@@ -95,11 +109,15 @@ def main(argv: list[str] | None = None) -> int:
 
     profile = read_version()
     if not profile:
-        logger.error("No application profile in scilex/kg/ap (run: python -m scilex.kg.sync_profile)")
+        logger.error(
+            "No application profile in scilex/kg/ap (run: python -m scilex.kg.sync_profile)"
+        )
         return 1
     logger.info(
         "Application profile %s (%s @ %s)",
-        profile.get("version_info"), profile.get("ref"), profile.get("commit", "")[:10],
+        profile.get("version_info"),
+        profile.get("ref"),
+        profile.get("commit", "")[:10],
     )
 
     try:
@@ -113,6 +131,7 @@ def main(argv: list[str] | None = None) -> int:
             run_validation=not args.no_validate,
             bib=args.bib,
             progress=lambda percent, message: logger.info("%s", message),
+            disclosure=args.disclosure,
         )
     except (
         KgDependencyError,
@@ -129,12 +148,28 @@ def main(argv: list[str] | None = None) -> int:
     logger.info(
         "%d papers -> %d triples in %s (%d SciLEx automation tags left out, "
         "%d citation notes cleaned)",
-        report.papers, report.triples, report.output, report.dropped_tags, report.notes_cleaned,
+        report.papers,
+        report.triples,
+        report.output,
+        report.dropped_tags,
+        report.notes_cleaned,
     )
+    if result.bundle is not None:
+        logger.info(
+            "Survey bundle (%s): %s", result.bundle.disclosure, result.bundle.path
+        )
+    if report.suspect_literals:
+        logger.warning(
+            "%d values look like credentials, check before sharing: %s",
+            len(report.suspect_literals),
+            "; ".join(report.suspect_literals[:3]),
+        )
     if report.conforms is True:
         logger.info("SHACL: the graph conforms to the profile")
     elif report.conforms is False:
-        logger.warning("SHACL: violations, see %s", report.validation_report.with_suffix(".txt"))
+        logger.warning(
+            "SHACL: violations, see %s", report.validation_report.with_suffix(".txt")
+        )
     return 0
 
 

@@ -102,6 +102,12 @@ def conflicts(mode_a: str, mode_b: str) -> bool:
 
 
 KIND_LABELS = {"pipeline": "collection"}
+# Name of an extension's Zotero collection: "Extension <n> · <label> · <date>".
+EXTENSION_LABELS = {
+    extension.ADD_NEW: "New collect",
+    extension.REAGGREGATE: "Re-aggregation",
+    None: "Full collection",
+}
 
 
 @dataclass
@@ -364,7 +370,10 @@ class JobRunner:
             JobConflictError: If a collection runs, or a job uses this review's results.
             ValueError: If ``since`` is not a valid date.
             FileNotFoundError: If ``resume`` is set but nothing can be resumed.
+            ExtensionNeedsGroupError: The review has papers (this is an
+                extension) but no Zotero group for their collection.
         """
+        from scilex.gui.services import extension_collection
         from scilex.gui.services.collect_summary import (
             clear_collection,
             collection_failure,
@@ -383,6 +392,11 @@ class JobRunner:
             extend = None
         if extend is not None and extend not in extension.MODES:
             raise ValueError(f"Unknown extension mode {extend!r}")
+        # On a review with papers, any collect is an extension: its new papers
+        # go into a Zotero collection of the review's group.
+        extending = review.has_results
+        if extending:
+            extension_collection.group_required(review)
         history_key = {
             extension.ADD_NEW: run_history.EXTEND_ADD,
             extension.REAGGREGATE: run_history.EXTEND_REAGGREGATE,
@@ -398,7 +412,7 @@ class JobRunner:
             if clear_dir is not None:
                 job.message = "Deleting the previous collection…"
                 clear_collection(clear_dir)
-            previous = self._snapshot(review) if extend else None
+            previous = self._snapshot(review) if extending else None
             self._collect(job, config)
             if job.cancel_event.is_set():
                 return ""
@@ -436,7 +450,13 @@ class JobRunner:
 
         Raises:
             JobConflictError: If a job uses this review's results.
+            ExtensionNeedsGroupError: ``keep_outside`` (an extension) on a
+                review without a Zotero group.
         """
+        if keep_outside:
+            from scilex.gui.services import extension_collection
+
+            extension_collection.group_required(review)
         job = self._new_job(
             review,
             PIPELINE,
@@ -467,22 +487,62 @@ class JobRunner:
 
         if job.cancel_event.is_set():
             return ""
-        if not mode or previous is None:
-            tag_types(review.results_path)  # every paper gets its default type
-            return ""
-        job.message = "Merging with the papers already in the review…"
-        summary = extension.apply_extension(mode, previous, review.results_path)
-        tag_types(review.results_path)  # before the new papers are pushed
-        if summary and mode == extension.ADD_NEW:
+        summary = ""
+        if mode and previous is not None:
+            job.message = "Merging with the papers already in the review…"
+            summary = extension.apply_extension(mode, previous, review.results_path)
+        tag_types(review.results_path)  # every paper gets its default type
+        # Before the new papers are pushed: excluded ones arrive tagged.
+        applied = JobRunner._apply_criteria(job, review)
+        summary = " ".join(part for part in (summary, applied) if part)
+        if previous is not None:
+            # Every extension: its new papers go into a Zotero collection.
             from scilex.gui.services import extension_collection
 
+            job.message = "Zotero collection of the new papers…"
             published = extension_collection.publish(
-                review, extension_collection.paper_keys(previous), "New collect"
+                review,
+                extension_collection.paper_keys(previous),
+                EXTENSION_LABELS.get(mode, "New collect"),
             )
-            summary = f"{summary} {published.message()}"
+            summary = f"{summary} {published.message()}".strip()
         if summary:
             logger.info(summary)
         return summary
+
+    @staticmethod
+    def _apply_criteria(job: Job, review: Review) -> str:
+        """Apply the review's saved eligibility criteria to the new results.
+
+        Excluded papers get ``DELETED_BY:filter:<id> <cause>`` (see
+        :func:`scilex.gui.services.criteria.apply`). Nothing happens while the
+        criteria were never saved (step Eligibility criteria); a failure is
+        reported in the summary and never fails the aggregation.
+        """
+        from scilex.gui.services import criteria
+        from scilex.gui.services.workspace import Workspace
+
+        if job.cancel_event.is_set() or not criteria.path_of(review.folder).is_file():
+            return ""
+        job.message = "Applying the eligibility criteria…"
+        try:
+            try:
+                main = Workspace.load_config(review).main
+            except Exception:
+                main = {}
+            items = criteria.load(review.folder, main)
+            if not any(c.enabled for c in items):
+                return ""
+            counts = criteria.apply(review, items)
+        except Exception as exc:
+            logger.warning("Cannot apply the eligibility criteria", exc_info=True)
+            return f"The eligibility criteria could not be applied ({exc})."
+        excluded = ", ".join(f"{cid} {n}" for cid, n in counts.items() if n)
+        return (
+            f"Eligibility criteria applied: {excluded} excluded."
+            if excluded
+            else "Eligibility criteria applied: no paper excluded."
+        )
 
     def cancel(self, job_id: str) -> bool:
         """Request cancellation; returns False if the job is not active.

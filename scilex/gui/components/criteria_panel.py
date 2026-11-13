@@ -17,8 +17,18 @@ from scilex import review_tags
 from scilex.gui.services import criteria as service
 
 
-def verdicts(record: dict, items: list[service.Criterion], included: bool = False):
-    """``[(criterion, state, text)]``; state: ``pass``, ``excluded``, ``kept``, ``tagged``."""
+def verdicts(
+    record: dict,
+    items: list[service.Criterion],
+    included: bool = False,
+    live: dict[str, tuple[str, str]] | None = None,
+):
+    """``[(criterion, state, text)]``; state: ``pass``, ``excluded``, ``kept``, ``tagged``.
+
+    ``live``: the paper's verdicts judged on the whole corpus
+    (:func:`service.eligibility`); without it, rules that need the corpus
+    (duplicates, top % of a metric) rely on the applied tags.
+    """
     tags = review_tags.split_tags(record.get("tags"))
     tagged = {
         cid: tag
@@ -30,8 +40,16 @@ def verdicts(record: dict, items: list[service.Criterion], included: bool = Fals
     for criterion in items:
         if not criterion.enabled:
             continue
-        cause = service.cause_of(criterion, record)
-        exception = service.exception_of(criterion, record, included)
+        if live is not None:
+            state, cause = live.get(criterion.id, (service.PASS, None))
+            exception = (
+                service.exception_of(criterion, record, included)
+                if state == service.KEPT
+                else None
+            )
+        else:
+            cause = service.cause_of(criterion, record)
+            exception = service.exception_of(criterion, record, included)
         if cause and exception:
             found.append((criterion, "kept", f"{cause} — kept: {exception}"))
         elif cause:
@@ -57,9 +75,10 @@ def render_criteria(
     items: list[service.Criterion],
     on_tags: Callable[[list[str], list[str]], Awaitable[None]] | None = None,
     included: bool = False,
+    live: dict[str, tuple[str, str]] | None = None,
 ) -> None:
     """The eligibility of ``record``; ``on_tags(add, remove)`` writes its tags."""
-    found = verdicts(record, items, included)
+    found = verdicts(record, items, included, live)
     if not found:
         return
     failing = sum(1 for _, state, _ in found if state in ("excluded", "tagged"))

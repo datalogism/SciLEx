@@ -1,5 +1,7 @@
 """Simulated UI tests of the Screen step."""
 
+import asyncio
+
 import pandas as pd
 import pytest
 from nicegui.testing import user_simulation
@@ -70,6 +72,103 @@ async def test_decision_filter_and_search(ctx, review):
         assert len(grid.options["rowData"]) == 2
         user.find(marker="text-search").elements.pop().set_value("metabol")
         assert [r["title"] for r in grid.options["rowData"]] == ["Metabolomics KG"]
+
+
+async def test_eligibility_filter(ctx, review):
+    from scilex.gui.services import criteria as cr
+
+    items = [c for c in cr.defaults({}) if c.id == "C6"]  # DOI required
+    cr.save(review.folder, items)
+    async with user_simulation(build_root(ctx)) as user:
+        await user.open(f"/review/{review.id}/screen")
+        await user.should_see(marker="screen-eligibility", retries=20)
+        grid = user.find(marker="screen-grid").elements.pop()
+        rows = {r["title"]: r for r in grid.options["rowData"]}
+        assert rows["Metabolomics KG"]["criteria"] == "C6"
+        eligibility = user.find(marker="screen-eligibility").elements.pop()
+        assert "Excluded by C6 – Referenceability (1)" in eligibility.options.values()
+        eligibility.set_value("fail:C6")
+        assert [r["title"] for r in grid.options["rowData"]] == ["Metabolomics KG"]
+        await user.should_see("About metabolites")  # detail follows the filter
+        eligibility.set_value("eligible")
+        assert {r["title"] for r in grid.options["rowData"]} == {
+            "Graph RAG",
+            "Unrelated topic",
+        }
+
+
+async def test_paper_types_can_be_set_while_screening(ctx, review):
+    from scilex.gui.services.extend import read_results
+
+    async def tags_of(title, wanted):
+        for _ in range(50):
+            data = read_results(review.results_path).set_index("title")
+            tags = str(data["tags"][title]) if "tags" in data.columns else ""
+            if wanted(tags):
+                return tags
+            await asyncio.sleep(0.05)
+        return tags
+
+    async with user_simulation(build_root(ctx)) as user:
+        await user.open(f"/review/{review.id}/screen")
+        await user.should_see(marker="paper-type-picker", retries=20)
+        grid = user.find(marker="screen-grid").elements.pop()
+        first = grid.options["rowData"][0]
+        assert first["title"] == "Graph RAG"
+        assert first["paper_type"] == "Model or Method"  # the default
+
+        # The first choice replaces the default type.
+        user.find(marker="paper-type-3").click()  # Dataset
+        tags = await tags_of("Graph RAG", lambda t: "PAPER_TYPE:Dataset" in t)
+        assert tags.count("PAPER_TYPE:") == 1 and "PAPER_TYPE:Dataset" in tags
+
+        # A paper can be both a method and a dataset.
+        user.find(marker="paper-type-4").click()  # Model or Method
+        tags = await tags_of("Graph RAG", lambda t: "Model or Method" in t)
+        assert "PAPER_TYPE:Dataset" in tags and "PAPER_TYPE:Model or Method" in tags
+
+        # Clicking a type again switches it off.
+        user.find(marker="paper-type-3").click()
+        tags = await tags_of("Graph RAG", lambda t: "Dataset" not in t)
+        assert tags.count("PAPER_TYPE:") == 1 and "Model or Method" in tags
+
+
+async def test_ticked_papers_are_validated_or_deleted_at_once(ctx, review, monkeypatch):
+    from nicegui import ui
+
+    from scilex.gui.services.extend import read_results
+
+    orcid = ctx.profile.orcid
+    ticked = []
+
+    async def selected_rows(self):
+        return list(ticked)
+
+    monkeypatch.setattr(ui.aggrid, "get_selected_rows", selected_rows)
+    async with user_simulation(build_root(ctx)) as user:
+        await user.open(f"/review/{review.id}/screen")
+        await user.should_see(marker="screen-grid", retries=20)
+        await user.should_not_see(marker="bulk-delete")  # nothing ticked
+        grid = user.find(marker="screen-grid").elements.pop()
+        rows = {r["title"]: r for r in grid.options["rowData"]}
+        ticked[:] = [rows["Graph RAG"], rows["Unrelated topic"]]
+        user.find(marker="screen-grid").trigger("selectionChanged")
+        await user.should_see("2 paper(s) ticked", retries=20)
+
+        user.find(marker="bulk-delete").click()
+        await user.should_see("2 paper(s) deleted", retries=20)
+        tags = read_results(review.results_path).set_index("title")["tags"]
+        assert f"DELETED_BY:{orcid}" in str(tags["Graph RAG"])
+        assert f"DELETED_BY:{orcid}" in str(tags["Unrelated topic"])
+        assert f"DELETED_BY:{orcid}" not in str(tags["Metabolomics KG"])
+
+        ticked[:] = [rows["Metabolomics KG"]]
+        user.find(marker="screen-grid").trigger("selectionChanged")
+        await user.should_see("1 paper(s) ticked", retries=20)
+        user.find(marker="bulk-validate").click()
+        await user.should_see("1 paper(s) validated", retries=20)
+        tags = read_results(review.results_path).set_index("title")["tags"]
+        assert f"ANNOT_VALID_BY:{orcid}" in str(tags["Metabolomics KG"])
 
 
 async def test_orphans_can_be_forgotten(ctx, review):

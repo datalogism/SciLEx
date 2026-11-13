@@ -51,6 +51,12 @@ class Snapshot:
     validated: int = 0  # papers with ANNOT_VALID_BY:<id>
     assigned: int = 0  # papers with ANNOT:<id>
     discarded: int = 0  # papers with DELETED_BY:<who> (left out of the counts above)
+    # SX-20: the codes that appeared / disappeared since the previous snapshot with
+    # codes, as [Zotero item key, "DIMENSION:value"] pairs. Only snapshots taken from
+    # Zotero items have them (the first one lists every code as added); replaying
+    # them (:func:`codes_at`) gives the codes of each paper at each snapshot.
+    codes_added: list = field(default_factory=list)
+    codes_removed: list = field(default_factory=list)
 
 
 @dataclass
@@ -122,6 +128,41 @@ def snapshot_of(papers_tags: Iterable[Iterable[str]], origin: str) -> Snapshot:
     )
 
 
+def paper_codes(papers_tags: dict[str, Iterable[str]]) -> set[tuple[str, str]]:
+    """``{(paper, "DIMENSION:value")}`` of the papers kept (placeholders left out)."""
+    codes = set()
+    for paper, tags in papers_tags.items():
+        tags = list(tags)
+        if review_tags.workflow(tags).deleted:
+            continue
+        for dimension, value in _annotation_tags(tags):
+            if value and value != PLACEHOLDER:
+                codes.add((str(paper), f"{dimension}:{value}"))
+    return codes
+
+
+def codes_at(history: Iterable[Snapshot]) -> set[tuple[str, str]]:
+    """The codes after the last of ``history``, replayed from the snapshots' deltas."""
+    codes: set[tuple[str, str]] = set()
+    for snapshot in history:
+        codes -= {tuple(pair) for pair in snapshot.codes_removed}
+        codes |= {tuple(pair) for pair in snapshot.codes_added}
+    return codes
+
+
+def zotero_tags_by_key(items: Iterable[dict]) -> dict[str, list[str]]:
+    """Tag lists of Zotero items (papers only), by item key."""
+    from scilex.tagging.grid import is_paper
+
+    return {
+        str(item.get("key") or item.get("data", {}).get("key", "")): [
+            str(t.get("tag", "")) for t in item.get("data", {}).get("tags", [])
+        ]
+        for item in items
+        if is_paper(item)
+    }
+
+
 def zotero_tags(items: Iterable[dict]) -> list[list[str]]:
     """Tag lists of Zotero items (papers only)."""
     from scilex.tagging.grid import is_paper
@@ -136,9 +177,20 @@ def zotero_tags(items: Iterable[dict]) -> list[list[str]]:
 def record_snapshot(
     folder: Path, papers_tags: Iterable[Iterable[str]], origin: str
 ) -> Snapshot | None:
-    """Append a snapshot to the review's history; never fails the caller."""
+    """Append a snapshot to the review's history; never fails the caller.
+
+    ``papers_tags`` is one tag list per paper, or ``{Zotero item key: tags}``:
+    the snapshot then also records the codes added and removed since the last
+    snapshot (SX-20).
+    """
     try:
-        snapshot = snapshot_of(papers_tags, origin)
+        keyed = isinstance(papers_tags, dict)
+        snapshot = snapshot_of(papers_tags.values() if keyed else papers_tags, origin)
+        if keyed:
+            current = paper_codes(papers_tags)
+            before = codes_at(load_history(folder))
+            snapshot.codes_added = sorted(map(list, current - before))
+            snapshot.codes_removed = sorted(map(list, before - current))
         path = Path(folder) / HISTORY_FILENAME
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(snapshot.__dict__, ensure_ascii=False) + "\n")
@@ -200,17 +252,20 @@ def compute(review) -> Overview:
     overview.by_collection = dict(collections.most_common())
 
     from scilex import review_tags
-    from scilex.paper_types import TYPES, effective_type
+    from scilex.paper_types import TYPES, effective_types
 
-    types = [effective_type(row) for row in rows]
+    # A paper with several types counts once for each.
+    types = [effective_types(row) for row in rows]
     order = {t: i for i, t in enumerate(TYPES)}
-    counted = Counter(types)
+    counted = Counter(kind for kinds in types for kind in kinds)
     overview.by_type = dict(
         sorted(counted.items(), key=lambda kv: (order.get(kv[0], len(TYPES)), kv[0]))
     )
-    for row, kind in zip(rows, types, strict=True):
+    for row, kinds in zip(rows, types, strict=True):
         year = extract_year(row.get("date"))
-        if year is not None:
+        if year is None:
+            continue
+        for kind in kinds:
             per_year = overview.type_by_year.setdefault(kind, {})
             per_year[year] = per_year.get(year, 0) + 1
         for path in review_tags.split_tags(row.get("zotero_collections")):

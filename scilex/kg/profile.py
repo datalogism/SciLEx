@@ -54,6 +54,8 @@ class PreparedMapping:
     # Environment the FnO functions need while the mapping runs (SCILEX_PROFILE, iter3+).
     env: dict = field(default_factory=dict)
     templated: bool = False  # the profile's mapping has {{...}} placeholders (iter3+)
+    # the profile describes the dataset, its creator and sub-corpora itself (iter4+)
+    contract: bool = False
 
 
 def read_version(folder: Path = PROFILE_DIR) -> dict:
@@ -117,12 +119,21 @@ def prepare_mapping(
     profile_dir: Path = PROFILE_DIR,
     title: str = "",
     description: str = "",
+    contract: dict | None = None,
 ) -> PreparedMapping:
     """Write into ``workdir`` a copy of the profile's mapping for one review.
 
-    Two profile generations are supported:
+    Three profile generations are supported:
 
-    - **templates** (iteration 3+): the RML / SPARQL files hold ``{{BASE}}``,
+    - **contract** (iteration 4+): the profile ships its mapping interface,
+      ``mappings/ap_profile.py``. SciLEx writes the review's collection profile
+      (:func:`collection_profile_v4`), and the profile's own code merges it into
+      the effective profile and fills every placeholder (ORSD A2): SciLEx never
+      rebuilds the placeholder values. ``contract`` passes the keys only this
+      generation reads: ``creator``, ``generator``, ``config_hash``, ``survey``
+      (path of the survey bundle) and ``grid`` (the grid declaration, see
+      :func:`grid_declaration`).
+    - **templates** (iteration 3): the RML / SPARQL files hold ``{{BASE}}``,
       ``{{JSON}}``, ``{{TITLE}}``... placeholders and the FnO functions read a
       *collection profile* (``SCILEX_PROFILE``). SciLEx fills the placeholders and
       writes the review's collection profile (:func:`collection_profile`).
@@ -157,6 +168,18 @@ def prepare_mapping(
             f"The pinned profile in {profile_dir} is incomplete "
             "(run: python -m scilex.kg.sync_profile)"
         )
+    if (mappings / CONTRACT_FILENAME).is_file():
+        return _prepare_contract(
+            workdir,
+            profile_dir=profile_dir,
+            base_iri=base_iri,
+            source_json=source_json,
+            source_name=source_name,
+            dimensions=dimensions,
+            title=title,
+            description=description,
+            **(contract or {}),
+        )
     if any(PLACEHOLDER_MARK in _read(f) for f in rml_files):
         return _prepare_templates(
             workdir,
@@ -174,7 +197,7 @@ def prepare_mapping(
     udfs_text = _read(udf_files[0])
     match = _BASE_IN_UDFS.search(udfs_text)
     if not match:
-        raise ProfileError(f"No BASE = \"...\" in {udf_files[0].name}")
+        raise ProfileError(f'No BASE = "..." in {udf_files[0].name}')
     upstream_base = match.group(1)
     # What must not survive the rewrite ("" when the review reuses the profile's own base).
     leftover = "" if upstream_base == base_iri else upstream_base
@@ -209,15 +232,23 @@ def prepare_mapping(
         udfs += f"DIMENSIONS = {sorted(set(dimensions))!r}\n"
         udfs += "DIMENSIONS = set(DIMENSIONS)\n"
     # morph-kgc opens the functions file with the locale encoding (cp1252 on Windows).
-    out_udfs = _write(workdir / "functions" / udf_files[0].name, ascii_source(udfs), leftover)
+    out_udfs = _write(
+        workdir / "functions" / udf_files[0].name, ascii_source(udfs), leftover
+    )
 
     for path in ru_files:
-        out_ru.append(_write(workdir / "sparql" / path.name, rewrite(_read(path)), leftover))
+        out_ru.append(
+            _write(workdir / "sparql" / path.name, rewrite(_read(path)), leftover)
+        )
 
     roles = lpwc_roles(dimensions or [])
     if roles:
         out_ru.append(
-            _write(workdir / "sparql" / "90-scilex-grid-lifting.ru", lifting_update(base_iri, roles), "")
+            _write(
+                workdir / "sparql" / "90-scilex-grid-lifting.ru",
+                lifting_update(base_iri, roles),
+                "",
+            )
         )
     return PreparedMapping(workdir, out_rml, out_udfs, out_ru, base_iri)
 
@@ -236,7 +267,8 @@ SCILEX_PRESENCE_TAGS = ("HavePDF", "HaveHF", "HavePWC", "HaveGithub", "SciLexCol
 def is_templated(profile_dir: Path = PROFILE_DIR) -> bool:
     """True when the pinned profile's mapping uses ``{{...}}`` placeholders (iter3+)."""
     return any(
-        PLACEHOLDER_MARK in _read(p) for p in (profile_dir / "mappings" / "rml").glob("*.rml.ttl")
+        PLACEHOLDER_MARK in _read(p)
+        for p in (profile_dir / "mappings" / "rml").glob("*.rml.ttl")
     )
 
 
@@ -282,7 +314,10 @@ def collection_profile(
 def _sparql_text(text: str) -> str:
     """Escape a value placed between double quotes in Turtle / SPARQL."""
     return (
-        text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ").replace("\r", " ")
+        text.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", " ")
+        .replace("\r", " ")
     )
 
 
@@ -320,7 +355,9 @@ def _prepare_templates(
         dimensions=dimensions,
     )
     profile_path = workdir / f"{slug}.collection.json"
-    profile_path.write_text(json.dumps(profile, ensure_ascii=False, indent=1), encoding="utf-8")
+    profile_path.write_text(
+        json.dumps(profile, ensure_ascii=False, indent=1), encoding="utf-8"
+    )
     values = {
         "BASE": base_iri,
         "JSON": source_json.resolve().as_posix(),
@@ -342,13 +379,22 @@ def _prepare_templates(
     out_rml = [
         _write(workdir / "rml" / p.name, fill(_read(p), p.name), "") for p in rml_files
     ]
-    out_ru = [_write(workdir / "sparql" / p.name, fill(_read(p), p.name), "") for p in ru_files]
+    out_ru = [
+        _write(workdir / "sparql" / p.name, fill(_read(p), p.name), "")
+        for p in ru_files
+    ]
     # morph-kgc opens the functions file with the locale encoding (cp1252 on Windows).
-    out_udfs = _write(workdir / "functions" / udf_file.name, ascii_source(_read(udf_file)), "")
+    out_udfs = _write(
+        workdir / "functions" / udf_file.name, ascii_source(_read(udf_file)), ""
+    )
     roles = lpwc_roles(dimensions)
     if roles:
         out_ru.append(
-            _write(workdir / "sparql" / "90-scilex-grid-lifting.ru", lifting_update(base_iri, roles), "")
+            _write(
+                workdir / "sparql" / "90-scilex-grid-lifting.ru",
+                lifting_update(base_iri, roles),
+                "",
+            )
         )
     return PreparedMapping(
         workdir,
@@ -358,6 +404,275 @@ def _prepare_templates(
         base_iri,
         env={"SCILEX_PROFILE": str(profile_path.resolve())},
         templated=True,
+    )
+
+
+# --- Contract profiles (iteration 4+) ----------------------------------------
+
+CONTRACT_FILENAME = "ap_profile.py"
+# Grid columns read by grid_declaration (SX-22). All optional.
+GRID_TYPE_COLUMN = "type"
+GRID_VALUES_COLUMN = "values"
+GRID_BROADER_COLUMN = "broader"
+GRID_IMPLIES_COLUMN = "implies"
+GRID_OTHER_TO_COLUMN = "other_to"
+GRID_LPWC_COLUMN = "lpwc"
+VALUE_TYPES = ("binary", "closed", "magnitude", "integer", "open")
+
+
+def maps_part(part: str, profile_dir: Path = PROFILE_DIR) -> bool:
+    """True when the pinned profile maps the survey bundle's ``part`` (``$.part[*]``)."""
+    needle = f"$.{part}[*]"
+    return any(
+        needle in _read(p) for p in (profile_dir / "mappings" / "rml").glob("*.rml.ttl")
+    )
+
+
+def contract_module(profile_dir: Path = PROFILE_DIR):
+    """Load the profile's mapping interface (``mappings/ap_profile.py``), or None.
+
+    The module is the profile's code, pinned with it and reviewed with the
+    rest of ``scilex/kg/ap`` (standard library only).
+    """
+    import importlib.util
+    import sys
+
+    path = profile_dir / "mappings" / CONTRACT_FILENAME
+    if not path.is_file():
+        return None
+    name = f"scilex_kg_ap_profile_{abs(hash(path.resolve()))}"
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        sys.modules.pop(name, None)
+        raise
+    return module
+
+
+def _split_list(text: str) -> list[str]:
+    return [v.strip() for v in re.split(r"[,|·]", text) if v.strip()]
+
+
+def _rules(text: str, where: str) -> dict[str, list[str]]:
+    """``"ner > ie; re > ie, nlp"`` -> ``{"ner": ["ie"], "re": ["ie", "nlp"]}``."""
+    rules: dict[str, list[str]] = {}
+    for part in (p.strip() for p in text.split(";")):
+        if not part:
+            continue
+        left, sep, right = part.partition(">")
+        if not sep or not left.strip() or not _split_list(right):
+            raise ProfileError(f"{where}: '{part}' is not 'value > value, value'")
+        rules.setdefault(left.strip(), []).extend(_split_list(right))
+    return rules
+
+
+def grid_declaration(grid) -> dict[str, dict]:
+    """The grid declaration of a review (profile iteration 6, SX-22).
+
+    Reads the optional columns of ``annotation_grid.csv``:
+
+    - ``type``: ``binary``, ``closed``, ``magnitude``, ``integer`` or ``open``;
+    - ``values``: the values of a closed dimension (``a, b, c``); else the
+      grid's ``Allowed values`` column or the ``Values: ...`` end of its detail;
+    - ``broader``: value hierarchy, ``narrow > broad, broad; narrow2 > broad``;
+    - ``implies``: implication rules, ``value > required, required; ...``;
+    - ``other_to``: for a binary dimension, the dimension of its other values;
+    - ``lpwc``: LPWC role (``task``, ``dataset``, ``model``, ``method``).
+
+    Returns:
+        ``{dimension: {"values": {...}, "broader": {...}, "implies": {...}, "question": ...}}``
+        with only the keys the grid gives. A grid without these columns gives
+        bare dimensions, as before iteration 6.
+
+    Raises:
+        ProfileError: If a cell cannot be read.
+    """
+    from scilex.tagging.grid import (
+        DETAIL_COLUMN,
+        TAG_COLUMN,
+        dimension_values,
+        normalize_grid,
+    )
+
+    grid = normalize_grid(grid)
+    out: dict[str, dict] = {}
+    for _, row in grid.iterrows():
+        name = str(row[TAG_COLUMN])
+        cell = {c: str(row.get(c, "") or "").strip() for c in grid.columns}
+        entry: dict = {}
+        if cell.get(DETAIL_COLUMN):
+            entry["question"] = cell[DETAIL_COLUMN]
+        kind = cell.get(GRID_TYPE_COLUMN, "").lower()
+        if kind:
+            if kind not in VALUE_TYPES:
+                raise ProfileError(
+                    f"{name}: unknown value type '{kind}' (one of {', '.join(VALUE_TYPES)})"
+                )
+            values: dict = {"type": kind}
+            if kind == "closed":
+                listed = _split_list(cell.get(GRID_VALUES_COLUMN, "")) or (
+                    dimension_values(grid, name)
+                )
+                if not listed:
+                    raise ProfileError(
+                        f"{name}: a closed dimension needs its values ('values' column)"
+                    )
+                values["list"] = listed
+            if cell.get(GRID_OTHER_TO_COLUMN):
+                if kind != "binary":
+                    raise ProfileError(f"{name}: 'other_to' is for binary dimensions")
+                values["other_to"] = cell[GRID_OTHER_TO_COLUMN].upper()
+            entry["values"] = values
+        for column in (GRID_BROADER_COLUMN, GRID_IMPLIES_COLUMN):
+            if cell.get(column):
+                entry[column] = _rules(cell[column], f"{name} {column}")
+        if cell.get(GRID_LPWC_COLUMN):
+            entry["lpwc"] = cell[GRID_LPWC_COLUMN].lower()
+        out[name] = entry
+    return out
+
+
+def collection_profile_v4(
+    slug: str,
+    *,
+    base_iri: str,
+    source_name: str,
+    title: str,
+    description: str,
+    dimensions: list[str],
+    grid: dict[str, dict] | None = None,
+    creator: str = "",
+    generator: str = "",
+    config_hash: str = "",
+    survey: str = "",
+) -> dict:
+    """The collection profile (schemaVersion 1, profile iteration 4+) of a review.
+
+    It extends the profile's ``_scilex-defaults`` (the tags SciLEx writes itself),
+    so it declares only the review's own grid. A grid dimension whose last part
+    names an LPWC role (``SAT_TASK``, ``DATASET``) is lifted into LPWC.
+    """
+    grid = grid or {}
+    declared = []
+    for name in sorted(set(dimensions) | set(grid)):
+        entry = {"name": name, "origin": "grid"}
+        extra = dict(grid.get(name, {}))
+        last = name.split("_", 1)[1] if "_" in name else name
+        if "lpwc" not in extra and last in LPWC_LIFTING:
+            extra["lpwc"] = LPWC_LIFTING[last][1]
+        entry.update(extra)
+        declared.append(entry)
+    profile = {
+        "schemaVersion": 1,
+        "slug": slug,
+        "base": base_iri,
+        "use_case": "SciLEx",
+        "source": source_name,
+        "title": title,
+        "description": description,
+        "extends": ["_scilex-defaults"],
+        "tags": {
+            "dimensions": declared,
+            "dimension_patterns": [],
+            "dimension_aliases": {},
+            "slash_form": False,
+            "plain": {},
+        },
+    }
+    for key, value in (
+        ("creator", creator),
+        ("generator", generator),
+        ("config_hash", config_hash),
+        ("survey", survey),
+    ):
+        if value:
+            profile[key] = value
+    return profile
+
+
+def _prepare_contract(
+    workdir: Path,
+    *,
+    profile_dir: Path,
+    base_iri: str,
+    source_json: Path,
+    source_name: str,
+    dimensions: list[str] | None,
+    title: str,
+    description: str,
+    creator: str = "",
+    generator: str = "",
+    config_hash: str = "",
+    survey: Path | str | None = None,
+    grid: dict[str, dict] | None = None,
+) -> PreparedMapping:
+    api = contract_module(profile_dir)
+    mappings = profile_dir / "mappings"
+    slug = slugify(base_iri.rstrip("/").rsplit("/", 1)[-1])
+    for folder in ("rml", "functions", "sparql"):
+        (workdir / folder).mkdir(parents=True, exist_ok=True)
+    if dimensions is None:
+        dimensions = deduce_dimensions(source_json)
+    survey_path = Path(survey).resolve() if survey else None
+    raw = collection_profile_v4(
+        slug,
+        base_iri=base_iri,
+        source_name=source_name,
+        title=title or slug,
+        description=description or f"SciLEx review {slug}.",
+        dimensions=dimensions,
+        grid=grid,
+        creator=creator,
+        generator=generator,
+        config_hash=config_hash,
+        survey=survey_path.name if survey_path else "",
+    )
+    raw_path = workdir / f"{slug}.json"
+    raw_path.write_text(json.dumps(raw, ensure_ascii=False, indent=1), encoding="utf-8")
+    try:
+        effective = api.load_profile(raw_path, search=[mappings / "collections"])
+        effective_path = api.write_effective_profile(
+            effective, workdir / f"{slug}.effective.json"
+        )
+        values = api.placeholder_values(effective, source_json.resolve().as_posix())
+        # The profile reads the bundle from its own raw_data/ folder; SciLEx's is elsewhere.
+        values["SURVEY"] = (
+            api.escape_string(survey_path.as_posix()) if survey_path else ""
+        )
+
+        def fill(path: Path) -> str:
+            return api.expand(_read(path), values, path.name)
+
+        out_rml = [
+            _write(workdir / "rml" / p.name, fill(p), "")
+            for p in sorted((mappings / "rml").glob("*.rml.ttl"))
+            if survey_path or "survey" not in p.name
+        ]
+        out_ru = [
+            _write(workdir / "sparql" / p.name, fill(p), "")
+            for p in sorted((mappings / "sparql").glob("*.ru"))
+        ]
+    except ValueError as exc:  # the contract's ProfileError is a ValueError
+        raise ProfileError(str(exc)) from exc
+    udf_file = next((mappings / "functions").glob("*.py"))
+    # morph-kgc opens the functions file with the locale encoding (cp1252 on Windows).
+    out_udfs = _write(
+        workdir / "functions" / udf_file.name, ascii_source(_read(udf_file)), ""
+    )
+    return PreparedMapping(
+        workdir,
+        out_rml,
+        out_udfs,
+        out_ru,
+        base_iri,
+        env={"SCILEX_PROFILE": str(Path(effective_path).resolve())},
+        templated=True,
+        contract=True,
     )
 
 
@@ -373,7 +688,9 @@ def ascii_source(code: str) -> str:
         code_point = ord(char)
         if code_point < 128:
             return char
-        return f"\\u{code_point:04x}" if code_point <= 0xFFFF else f"\\U{code_point:08x}"
+        return (
+            f"\\u{code_point:04x}" if code_point <= 0xFFFF else f"\\U{code_point:08x}"
+        )
 
     return "".join(escape(c) for c in code)
 

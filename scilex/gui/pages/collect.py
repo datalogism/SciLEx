@@ -19,6 +19,7 @@ from scilex.gui.services.collect_summary import (
     preflight_line,
     target_collection_dir,
 )
+from scilex.gui.services.extension_collection import ExtensionNeedsGroupError
 from scilex.gui.services.jobs import (
     COLLECT,
     EXCLUSIVE,
@@ -210,6 +211,15 @@ def render(ctx: AppContext, review: Review, extending: bool = False) -> None:
         "what is already collected (even a partial collection) with the current "
         "scilex.yml; nothing is collected again."
     ).classes("text-sm text-gray-500")
+    from scilex.gui.services import criteria as criteria_service
+
+    ui.label(
+        "After each aggregation, the saved eligibility criteria are applied: "
+        "excluded papers are tagged DELETED_BY:filter:<criterion>."
+        if criteria_service.path_of(review.folder).is_file()
+        else "Save the eligibility criteria (step Eligibility criteria) to have "
+        "them applied after each aggregation."
+    ).classes("text-sm text-gray-500").mark("collect-criteria-note")
 
     # The resume state needs a disk scan: compute it at render and when a job
     # finishes, never on the 0.5 s tick of the job panel.
@@ -449,7 +459,12 @@ def render(ctx: AppContext, review: Review, extending: bool = False) -> None:
                 fresh=not resume and extend is None,
                 extend=extend,
             )
-        except (SettingsError, FileNotFoundError, JobConflictError) as exc:
+        except (
+            SettingsError,
+            FileNotFoundError,
+            JobConflictError,
+            ExtensionNeedsGroupError,
+        ) as exc:
             show_error("Cannot start the collection", exc, expected=True)
         except Exception as exc:
             show_error("Cannot start the collection", exc)
@@ -490,7 +505,12 @@ def render(ctx: AppContext, review: Review, extending: bool = False) -> None:
                 skip_citations=skip_citations.value,
                 keep_outside=review.has_results,  # never drop imported or snowballed papers
             )
-        except (SettingsError, FileNotFoundError, JobConflictError) as exc:
+        except (
+            SettingsError,
+            FileNotFoundError,
+            JobConflictError,
+            ExtensionNeedsGroupError,
+        ) as exc:
             show_error("Cannot start the aggregation", exc, expected=True)
         except Exception as exc:
             show_error("Cannot start the aggregation", exc)

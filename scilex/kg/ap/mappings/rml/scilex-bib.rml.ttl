@@ -1,9 +1,10 @@
-# scilex-lpwc-ap -- iteration 3 -- RML mapping TEMPLATE: SciLEx BibLaTeX (as generic JSON) -> RDF
+# scilex-lpwc-ap -- iteration 4 -- RML mapping TEMPLATE: SciLEx BibLaTeX (as generic JSON) -> RDF
 #
-# iter3: one template for every collection. scripts/build_iteration.py expands
-#   {{BASE}} -> https://w3id.org/scilex/data/<slug>/   (collection namespace)
-#   {{JSON}} -> raw_data/<source>.json
-# from mappings/collections/<slug>.json, and runs morph-kgc once per collection.
+# One template for every collection. The placeholders ({{BASE}}, {{JSON}}) follow the
+# contract of mappings/ap_profile.py (PLACEHOLDERS, documented in mappings/README.md):
+#   {{BASE}} -> the profile's "base" (default https://w3id.org/scilex/data/<slug>/)
+#   {{JSON}} -> the collection's generic JSON (bib2json output)
+# An unknown placeholder fails the build (iter4, A2).
 #
 # Pipeline:  raw_data/*.bib --scripts/bib2json.py--> raw_data/*.json
 #            --this mapping + functions/scilex_udfs.py (morph-kgc)--> raw graph
@@ -38,6 +39,8 @@
 @prefix sxv:      <https://w3id.org/scilex/vocab#> .
 @prefix sxfn:     <https://w3id.org/scilex/fn#> .
 @prefix void:     <http://rdfs.org/ns/void#> .
+@prefix dcat:     <http://www.w3.org/ns/dcat#> .
+@prefix bibo:     <http://purl.org/ontology/bibo/> .
 @prefix :         <https://w3id.org/scilex/mapping/bib#> .
 
 # ---------------------------------------------------------------------------
@@ -53,6 +56,9 @@
 # iter2: multi-valued identifier fields (issn, isbn), one row per value
 :identifiers rml:source "{{JSON}}" ;
           rml:referenceFormulation rml:JSONPath ; rml:iterator "$.identifiers[*]" .
+# iter4: sub-corpora (Zotero collections) of each entry, one row per collection path
+:subcorpora rml:source "{{JSON}}" ;
+          rml:referenceFormulation rml:JSONPath ; rml:iterator "$.subcorpora[*]" .
 
 # ---------------------------------------------------------------------------
 # br -- the bibliographic resource (one per BibLaTeX entry)
@@ -92,7 +98,8 @@
             rml:functionExecution [ rml:function sxfn:seriesIssnIris ;
                 rml:input [ rml:parameter sxfn:value ; rml:inputValueMap [ rml:reference "series" ] ] ] ] ] ;
 
-    # iter3: staging copy of the note; sparql/03 reads citation counts from it, then deletes it
+    # staging copy of the note; sparql/03 reads citation counts from it, sparql/06 its
+    # `Key: value` lines (iter4), sparql/99 deletes it
     rml:predicateObjectMap [ rml:predicate <urn:scilex:staging#note> ; rml:objectMap [ rml:reference "note" ] ] ;
 
     # identifiers
@@ -122,12 +129,17 @@
                 rml:input [ rml:parameter sxfn:value ;  rml:inputValueMap [ rml:constant "br/venue/book" ] ] ;
                 rml:input [ rml:parameter sxfn:value2 ; rml:inputValueMap [ rml:reference "booktitle" ] ] ] ] ] ;
 
-    # event (LPWC conference)
+    # event: iter8 (ORSD VR4, VR5) -- lpwcp:hasConference the conference *series* (LPWC level),
+    # bibo:presentedAt the *edition* (series + year)
     rml:predicateObjectMap [ rml:predicate lpwcp:hasConference ;
         rml:objectMap [ rml:termType rml:IRI ;
-            rml:functionExecution [ rml:function sxfn:entityIri ;
-                rml:input [ rml:parameter sxfn:value ;  rml:inputValueMap [ rml:constant "conference" ] ] ;
-                rml:input [ rml:parameter sxfn:value2 ; rml:inputValueMap [ rml:reference "eventtitle" ] ] ] ] ] ;
+            rml:functionExecution [ rml:function sxfn:conferenceSeriesIri ;
+                rml:input [ rml:parameter sxfn:value ; rml:inputValueMap [ rml:reference "eventtitle" ] ] ] ] ] ;
+    rml:predicateObjectMap [ rml:predicate bibo:presentedAt ;
+        rml:objectMap [ rml:termType rml:IRI ;
+            rml:functionExecution [ rml:function sxfn:conferenceEditionIri ;
+                rml:input [ rml:parameter sxfn:value ;  rml:inputValueMap [ rml:reference "eventtitle" ] ] ;
+                rml:input [ rml:parameter sxfn:value2 ; rml:inputValueMap [ rml:reference "date" ] ] ] ] ] ;
 
     # publisher role (OCDM: agent role with pro:publisher)
     rml:predicateObjectMap [ rml:predicate pro:isDocumentContextFor ;
@@ -243,12 +255,31 @@
     rml:predicateObjectMap [ rml:predicate dcterms:title ; rml:objectMap [ rml:reference "series" ] ] .
 
 :Conference a rml:TriplesMap ;
+    # iter8: the conference *series* (LPWC conference level, ORSD VR5); name = eventtitle without
+    # year, ordinal or edition number. Several spellings may give one series: sparql/07 keeps one name.
     rml:logicalSource :entries ;
     rml:subjectMap [ rml:class lpwc:conference ;
-        rml:functionExecution [ rml:function sxfn:entityIri ;
-            rml:input [ rml:parameter sxfn:value ;  rml:inputValueMap [ rml:constant "conference" ] ] ;
-            rml:input [ rml:parameter sxfn:value2 ; rml:inputValueMap [ rml:reference "eventtitle" ] ] ] ] ;
-    rml:predicateObjectMap [ rml:predicate foaf:name ; rml:objectMap [ rml:reference "eventtitle" ] ] ;
+        rml:functionExecution [ rml:function sxfn:conferenceSeriesIri ;
+            rml:input [ rml:parameter sxfn:value ; rml:inputValueMap [ rml:reference "eventtitle" ] ] ] ] ;
+    # foaf:name: derived in sparql/07 from the editions' eventtitles (morph-kgc 2.10 cannot
+    # materialise FnO literals: KeyError 'reference_results')
+    rml:predicateObjectMap [ rml:predicate <urn:scilex:staging#eventtitle> ;
+        rml:objectMap [ rml:reference "eventtitle" ] ] .
+
+:ConferenceEdition a rml:TriplesMap ;
+    # iter8 (ORSD VR4): one edition (event) per series and year; it carries the place and the
+    # raw eventtitle(s). The place was on the series up to iter7, hence the "Findings 2021" warning.
+    rml:logicalSource :entries ;
+    rml:subjectMap [ rml:class bibo:Conference ;
+        rml:functionExecution [ rml:function sxfn:conferenceEditionIri ;
+            rml:input [ rml:parameter sxfn:value ;  rml:inputValueMap [ rml:reference "eventtitle" ] ] ;
+            rml:input [ rml:parameter sxfn:value2 ; rml:inputValueMap [ rml:reference "date" ] ] ] ] ;
+    rml:predicateObjectMap [ rml:predicate rdfs:label ; rml:objectMap [ rml:reference "eventtitle" ] ] ;
+    rml:predicateObjectMap [ rml:predicate dcterms:isPartOf ;
+        rml:objectMap [ rml:termType rml:IRI ;
+            rml:functionExecution [ rml:function sxfn:conferenceSeriesIri ;
+                rml:input [ rml:parameter sxfn:value ; rml:inputValueMap [ rml:reference "eventtitle" ] ] ] ] ] ;
+    # dcterms:date (xsd:gYear): from the edition IRI's last segment, in sparql/07
     rml:predicateObjectMap [ rml:predicate sxv:eventPlace ; rml:objectMap [ rml:reference "location" ] ] .
 
 # ---------------------------------------------------------------------------
@@ -336,3 +367,46 @@
                 rml:input [ rml:parameter sxfn:value ; rml:inputValueMap [ rml:reference "value" ] ] ] ] ] ;
     # raw tag; skos:altLabel / skos:prefLabel derived in sparql/04
     rml:predicateObjectMap [ rml:predicate skos:notation ; rml:objectMap [ rml:reference "value" ] ] .
+
+# iter4: origin of the dimension's tags (SciLEx / enrichment / grid / workflow), from the
+# collection profile (ORSD UCR3, UCR10, KR1). One of the sxv:TagOrigins concepts.
+:CodingScheme a rml:TriplesMap ;
+    rml:logicalSource :keywords ;
+    rml:subjectMap [
+        rml:functionExecution [ rml:function sxfn:codingScheme ;
+            rml:input [ rml:parameter sxfn:value ; rml:inputValueMap [ rml:reference "value" ] ] ] ] ;
+    rml:predicateObjectMap [
+        rml:predicate dcterms:type ;
+        rml:objectMap [ rml:termType rml:IRI ;
+            rml:functionExecution [ rml:function sxfn:tagOrigin ;
+                rml:input [ rml:parameter sxfn:value ; rml:inputValueMap [ rml:reference "value" ] ] ] ] ] .
+
+# ---------------------------------------------------------------------------
+# iter4: sub-corpora -- the Zotero collections of a review loaded from several
+# collections (ORSD UCR15, IR5). Each is a dcat:Dataset, void:subset of the
+# collection's dataset; its papers point to it with void:inDataset.
+# ---------------------------------------------------------------------------
+
+:SubCorpus a rml:TriplesMap ;
+    rml:logicalSource :subcorpora ;
+    rml:subjectMap [ rml:class dcat:Dataset ;
+        rml:functionExecution [ rml:function sxfn:subcorpusIri ;
+            rml:input [ rml:parameter sxfn:value ; rml:inputValueMap [ rml:reference "value" ] ] ] ] ;
+    rml:predicateObjectMap [ rml:predicate dcterms:title ; rml:objectMap [ rml:reference "value" ] ] ;
+    rml:predicateObjectMap [ rml:predicate dcterms:isPartOf ; rml:object <{{BASE}}> ] .
+
+:SubCorpusOfDataset a rml:TriplesMap ;
+    rml:logicalSource :subcorpora ;
+    rml:subjectMap [ rml:constant <{{BASE}}> ] ;
+    rml:predicateObjectMap [ rml:predicate void:subset ;
+        rml:objectMap [ rml:termType rml:IRI ;
+            rml:functionExecution [ rml:function sxfn:subcorpusIri ;
+                rml:input [ rml:parameter sxfn:value ; rml:inputValueMap [ rml:reference "value" ] ] ] ] ] .
+
+:SubCorpusMember a rml:TriplesMap ;
+    rml:logicalSource :subcorpora ;
+    rml:subjectMap [ rml:template "{{BASE}}br/{entry}" ] ;
+    rml:predicateObjectMap [ rml:predicate void:inDataset ;
+        rml:objectMap [ rml:termType rml:IRI ;
+            rml:functionExecution [ rml:function sxfn:subcorpusIri ;
+                rml:input [ rml:parameter sxfn:value ; rml:inputValueMap [ rml:reference "value" ] ] ] ] ] .

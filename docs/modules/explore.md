@@ -2,8 +2,10 @@
 
 <img src="../_static/modules/explore.png" alt="Explore module" height="80">
 
-Explore browses the papers of a review once it has some, at any step. It reads the
-corpus; the only things it writes are a few per-paper actions (validate, discard,
+Explore browses the papers of a review once it has some, at any step: the
+**Explore** button at the top right of every review screen opens it full screen over
+the current step (close it to come back; **Reload** reads the papers again). It reads
+the corpus; the only things it writes are a few per-paper actions (validate, discard,
 enrich one paper). Screening decisions are taken in [③ Screen](screen.md).
 
 | Sub-module | What it does |
@@ -19,7 +21,8 @@ Filter by screening decision, a title/abstract search, and property filters: doc
 type, [paper type](enrich.md#paper-types), origin (Collect, Extend collect, Zotero,
 knowledge graph or BibTeX import, Snowball), import date, source API, Zotero
 collection, search keywords, tags, LPWC tasks and datasets, ORKG research problems and
-fields, annotation status, annotator and validator. Only the properties whose values
+fields, annotation status, annotator and validator (folded under **Filters**, above the
+article list). Only the properties whose values
 differ between papers are offered. Several values of one filter: any of them; several
 filters: all of them. **(none)** selects the papers without a value. The count of
 matching papers is shown.
@@ -31,9 +34,16 @@ each paper first entered the review. Papers already there before this log existe
 **Save selection** writes the matching papers, with every column, to
 `output/<name>/explore_selection.csv`.
 
+**Eligibility** filters on the [eligibility criteria](criteria.md): papers that meet
+all the enabled criteria (exceptions count as met), those that fail one, those kept by
+an exception, or those a given criterion excludes. The criteria are judged on the
+whole corpus, as in [Test](criteria.md#test), whether or not they were applied yet; the
+**Criteria** column lists the ones a paper does not meet (`*`: kept by an exception),
+with the causes as tooltip.
+
 ## Break down by
 
-Draws the selection per value of any property (type, origin, collection, tags, LPWC
+Folded under the article list, draws the selection per value of any property (type, origin, collection, tags, LPWC
 tasks…). Clicking a bar filters on that value.
 
 ## Paper notice
@@ -59,6 +69,7 @@ the [citation graph](analyses.md#graph).
 ## Enrich one paper
 
 The **Enrich** menu of the notice runs one enricher of [⑥ Enrich](enrich.md) on this
-paper only: Crossref, Linked Papers With Code, ORKG, paper type or search keywords.
+paper only: Crossref, Linked Papers With Code, ORKG, GitHub, Zenodo, paper type, short
+title or search keywords.
 Each runs exactly as in ⑥ Enrich (cached answers are reused); what it fills is written
 into the review's results and shared through the Zotero sync.

@@ -147,6 +147,9 @@ def test_fresh_run_deletes_previous_raw_results(tmp_path):
     review = workspace.create_review(tmp_path / "rag", name="rag_kg")
     _interrupted_collection(review)
     (review.collection_dir / "aggregated_results.csv").write_text("old")
+    from scilex.gui.services import zotero_library as _zl
+
+    _zl.save_source(review.folder, _zl.ZoteroSource("42", "group", None, ""))
     config = Workspace.load_config(review)
     assert target_collection_dir(config) == review.collection_dir
     assert [p.name for p in collected_api_dirs(review.collection_dir)] == ["OpenAlex"]

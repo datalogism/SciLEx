@@ -16,6 +16,9 @@ write only the cells they changed.
 | <a href="#crossref"><img src="../_static/modules/sub/enrich-crossref.png" height="30" alt="Crossref"></a> | Abstracts, venues, dates, licences, funders | Crossref |
 | <a href="#linked-papers-with-code"><img src="../_static/modules/sub/enrich-lpwc.png" height="30" alt="Linked Papers With Code"></a> | Tasks, methods, datasets, repositories, conference | LPWC |
 | <a href="#orkg"><img src="../_static/modules/sub/enrich-orkg.png" height="30" alt="ORKG"></a> | Research fields and problems | ORKG |
+| [GitHub licences](#github-licences) | Licence of the code | GitHub |
+| [Zenodo](#zenodo) | Data and code deposits, their licences | Zenodo |
+| [Short titles](#short-titles) | `shortTitle` (acronym of the title) | none |
 | <a href="#search-keywords"><img src="../_static/modules/sub/enrich-search-keywords.png" height="30" alt="Search keywords"></a> | `Collect_KW<n>:` and `BK:` tags | none |
 | <a href="#paper-types"><img src="../_static/modules/sub/enrich-paper-types.png" height="30" alt="Paper types"></a> | `PAPER_TYPE:` tag | none |
 | <a href="#citation-metrics"><img src="../_static/modules/sub/enrich-metrics.png" height="30" alt="Citation metrics"></a> | `metric_*` columns and metric tags | none |
@@ -63,6 +66,50 @@ By arXiv id, else exact title: `lpwc_tasks`, `lpwc_methods`, `lpwc_datasets`,
 By DOI, else exact title: `orkg_paper`, `orkg_research_fields`,
 `orkg_research_problems` (of the paper's contributions) from the Open Research
 Knowledge Graph.
+
+## GitHub licences
+
+For each paper with a GitHub repository (`github_repo`, `pwc_repository` or
+`lpwc_repositories`: run Papers with Code or Linked Papers With Code first):
+`code_license` (SPDX id such as `MIT` or `Apache-2.0`, `Other` when GitHub cannot
+name it) and `code_repository`. A paper with several repositories takes the first
+licensed one. Papers that already have a `code_license` are not looked up again.
+Without a token GitHub answers 60 repositories an hour: the run stops when the limit
+is reached and says so; rerun later, or add a token (no permission needed) in
+**Keys > GitHub** (`GitHub: token:` in `keys.yml`, or `SCILEX_GITHUB_TOKEN`) for
+5,000 an hour.
+
+## Zenodo
+
+Finds the Zenodo deposits of a paper's data or code, in two ways:
+
+- records the paper links to: a Zenodo DOI (`10.5281/zenodo.N`) or a Zenodo link in
+  its DOI, URL or abstract (dataset papers often give one);
+- records naming the paper's DOI among their *related identifiers* (a deposit marked
+  *is supplement to* the paper).
+
+It writes `zenodo_records`, `zenodo_dois`, `zenodo_license` (e.g. `cc-by-4.0`),
+`zenodo_types` (dataset, software…), `zenodo_size` and `zenodo_downloads`. The
+licence of a software deposit also fills `code_license` when empty. **Only the dataset
+papers** limits the run to `PAPER_TYPE:Dataset` papers. Papers whose `zenodo_records`
+is already filled are kept as they are. An optional token (**Keys > Zenodo**) raises
+the request rate.
+
+## Short titles
+
+Gives each paper without a short title the acronym its title names:
+
+- the prefix before a colon or a dash: *BERT: Pre-training of…* → `BERT`,
+  *GPT-4 – Technical report* → `GPT-4`;
+- an acronym in parentheses spelled by the words before it: *Holistic Evaluation of
+  Language Models (HELM)* → `HELM`.
+
+Only acronym-like names are taken (capitals inside the word or digits: `SQuAD`,
+`RoBERTa`, `T5`, `word2vec`), never plain words (*Transformers: …*) or phrases
+(*Lost in the Middle: …*). A prefix starting several titles of the corpus (*COVID-19:
+…*) is a topic and is left out. A short title already set (in Zotero or SciLEx) is
+never changed. The `shortTitle` column is Zotero's *Short Title* (shared by the sync)
+and `fabio:hasShortTitle` in the knowledge graph.
 
 ## Search keywords
 

@@ -147,9 +147,25 @@ def test_list_collections_builds_paths():
     ]
 
 
-def test_credentials_require_key_and_library():
+def test_credentials_require_a_key_and_default_to_the_key_owner(monkeypatch):
     with pytest.raises(zl.ZoteroNotConfiguredError):
-        zl.zotero_credentials({"Zotero": {"api_key": "k"}})
+        zl.zotero_credentials({"Zotero": {"user_id": 5}})
+
+    # Without a library id, the key owner's library is used (asked to Zotero,
+    # stubbed here so the test never reaches the network).
+    asked = []
+
+    def fake_key_info(api_key, refresh=False):
+        asked.append(api_key)
+        if api_key == "refused":
+            raise zl.ZoteroNotConfiguredError("refused")
+        return zl.ZoteroKeyInfo(user_id="77")
+
+    monkeypatch.setattr(zl, "key_info", fake_key_info)
+    assert zl.zotero_credentials({"Zotero": {"api_key": "k"}}) == ("k", "77", "user")
+    with pytest.raises(zl.ZoteroNotConfiguredError):
+        zl.zotero_credentials({"Zotero": {"api_key": "refused"}})
+    assert asked == ["k", "refused"]
     assert zl.zotero_credentials(
         {"Zotero": {"api_key": ["k1", "k2"], "user_id": 5, "user_mode": "group"}}
     ) == ("k1", "5", "group")

@@ -4,15 +4,19 @@ Each review has a dedicated Zotero group, chosen among the groups the global
 Zotero key reaches. This page shows the group (type, rights, papers, link on
 zotero.org), the part of it the review uses, and the people: the group's
 owner, admins and members, completed by ``members.yml`` (names, ORCID iDs).
+It also sets the role of each collection of the group: automatic (filled by
+SciLEx) or screened results (filled by people, with a paper type), see
+:mod:`scilex.gui.services.collection_roles`.
 """
 
 from __future__ import annotations
 
 from nicegui import run, ui
 
+from scilex import paper_types
 from scilex.gui.components.errors import show_error
 from scilex.gui.components.review_group import choose_group_dialog, group_problem
-from scilex.gui.services import keys_editor, members, zotero_library
+from scilex.gui.services import collection_roles, keys_editor, members, zotero_library
 from scilex.gui.services.workspace import Review
 from scilex.gui.state import AppContext
 
@@ -100,6 +104,7 @@ async def _load(review: Review, source, container: ui.column) -> None:
             ).mark("group-error")
         if group is not None:
             _group_card(group, info)
+        _roles_card(review, source)
         _members_card(review, group)
 
 
@@ -219,3 +224,129 @@ def _members_card(review: Review, group) -> None:
             table.refresh()
 
         refresh.on_click(discover)
+
+
+NO_TYPE = "—"
+
+
+def cr_map(roles: list) -> dict:
+    return {role.path: role for role in roles}
+
+
+def _roles_card(review: Review, source) -> None:
+    """Role of each collection: automatic, or screened results with a type."""
+    card = ui.card().classes("w-full gap-2").mark("group-roles")
+    with card:
+        ui.label("Collections: automatic or screened results").classes(
+            "text-lg font-bold"
+        )
+        ui.label(
+            "Automatic collections are filled by SciLEx (collect, extensions). "
+            "Screened-results collections are those people fill by hand: Explore "
+            "and the Dashboard show their papers by default, each gets the "
+            "collection's paper type, and it stays in the corpus even when an "
+            "eligibility criterion would discard it (KEEP:screened tag)."
+        ).classes("text-sm text-gray-500")
+        holder = ui.column().classes("w-full gap-1")
+        with holder:
+            ui.spinner()
+
+    async def fill() -> None:
+        try:
+            keys = keys_editor.effective_keys(review.folder)
+            api = zotero_library.client(keys, library=source)
+            collections = await run.io_bound(zotero_library.list_collections, api)
+        except Exception as exc:  # offline, key refused
+            holder.clear()
+            with holder:
+                ui.label(f"The collections could not be read: {exc}").classes(
+                    "text-sm text-negative"
+                )
+            return
+        saved = collection_roles.load(review.folder)
+        roles = collection_roles.proposal(collections, saved, review.name)
+        counts = {c.path: c.num_items for c in collections}
+        holder.clear()
+        with holder:
+            if not saved:
+                ui.label(
+                    "Roles not saved yet: proposed from the collection names."
+                ).classes("text-sm text-orange-700")
+            rows = []
+            for role in roles:
+                with ui.row().classes("items-center gap-3 no-wrap w-full"):
+                    ui.label(role.path).classes("text-sm grow min-w-0 truncate")
+                    ui.label(f"{counts.get(role.path, 0)} items").classes(
+                        "text-xs text-gray-500 w-20 shrink-0"
+                    )
+                    kind = (
+                        ui.select(
+                            [NO_TYPE, *paper_types.TYPES],
+                            value=role.paper_type or NO_TYPE,
+                            label="Paper type",
+                        )
+                        .props("dense outlined options-dense")
+                        .classes("w-56")
+                    )
+                    which = ui.toggle(collection_roles.ROLES, value=role.role).props(
+                        "dense no-caps"
+                    )
+                    kind.bind_visibility_from(
+                        which, "value", value=collection_roles.SCREENED
+                    )
+                    rows.append((role, which, kind))
+            with ui.row().classes("items-center gap-2 mt-2"):
+                save_button = (
+                    ui.button("Save and apply", icon="save")
+                    .props("no-caps")
+                    .mark("group-roles-save")
+                )
+                status = ui.label().classes("text-sm text-gray-600")
+
+        async def save() -> None:
+            chosen = [
+                collection_roles.CollectionRole(
+                    key=role.key,
+                    path=role.path,
+                    role=which.value,
+                    paper_type=(
+                        kind.value
+                        if which.value == collection_roles.SCREENED
+                        and kind.value != NO_TYPE
+                        else None
+                    ),
+                )
+                for role, which, kind in rows
+            ]
+            save_button.disable()
+            status.text = "Reading the papers' collections from Zotero…"
+            try:
+                collection_roles.save(review.folder, chosen)
+                moved = await run.io_bound(
+                    collection_roles.refresh_from_zotero, review, cr_map(chosen)
+                )
+                done = await run.io_bound(collection_roles.apply, review)
+            except Exception as exc:
+                show_error("Cannot apply the collection roles", exc)
+                status.text = ""
+                return
+            finally:
+                save_button.enable()
+            status.text = (
+                f"{done['screened']} papers in screened collections; "
+                f"{done['typed']} paper types set, {done['kept_tagged']} tagged "
+                f"KEEP:screened, {done['untagged']} untagged; "
+                f"{moved['changed']} papers' collections refreshed"
+                + (f", {moved['gone']} no longer in Zotero" if moved["gone"] else "")
+                + (
+                    f", {moved['added']} screened papers added from Zotero"
+                    if moved["added"]
+                    else ""
+                )
+                + ". Push the changes to Zotero with the sync button."
+            )
+            ui.notify("Collection roles applied", type="positive")
+
+        save_button.on_click(save)
+
+    ui.timer(0, fill, once=True)

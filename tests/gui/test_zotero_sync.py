@@ -41,9 +41,16 @@ class FakeZotero:
             "key": key,
             "version": self.version,
             "data": {
-                "key": key, "itemType": "journalArticle", "title": title, "DOI": doi,
-                "date": "2021", "abstractNote": "", "url": "", "collections": list(collections),
-                "tags": [{"tag": t} for t in tags], **fields,
+                "key": key,
+                "itemType": "journalArticle",
+                "title": title,
+                "DOI": doi,
+                "date": "2021",
+                "abstractNote": "",
+                "url": "",
+                "collections": list(collections),
+                "tags": [{"tag": t} for t in tags],
+                **fields,
             },
         }
 
@@ -61,17 +68,37 @@ class FakeZotero:
     def _get(self, path, params=None):
         params = params or {}
         if path == "/items/top" and "since" in params:
-            body = {k: i["version"] for k, i in self.items.items() if i["version"] > params["since"]}
+            body = {
+                k: i["version"]
+                for k, i in self.items.items()
+                if i["version"] > params["since"]
+            }
         elif path == "/items/top":
             body = []
         elif path == "/deleted":
-            body = {"items": [k for k, v in self.deleted.items() if v > params["since"]]}
+            body = {
+                "items": [k for k, v in self.deleted.items() if v > params["since"]]
+            }
         elif path == "/items":
             keys = params["itemKey"].split(",")
             body = [copy.deepcopy(self.items[k]) for k in keys if k in self.items]
         else:
             raise AssertionError(path)
         return _Response(body, self.version)
+
+    def get_collections(self):
+        names = {COLLECTION: "rev", "SCR": "surveys", "SUB": "Website"}
+        return [
+            {
+                "data": {
+                    "key": key,
+                    "name": name,
+                    "parentCollection": "SCR" if key == "SUB" else False,
+                },
+                "meta": {},
+            }
+            for key, name in names.items()
+        ]
 
     def _post(self, path, batch):
         successful, failed = {}, {}
@@ -81,7 +108,9 @@ class FakeZotero:
                 failed[str(index)] = {"message": "version mismatch"}
                 continue
             self.version += 1
-            item["data"].update({k: v for k, v in entry.items() if k not in ("key", "version")})
+            item["data"].update(
+                {k: v for k, v in entry.items() if k not in ("key", "version")}
+            )
             item["version"] = self.version
             successful[str(index)] = item
         return _Response({"successful": successful, "failed": failed}, self.version)
@@ -94,7 +123,12 @@ def zotero(monkeypatch):
     fake.add("K2", "Knowledge graphs", doi="10.1/b")
     monkeypatch.setattr(sync, "_api", lambda review: (fake, None))
     monkeypatch.setattr(
-        sync, "_fetch_all", lambda review, api, source: (copy.deepcopy(list(fake.items.values())), [COLLECTION])
+        sync,
+        "_fetch_all",
+        lambda review, api, source: (
+            copy.deepcopy(list(fake.items.values())),
+            [COLLECTION],
+        ),
     )
     return fake
 
@@ -106,9 +140,30 @@ def review(ctx, tmp_path):
     write_results(
         pd.DataFrame(
             [
-                {"itemType": "journalArticle", "title": "Graph RAG", "DOI": "10.1/a", "date": "2021", "abstract": "NA", "tags": "Tool:Blender"},
-                {"itemType": "journalArticle", "title": "Knowledge graphs", "DOI": "10.1/b", "date": "2021", "abstract": "NA", "tags": "NA"},
-                {"itemType": "journalArticle", "title": "Only in SciLEx", "DOI": "10.1/c", "date": "2022", "abstract": "NA", "tags": "NA"},
+                {
+                    "itemType": "journalArticle",
+                    "title": "Graph RAG",
+                    "DOI": "10.1/a",
+                    "date": "2021",
+                    "abstract": "NA",
+                    "tags": "Tool:Blender",
+                },
+                {
+                    "itemType": "journalArticle",
+                    "title": "Knowledge graphs",
+                    "DOI": "10.1/b",
+                    "date": "2021",
+                    "abstract": "NA",
+                    "tags": "NA",
+                },
+                {
+                    "itemType": "journalArticle",
+                    "title": "Only in SciLEx",
+                    "DOI": "10.1/c",
+                    "date": "2022",
+                    "abstract": "NA",
+                    "tags": "NA",
+                },
             ]
         ),
         review.results_path,
@@ -130,14 +185,24 @@ def test_link_gives_each_copy_of_a_paper_its_own_item(review, zotero):
     data = read_results(review.results_path)
     copies = pd.DataFrame(
         [
-            {"itemType": "journalArticle", "title": "DocRED", "DOI": "10.1/docred", "date": "2019", "zotero_collections": corpus}
+            {
+                "itemType": "journalArticle",
+                "title": "DocRED",
+                "DOI": "10.1/docred",
+                "date": "2019",
+                "zotero_collections": corpus,
+            }
             for corpus in ("datasets", "models")
         ]
     )
     write_results(pd.concat([data, copies], ignore_index=True), review.results_path)
 
     assert sync.link(review)["linked"] == 4
-    keys = {r["zotero_collections"]: r["zotero_key"] for r in read_results(review.results_path).to_dict("records") if r["title"] == "DocRED"}
+    keys = {
+        r["zotero_collections"]: r["zotero_key"]
+        for r in read_results(review.results_path).to_dict("records")
+        if r["title"] == "DocRED"
+    }
     assert keys == {"datasets": "KD", "models": "KM"}
 
 
@@ -148,7 +213,17 @@ def test_link_prefers_required_subcorpora_over_import_copies(review, zotero):
     zotero.items["KCOPY"]["_scilex_collections"] = ["datasets 10/11/2026 15:35:35"]
     zotero.items["KREAL"]["_scilex_collections"] = ["datasets"]
     data = read_results(review.results_path)
-    row = pd.DataFrame([{"itemType": "journalArticle", "title": "DocRED", "DOI": "10.1/docred", "date": "2019", "zotero_key": "KCOPY"}])
+    row = pd.DataFrame(
+        [
+            {
+                "itemType": "journalArticle",
+                "title": "DocRED",
+                "DOI": "10.1/docred",
+                "date": "2019",
+                "zotero_key": "KCOPY",
+            }
+        ]
+    )
     write_results(pd.concat([data, row], ignore_index=True), review.results_path)
 
     sync.link(review, required=["datasets", "models", "surveys"])
@@ -170,7 +245,9 @@ def test_link_matches_by_doi_and_starts_in_sync(review, zotero):
 
 def test_zotero_changes_are_pulled(review, zotero):
     sync.link(review)
-    zotero.edit("K1", tags=["Tool:Blender", "Onto:CIDOC-CRM"], abstractNote="New abstract")
+    zotero.edit(
+        "K1", tags=["Tool:Blender", "Onto:CIDOC-CRM"], abstractNote="New abstract"
+    )
     status = sync.check(review)
     assert status.state == "pull" and status.zotero_count == 1
     assert status.zotero_changed[0].added == {"Onto:CIDOC-CRM"}
@@ -179,6 +256,25 @@ def test_zotero_changes_are_pulled(review, zotero):
     assert row["abstract"] == "New abstract"
     assert set(row["tags"].split(";")) == {"Tool:Blender", "Onto:CIDOC-CRM"}
     assert sync.check(review).state == "synced"
+
+
+def test_pull_follows_collection_moves_and_removals(review, zotero):
+    zotero.items["K1"]["_scilex_collections"] = ["rev"]
+    sync.link(review)
+    assert _rows(review)["Graph RAG"]["zotero_collections"] == "rev"
+    # Moving a paper between collections changes no field, only its version.
+    zotero.edit("K2", collections=[COLLECTION, "SUB"])
+    zotero.version += 1
+    zotero.deleted["K1"] = zotero.version
+    status = sync.check(review)
+    result = sync.pull(review, status)
+    assert result["moved"] == 2 and result["removed"] == 1
+    rows = _rows(review)
+    assert rows["Knowledge graphs"]["zotero_collections"] == "rev;surveys / Website"
+    assert (
+        pd.isna(rows["Graph RAG"]["zotero_collections"])
+        or not rows["Graph RAG"]["zotero_collections"]
+    )
 
 
 def test_screening_and_enrichment_are_pushed(review, zotero):
@@ -206,7 +302,9 @@ def test_both_sides_and_conflict_resolution(review, zotero):
     assert status.state == "conflict"
     conflict = status.conflicts[0]
     assert (conflict.what, conflict.local, conflict.zotero) == (
-        "title", "Graph RAG (SciLEx)", "Graph RAG (Zotero)"
+        "title",
+        "Graph RAG (SciLEx)",
+        "Graph RAG (Zotero)",
     )
     sync.resolve(review, conflict, "zotero")
     assert "Graph RAG (Zotero)" in _rows(review)
@@ -241,7 +339,11 @@ def test_tags_merge_from_both_sides(review, zotero):
     assert status.state == "push"
     sync.push(review, status)
     assert zotero.tags("K1") == ["Onto:PROV-O", "Step:3", "Tool:Blender"]
-    assert set(_rows(review)["Graph RAG"]["tags"].split(";")) == {"Tool:Blender", "Step:3", "Onto:PROV-O"}
+    assert set(_rows(review)["Graph RAG"]["tags"].split(";")) == {
+        "Tool:Blender",
+        "Step:3",
+        "Onto:PROV-O",
+    }
     assert sync.check(review).state == "synced"
 
 
@@ -256,6 +358,47 @@ def test_new_zotero_papers_and_screen_tags_are_pulled(review, zotero):
     assert row["zotero_key"] == "K3"
     decision = screening.load_decisions(review)[screening.paper_key(row)]
     assert decision.decision == screening.EXCLUDE
+    assert sync.check(review).state == "synced"
+
+
+def _discard_only_in_scilex(review):
+    data = read_results(review.results_path)
+    data.loc[data["title"] == "Only in SciLEx", "tags"] = "DELETED_BY:filter:C9"
+    write_results(data, review.results_path)
+    row = _rows(review)["Only in SciLEx"]
+    screening.set_decision(review, screening.paper_key(row), screening.EXCLUDE)
+
+
+def test_papers_pushed_after_the_link_are_linked_and_their_tags_merged(review, zotero):
+    sync.link(review)
+    _discard_only_in_scilex(review)
+    # ⑧ Export pushed it later: Zotero added its own tag, not the decision.
+    zotero.add("K3", "Only in SciLEx", doi="10.1/c", tags=["HavePDF"])
+    assert sync.link_new(review) == {"linked": 1, "unlinked": 0}
+    assert _rows(review)["Only in SciLEx"]["zotero_key"] == "K3"
+
+    status = sync.check(review)
+    assert status.local_unlinked == 0 and not status.zotero_new
+    sync.pull(review, sync.check(review))
+    sync.push(review, sync.check(review))
+    assert zotero.tags("K3") == ["DELETED_BY:filter:C9", "HavePDF", "SCREEN:Exclude"]
+    assert set(_rows(review)["Only in SciLEx"]["tags"].split(";")) == {
+        "DELETED_BY:filter:C9",
+        "HavePDF",
+    }
+    assert sync.check(review).state == "synced"
+
+
+def test_pull_links_pushed_papers_instead_of_copying_them(review, zotero):
+    sync.link(review)
+    _discard_only_in_scilex(review)
+    zotero.add("K3", "Only in SciLEx", doi="10.1/c")
+    status = sync.check(review)
+    assert [i["key"] for i in status.zotero_new] == ["K3"]
+    assert sync.pull(review, status)["added"] == 0
+    assert len(read_results(review.results_path)) == 3
+    sync.push(review, sync.check(review))
+    assert "SCREEN:Exclude" in zotero.tags("K3")
     assert sync.check(review).state == "synced"
 
 

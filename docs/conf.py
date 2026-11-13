@@ -15,7 +15,14 @@ myst_enable_extensions = [
 ]
 
 templates_path = ["_templates"]
-exclude_patterns = ["_build", "_tools", "wip", "superpowers", "decisions"]
+exclude_patterns = [
+    "_build",
+    "_tools",
+    "wip",
+    "superpowers",
+    "decisions",
+    "ontology-dev",
+]
 
 html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]

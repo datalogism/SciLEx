@@ -141,7 +141,16 @@ def _review_with_results(ctx, tmp_path):
     review = ctx.workspace.create_review(tmp_path / "rag", name="rag_kg")
     review.collection_dir.mkdir(parents=True)
     review.results_path.write_text("title\nA\n")
+    _give_group(review)  # Extend needs a group (each extension gets a collection)
     return review
+
+
+def _give_group(review):
+    from scilex.gui.services import zotero_library
+
+    zotero_library.save_source(
+        review.folder, zotero_library.ZoteroSource("42", "group", None, "")
+    )
 
 
 # --- page ---------------------------------------------------------------------
@@ -246,6 +255,7 @@ def _review_with_dois(ctx, tmp_path, count=3):
         + "\n".join(f"journalArticle,T{i},10.1/{i}" for i in range(count))
         + "\n"
     )
+    _give_group(review)
     return review
 
 
@@ -481,8 +491,11 @@ def test_tabs_follow_prerequisites():
         "enrich",
         "crossref",
         "lpwc",
+        "github",
+        "zenodo",
         "search_keywords",
         "paper_types",
+        "short_titles",
         "orkg",
         "metrics",
     ]

@@ -4,8 +4,13 @@ Screening decisions are taken in ③ Screen; a notice can mark the paper as
 validated against the grid or discard it (``ANNOT_VALID_BY`` / ``DELETED_BY``
 tags with the user's ORCID iD, see :mod:`scilex.review_tags`). The filters are those of Screen
 (document type, origin, import date, source, Zotero collection, keywords,
-tags, LPWC and ORKG terms); a bar chart breaks the selection down by any of
-them, and clicking a bar (or a value in a notice) filters on it.
+tags, LPWC and ORKG terms), folded under the article list, plus the
+**eligibility criteria**: each paper is judged against the enabled criteria
+of the review (on the whole corpus, so duplicates and "top % by PageRank"
+rules are right) and the list can show the eligible papers, those a given
+criterion excludes, or those kept by an exception. A folded bar chart breaks
+the selection down by any facet; clicking a bar (or a value in a notice)
+filters on it.
 """
 
 from __future__ import annotations
@@ -19,8 +24,18 @@ from nicegui import events, run, ui
 from scilex import review_tags
 from scilex.constants import doi_to_url, is_valid
 from scilex.gui.components import criteria_panel, paper_details
+from scilex.gui.components import eligibility_filter as elig
+from scilex.gui.components.eligibility_filter import (  # noqa: F401 (re-exported)
+    ELIGIBLE,
+    ELIGIBLE_ALL,
+    FAIL_PREFIX,
+    KEPT_BY_EXCEPTION,
+    NOT_ELIGIBLE,
+    compute_eligibility,
+)
 from scilex.gui.components.errors import show_error
 from scilex.gui.pages.overview import _hbar
+from scilex.gui.services import criteria as criteria_service
 from scilex.gui.services import members, paper_enrich, zotero_library
 from scilex.gui.services.screening import (
     DECISION_LABELS,
@@ -76,6 +91,7 @@ COLUMN_DEFS = [
         "headerTooltip": "Papers of this review citing it (citation network "
         "fetched in ⑥ Enrich)",
     },
+    elig.CRITERIA_COLUMN,
     {"field": "decision", "headerName": "Decision", "width": 110},
 ]
 # Notice sections: (label, facet) shown as clickable chips.
@@ -120,14 +136,24 @@ def render(ctx: AppContext, review: Review) -> None:
         "any property, and open the full notice of a paper. Click a bar or a value "
         "of a notice to filter on it."
     ).classes("text-gray-500")
+    from scilex.gui.components import scope_switch
+
+    scope_switch.switch(review, lambda _: ui.timer(0, load, once=True))
     container = ui.column().classes("w-full gap-3")
-    with container, ui.row().classes("items-center gap-2") as loading:
-        ui.spinner()
-        ui.label("Loading papers…")
 
     async def load() -> None:
+        if container.is_deleted:
+            return
+        container.clear()
+        with container, ui.row().classes("items-center gap-2") as loading:
+            ui.spinner()
+            ui.label("Loading papers…")
         try:
-            session = await run.io_bound(ScreeningSession, review)
+            session = await run.io_bound(
+                scope_switch.load_session, review, scope_switch.current(review)
+            )
+            items = criteria_panel.load_criteria(review)
+            verdicts = await run.io_bound(compute_eligibility, session, items)
         except Exception as exc:
             if container.is_deleted:
                 return
@@ -143,7 +169,9 @@ def render(ctx: AppContext, review: Review) -> None:
             return
         loading.delete()
         with container:
-            ExplorePage(review, session, ctx.profile, ctx=ctx).build()
+            ExplorePage(
+                review, session, ctx.profile, ctx=ctx, eligibility=(items, verdicts)
+            ).build()
 
     ui.timer(0, load, once=True)
 
@@ -158,12 +186,25 @@ class ExplorePage:
     """UI state of the Explore screen."""
 
     def __init__(
-        self, review: Review, session: ScreeningSession, profile=None, ctx=None
+        self,
+        review: Review,
+        session: ScreeningSession,
+        profile=None,
+        ctx=None,
+        eligibility: tuple[list, dict] | None = None,
     ):
-        """Bind the page to the papers of ``review``; ``profile``: the app user."""
+        """Bind the page to the papers of ``review``; ``profile``: the app user.
+
+        ``eligibility``: ``(criteria, verdicts)`` already computed (else here).
+        """
         self.review = review
         self.ctx = ctx  # runs the enrichment of one paper (None: not offered)
-        self.criteria = criteria_panel.load_criteria(review)
+        if eligibility is None:
+            self.criteria = criteria_panel.load_criteria(review)
+            self.verdicts = compute_eligibility(session, self.criteria)
+        else:
+            self.criteria, self.verdicts = eligibility
+        self.eligibility_filter = ELIGIBLE_ALL
         from scilex.gui.services import zotero_library
 
         try:
@@ -198,6 +239,13 @@ class ExplorePage:
             ).props("dense outlined clearable debounce=300").classes("grow").mark(
                 "explore-search"
             )
+            if self.enabled_criteria:
+                ui.select(
+                    self.eligibility_options(),
+                    value=ELIGIBLE_ALL,
+                    label="Eligibility",
+                    on_change=self.on_eligibility,
+                ).props("dense outlined").classes("w-72").mark("explore-eligibility")
             self.count = ui.label().classes("text-sm font-medium").mark("explore-count")
             ui.button(
                 "Clear filters", icon="filter_list_off", on_click=self.clear
@@ -207,21 +255,14 @@ class ExplorePage:
             ).props("outline dense no-caps").tooltip(
                 f"Write the selected papers to {SELECTION_FILENAME}"
             ).mark("explore-save")
-        self.filter_grid()
-        with ui.card().classes("w-full gap-1"):
-            with ui.row().classes("items-center gap-2"):
-                ui.label("Break down by").classes("text-sm font-medium")
-                ui.select(
-                    {facet: FACETS[facet] for facet in self.options},
-                    value=self.breakdown,
-                    on_change=self.on_breakdown,
-                ).props("dense outlined").classes("w-64").mark("explore-breakdown")
-            self.chart = (
-                ui.echart(_hbar({}), on_point_click=self.on_bar_click)
-                .classes("w-full")
-                .style("height: 280px")
-                .mark("explore-chart")
-            )
+        self.filters_box = (
+            ui.expansion("Filters", icon="filter_list")
+            .classes("w-full")
+            .props("dense")
+            .mark("explore-filters")
+        )
+        with self.filters_box:
+            self.filter_grid()
         with ui.element("div").classes("w-full grid gap-3 lg:grid-cols-5"):
             with ui.element("div").classes("lg:col-span-3 min-w-0"):
                 self.grid = (
@@ -246,6 +287,48 @@ class ExplorePage:
                 self.grid.on("selectionChanged", self.on_grid_selection)
             with ui.element("div").classes("lg:col-span-2 min-w-0"):
                 self.notice()
+        with (
+            ui.expansion("Break the selection down", icon="bar_chart")
+            .classes("w-full")
+            .props("dense"),
+            ui.card().classes("w-full gap-1"),
+        ):
+            with ui.row().classes("items-center gap-2"):
+                ui.label("Break down by").classes("text-sm font-medium")
+                ui.select(
+                    {facet: FACETS[facet] for facet in self.options},
+                    value=self.breakdown,
+                    on_change=self.on_breakdown,
+                ).props("dense outlined").classes("w-64").mark("explore-breakdown")
+            self.chart = (
+                ui.echart(_hbar({}), on_point_click=self.on_bar_click)
+                .classes("w-full")
+                .style("height: 280px")
+                .mark("explore-chart")
+            )
+        self.refill()
+
+    # -- eligibility ------------------------------------------------------
+
+    @property
+    def enabled_criteria(self) -> list:
+        return elig.enabled(self.criteria)
+
+    def eligibility_options(self) -> dict[str, str]:
+        """Choices of the Eligibility filter, with their paper counts."""
+        keys = [row["paper_key"] for row in self.session.rows]
+        return elig.options(keys, self.criteria, self.verdicts)
+
+    def _eligible(self, key: str) -> bool:
+        """Whether paper ``key`` passes the Eligibility filter."""
+        return elig.matches(self.eligibility_filter, self.verdicts.get(key, {}))
+
+    def _criteria_cells(self, row: dict) -> dict:
+        """The Criteria column of a grid row (ids not met, causes as tooltip)."""
+        return elig.criteria_cells(row, self.verdicts.get(row["paper_key"], {}))
+
+    def on_eligibility(self, event: events.ValueChangeEventArguments) -> None:
+        self.eligibility_filter = event.value or ELIGIBLE_ALL
         self.refill()
 
     def filter_grid(self) -> None:
@@ -348,6 +431,7 @@ class ExplorePage:
                     self.criteria,
                     change,
                     included=bool(decision and decision.decision == "include"),
+                    live=self.verdicts.get(key, {}),
                 )
             counts = [
                 f"{label}: {int(float(record[column]))}"
@@ -428,6 +512,13 @@ class ExplorePage:
             return
         if key in new:
             self.session.set_tags(key, new[key])
+        if any(t.startswith(f"{criteria_service.KEEP}:") for t in add + remove):
+            # An exception changed: judge the corpus again.
+            self.verdicts = await run.io_bound(
+                compute_eligibility, self.session, self.criteria
+            )
+            self.refill()
+            return
         self.notice.refresh()
 
     def _chips(self, label: str, facet: str, values: list[str]) -> None:
@@ -517,12 +608,20 @@ class ExplorePage:
 
     def refill(self) -> None:
         """Apply the filters to the grid, the counter and the chart."""
-        rows = self.session.visible_rows(self.decision_filter, self.query, self.filters)
+        rows = [
+            self._criteria_cells(row)
+            for row in self.session.visible_rows(
+                self.decision_filter, self.query, self.filters
+            )
+            if self._eligible(row["paper_key"])
+        ]
         self.order = [row["paper_key"] for row in rows]
         self.grid.options["rowData"] = rows
         self.grid.update()
         total = len(self.session.rows)
         self.count.set_text(f"{len(rows)} of {total} papers")
+        active = sum(1 for chosen in self.filters.values() if chosen)
+        self.filters_box.set_text(f"Filters ({active} active)" if active else "Filters")
         self.draw_chart()
         if self.current not in self.order:
             self.current = self.order[0] if self.order else None
@@ -564,6 +663,7 @@ class ExplorePage:
         if select is None:  # facet hidden: one value for all papers
             return
         chosen = list(select.value or [])
+        self.filters_box.open()
         if value not in chosen:
             select.set_value([*chosen, value])  # triggers on_facet
 

@@ -11,8 +11,12 @@ Instead of a new collection, the user can choose an existing collection of
 the group on the Extend page (:class:`Target`, saved in
 ``extension_target.yml`` so the background jobs follow the choice).
 
-Without a group, or when Zotero cannot be reached, the extension itself is
-kept: only the collection is missing, and the message says why.
+Papers already in the group (same DOI, else same title and year) are not
+pushed again: their Zotero item is added to the collection.
+
+The Extend page refuses to extend a review without a Zotero group
+(:func:`group_required`). When Zotero cannot be reached, the extension
+itself is kept: only the collection is missing, and the message says why.
 """
 
 from __future__ import annotations
@@ -108,6 +112,7 @@ class ExtensionCollection:
     existing: bool = False  # pushed into an existing collection
     papers: int = 0
     pushed: int = 0
+    linked: int = 0  # already in the group: added to the collection
     failed: int = 0
     skipped: str = ""  # why no collection was made ("" when one was)
 
@@ -116,9 +121,66 @@ class ExtensionCollection:
             return f"No Zotero collection for this extension: {self.skipped}"
         kind = "Existing Zotero collection" if self.existing else "Zotero collection"
         text = f"{kind} '{self.path}': {self.pushed} papers pushed"
+        if self.linked:
+            text += f", {self.linked} already in the group added to it"
         if self.failed:
             text += f", {self.failed} failed"
         return text + "."
+
+
+class ExtensionNeedsGroupError(RuntimeError):
+    """An extension was started on a review without a Zotero group."""
+
+
+def group_required(review: Review) -> None:
+    """Refuse an extension of ``review`` when its papers could get no collection.
+
+    Raises:
+        ExtensionNeedsGroupError: The review has no Zotero group.
+    """
+    from scilex.gui.services import zotero_library
+
+    source = zotero_library.load_source(review.folder)
+    if source is None or source.library_type != "group":
+        raise ExtensionNeedsGroupError(
+            "Every extension goes into a Zotero collection: choose the review's "
+            "Zotero group first (Zotero group page)."
+        )
+
+
+def _group_items(api) -> dict[str, dict]:
+    """The papers of the review's group by identity key (empty when unreadable)."""
+    from scilex.gui.services import zotero_library
+    from scilex.gui.services.screening import paper_key
+
+    try:
+        items = zotero_library.fetch_papers(api, None)
+    except Exception:  # unreadable: every new paper is pushed
+        logger.warning("Cannot list the papers of the group", exc_info=True)
+        return {}
+    return {
+        paper_key(zotero_library.item_to_row(item)): item
+        for item in items
+        if item.get("key")
+    }
+
+
+def _link(api, items: list[dict], collection: str) -> tuple[int, int]:
+    """Add the existing Zotero ``items`` to ``collection``: (linked, failed)."""
+    updates = {}
+    for item in items:
+        data = item.get("data", {})
+        current = list(data.get("collections") or [])
+        if collection not in current:
+            updates[item["key"]] = (
+                item.get("version", data.get("version", 0)),
+                [*current, collection],
+            )
+    if not updates:
+        return len(items), 0
+    counts = api.update_item_collections(updates)
+    failed = int(counts.get("failed", 0))
+    return len(items) - failed, failed
 
 
 def paper_keys(data: pd.DataFrame | None) -> set[str]:
@@ -222,7 +284,19 @@ def publish(
             summary.key = created.get("key") or created.get("data", {}).get("key", "")
         from scilex.push_to_zotero import prefetch_templates, push_new_items_to_zotero
 
-        new_rows = data.loc[new_index].drop(columns=["paper_key"], errors="ignore")
+        in_group = _group_items(api) if hasattr(api, "update_item_collections") else {}
+        to_link = [
+            in_group[key]
+            for key in (paper_key(data.loc[i].to_dict()) for i in new_index)
+            if key in in_group
+        ]
+        if to_link:
+            summary.linked, link_failed = _link(api, to_link, summary.key)
+            summary.failed += link_failed
+        to_push = [
+            i for i in new_index if paper_key(data.loc[i].to_dict()) not in in_group
+        ]
+        new_rows = data.loc[to_push].drop(columns=["paper_key"], errors="ignore")
         counts = push_new_items_to_zotero(
             new_rows,
             api,
@@ -243,7 +317,7 @@ def publish(
         summary.skipped = f"Zotero failed ({type(exc).__name__}: {exc})."
         return summary
     summary.pushed = int(counts.get("success", 0))
-    summary.failed = int(counts.get("failed", 0))
+    summary.failed += int(counts.get("failed", 0))
 
     # The new papers form a sub-corpus: the extension's collection.
     after = data.copy()
@@ -267,6 +341,7 @@ def publish(
             "collection": summary.path,
             "papers": summary.papers,
             "pushed": summary.pushed,
+            "linked": summary.linked,
             "failed": summary.failed,
         },
         message=summary.message(),

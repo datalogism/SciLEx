@@ -1,0 +1,30 @@
+# scilex-lpwc-ap -- iteration 6 -- SHACL, GENERAL level (valid for any SciLEx collection).
+# Codes as W3C Web Annotations (ORSD AR3): one oa:Annotation per (paper, code), written by
+# sparql/03c. The annotator and the date come with the survey bundle (iter5, SR8); they are
+# optional here.
+# One targeted node shape per file, constraints on the focus node's own triples only
+# (see ../README.md: how X-DigCheck evaluates shapes).
+
+@prefix sh:       <http://www.w3.org/ns/shacl#> .
+@prefix rdfs:     <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:      <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms:  <http://purl.org/dc/terms/> .
+@prefix skos:     <http://www.w3.org/2004/02/skos/core#> .
+@prefix oa:       <http://www.w3.org/ns/oa#> .
+@prefix lpwc:     <https://linkedpaperswithcode.com/class/> .
+@prefix sxsh:     <https://w3id.org/scilex/ap/lpwc/shapes#> .
+
+sxsh:AnnotationShape
+    a sh:NodeShape ;
+    rdfs:label "Code of a paper (Web Annotation)"@en ;
+    sh:targetClass oa:Annotation ;
+    sh:property [
+        sh:path oa:hasTarget ; sh:minCount 1 ; sh:maxCount 1 ; sh:class lpwc:paper ;
+        sh:message "An annotation has exactly one target, the coded paper." ] ;
+    sh:property [
+        sh:path oa:hasBody ; sh:minCount 1 ; sh:maxCount 1 ; sh:class skos:Concept ;
+        sh:message "An annotation has exactly one body, a value of a grid dimension (SKOS concept)." ] ;
+    sh:property [
+        sh:path oa:motivatedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( oa:classifying oa:tagging ) ] ;
+    sh:property [ sh:path dcterms:creator ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path dcterms:created ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] .

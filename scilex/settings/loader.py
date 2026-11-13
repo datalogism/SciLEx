@@ -48,6 +48,8 @@ KEY_BLOCK_NAMES = (
     "Zotero",
     "HuggingFace",
     "ORCID",
+    "GitHub",
+    "Zenodo",
 )
 # SCILEX_* variables that are not API key overrides.
 RESERVED_ENV_VARIABLES = frozenset(

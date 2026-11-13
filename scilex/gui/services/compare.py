@@ -30,9 +30,9 @@ MAX_GROUPS = 12  # more groups are unreadable in one chart
 def groups_of(row, compare_by: str) -> list[str]:
     """The groups of one paper (``[]`` when not comparing)."""
     if compare_by == PAPER_TYPE:
-        from scilex.paper_types import effective_type
+        from scilex.paper_types import effective_types
 
-        return [effective_type(row)]
+        return effective_types(row)  # a paper can have several types
     if compare_by == COLLECTION:
         found = review_tags.split_tags(row.get("zotero_collections"))
         return sorted({g for g in found if g}) or [NO_GROUP]

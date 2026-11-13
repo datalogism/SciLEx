@@ -59,10 +59,17 @@ AUTOMATION_PREFIXES = (
     "QUALI_SCORE:",
     "REL_SCORE:",
     "CITAT:",
+    "BK:",  # bonus keywords found in the title/abstract (pipeline.bonus_keywords)
+    "GITHUB_STARS:",  # Papers with Code enrichment (PapersWithCode.tag_formatter)
+    "CITED_BY_DATASET:",
     *WORKFLOW_TAG_PREFIXES,
     *METRIC_TAG_PREFIXES,
 )
-AUTOMATION_REGEXES = (re.compile(r"^Collect_KW\d*:"),)
+AUTOMATION_REGEXES = (
+    re.compile(r"^Collect_KW\d*:"),
+    # LLM proposals waiting for a person (scilex.tagging.auto_tags): never codes.
+    re.compile(r"^[^:\s]+-AUTO:", re.IGNORECASE),
+)
 COLLECT_KEYWORD_TAG = re.compile(r"^Collect_KW(\d+):(.+)$")
 
 
@@ -107,6 +114,20 @@ def load_grid(path: str | Path) -> pd.DataFrame:
     """Read a grid CSV (any of ``,`` ``;`` or tab as separator)."""
     grid = pd.read_csv(path, sep=None, engine="python", dtype=str)
     return normalize_grid(grid)
+
+
+def dimension_values(grid: pd.DataFrame, dimension: str) -> list[str]:
+    """Values a grid lists for ``dimension`` (``Allowed values`` column, else
+    the ``Values: a, b`` end of its detail); none for an unknown dimension."""
+    rows = grid[grid[TAG_COLUMN].astype(str).str.upper() == dimension.upper()]
+    if rows.empty:
+        return []
+    row = rows.iloc[0]
+    text = str(row.get("Allowed values", "") or "").strip()
+    if not text:
+        found = re.search(r"Values:\s*(.+)$", str(row.get(DETAIL_COLUMN, "")))
+        text = found.group(1) if found else ""
+    return [v.strip() for v in re.split(r"[,·]", text) if v.strip()]
 
 
 def save_grid(grid: pd.DataFrame, path: str | Path) -> Path:

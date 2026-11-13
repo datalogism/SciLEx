@@ -26,7 +26,9 @@ logger = logging.getLogger(__name__)
 SCREENING_FILENAME = "screening.csv"
 INCLUDE, EXCLUDE, MAYBE = "include", "exclude", "maybe"
 DECISIONS = (INCLUDE, EXCLUDE, MAYBE)
-FIELDS = ("paper_key", "decision", "note", "updated_at")
+# decided_by: IRI of the ORCID iD of the person who decided (SX-5); empty in files
+# written before it was recorded, which the knowledge graph reads as an unknown agent.
+FIELDS = ("paper_key", "decision", "note", "updated_at", "decided_by")
 
 
 @dataclass
@@ -37,6 +39,7 @@ class Decision:
     decision: str
     note: str = ""
     updated_at: str = ""
+    decided_by: str = ""
 
 
 def paper_key(row) -> str:
@@ -150,8 +153,14 @@ def _apply_decision(
     if decision is None:
         decisions.pop(key, None)
     else:
+        from scilex.gui.services.journal import current_agent
+
         decisions[key] = Decision(
-            key, decision, note, datetime.now().isoformat(timespec="seconds")
+            key,
+            decision,
+            note,
+            datetime.now().isoformat(timespec="seconds"),
+            current_agent()["id"],
         )
     _write_file(review, decisions, untouched)
     return decisions
@@ -187,6 +196,7 @@ DECISION_LABELS = {INCLUDE: "Include", EXCLUDE: "Exclude", MAYBE: "Maybe"}
 # Filters on paper properties ("facets"): key -> label, in display order.
 # Values are OR-ed within a facet and facets are AND-ed.
 FACETS = {
+    "paper_type": "Paper type",
     "item_type": "Document type",
     "origin": "Origin",
     "imported": "Imported on",
@@ -197,6 +207,9 @@ FACETS = {
     "status": "Annotation status",
     "assigned": "Assigned to",
     "validated_by": "Validated by",
+    "screen_method": "Screening (Auto / Manual)",
+    "exclusion": "Exclusion reason",
+    "inclusion_exception": "Kept despite criterion",
     "lpwc_tasks": "Tasks (LPWC)",
     "lpwc_datasets": "Datasets (LPWC)",
     "orkg_problems": "Research problems (ORKG)",
@@ -244,12 +257,20 @@ def item_type_label(item_type: str) -> str:
     return words[:1].upper() + words[1:]
 
 
-def _facet_values(record: dict, logged: dict | None) -> dict[str, set[str]]:
-    """Facet values of one results row (``logged``: its paper log entry)."""
+def _facet_values(
+    record: dict,
+    logged: dict | None,
+    codes: tuple[dict[str, str], list[str]] | None = None,
+) -> dict[str, set[str]]:
+    """Facet values of one results row (``logged``: its paper log entry;
+    ``codes``: exclusion codes and criteria order, see ``criteria.review_codes``)."""
+    from scilex import paper_types
     from scilex.gui.services.paper_log import origin_of
 
     item_type = _text(record.get("itemType"))
     values = {
+        # Its PAPER_TYPE tag, else the default (Model or Method…).
+        "paper_type": set(paper_types.effective_types(record)),
         "item_type": {item_type_label(item_type)} if item_type else set(),
         "origin": {(logged or {}).get("origin") or origin_of(record)},
         "imported": {(logged or {}).get("imported_at") or BEFORE_TRACKING},
@@ -271,7 +292,19 @@ def _facet_values(record: dict, logged: dict | None) -> dict[str, set[str]]:
     values["status"] = {state.status}
     values["assigned"] = set(state.assigned)
     values["validated_by"] = set(state.validated_by)
+    codes_by_id, order = codes or ({}, [])
+    status = review_tags.eligibility(state, codes_by_id, order)
+    values["screen_method"] = {status.method} if status.method else set()
+    values["exclusion"] = set(status.exclusion_all)
+    values["inclusion_exception"] = set(status.exceptions)
     return {facet: found or {NONE_VALUE} for facet, found in values.items()}
+
+
+def _types_label(record: dict) -> str:
+    """The paper types of a row for the grid: ``"Model or Method, Dataset"``."""
+    from scilex import paper_types
+
+    return ", ".join(paper_types.effective_types(record))
 
 
 def _paper_log(review: Review, results: pd.DataFrame) -> dict[str, dict]:
@@ -385,6 +418,9 @@ class ScreeningSession:
         self._records: dict[str, dict] = {}  # raw results rows (Explore notice)
         self.rows: list[dict] = []
         log = _paper_log(review, results)
+        from scilex.gui.services.criteria import review_codes
+
+        codes = review_codes(review.folder)
         network = CitationNetwork.load(review)
         self.has_network = bool(network)
         corpus = {k[4:] for k in present if k.startswith("doi:")}
@@ -417,7 +453,7 @@ class ScreeningSession:
                 extract_year(record["date"]) if is_valid(record.get("date")) else None
             )
             score = _number(record.get("relevance_score"))
-            facets = _facet_values(record, log.get(key))
+            facets = _facet_values(record, log.get(key), codes)
             self._facets[key] = facets
             imported = next(iter(facets["imported"]))
             imported = "" if imported == BEFORE_TRACKING else imported
@@ -433,6 +469,8 @@ class ScreeningSession:
                     "citations": None if citations is None else int(citations),
                     "cited_in_corpus": in_corpus,
                     "item_type": item_type,
+                    "paper_type": _types_label(record),
+                    "status": next(iter(facets["status"])),
                     "imported": imported,
                     "decision": self._label(key),
                 }
@@ -486,6 +524,10 @@ class ScreeningSession:
         for kept in ("origin", "imported"):  # from the paper log, unchanged
             fresh[kept] = old[kept]
         self._facets[key] = fresh
+        if key in self._row_by_key:
+            row = self._row_by_key[key]
+            row["paper_type"] = _types_label(record)
+            row["status"] = next(iter(fresh["status"]))
 
     def facets_of(self, key: str) -> dict[str, set[str]]:
         """Facet values of one paper (see :data:`FACETS`)."""

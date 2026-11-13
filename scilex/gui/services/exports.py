@@ -6,6 +6,7 @@ The functions here are UI-independent. File exports are written to
 
 from __future__ import annotations
 
+import logging
 import subprocess
 import sys
 import tempfile
@@ -18,6 +19,8 @@ import pandas as pd
 from scilex.config import SciLExConfig
 from scilex.gui.services import screening
 from scilex.gui.services.workspace import Review
+
+logger = logging.getLogger(__name__)
 
 EXPORTS_DIRNAME = "exports"
 SCOPE_INCLUDED, SCOPE_ALL = "included", "all"
@@ -222,9 +225,28 @@ def push_to_zotero(
         "collect_name": review.name,
         "_collect_dir": str(review.collection_dir),
     }
-    return push_new_items_to_zotero(
+    counts = push_new_items_to_zotero(
         data, zotero_api, key, existing_urls, templates, push_config
     )
+    counts["linked"] = _link_pushed(review)
+    return counts
+
+
+def _link_pushed(review: Review) -> int:
+    """Link the pushed papers for the sync (their SCREEN:/DELETED_BY: tags follow).
+
+    Only for a review already linked with Zotero; 0 when it is not, or when
+    Zotero cannot be read (the sync dialog offers the link again).
+    """
+    from scilex.gui.services import zotero_sync
+
+    if zotero_sync.load_state(review) is None:
+        return 0
+    try:
+        return zotero_sync.link_new(review)["linked"]
+    except Exception as exc:  # the push itself succeeded
+        logger.warning("Could not link the pushed papers: %s", exc)
+        return 0
 
 
 def reveal_command(path: Path, platform: str | None = None) -> list[str]:

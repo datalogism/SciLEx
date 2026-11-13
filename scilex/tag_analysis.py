@@ -176,7 +176,11 @@ def remove_merge_rows(path: Path, rows: list[dict]) -> int:
 def load_rejected(path: Path | None) -> set[tuple[str, str, str]]:
     """Merges the user refused: ``{(DIMENSION, value key, target key)}``."""
     return {
-        (dimension_name(r["dimension"] or "*"), value_key(r["value"]), value_key(r["merge_into"]))
+        (
+            dimension_name(r["dimension"] or "*"),
+            value_key(r["value"]),
+            value_key(r["merge_into"]),
+        )
         for r in read_merge_table(path).to_dict("records")
     }
 
@@ -277,7 +281,9 @@ def analyse_tags(
         values: dict[str, set[str]] = defaultdict(set)
         nones: set[str] = set()
         pending: set[str] = set()
-        for tag in split_semicolon_field(tags_column.iloc[index] if len(tags_column) else None):
+        for tag in split_semicolon_field(
+            tags_column.iloc[index] if len(tags_column) else None
+        ):
             parsed = parse_annotation(tag)
             if parsed is None:
                 continue
@@ -358,7 +364,9 @@ def analyse_tags(
     )
 
 
-def _is_rejected(suggestion: MergeSuggestion, rejected: set[tuple[str, str, str]]) -> bool:
+def _is_rejected(
+    suggestion: MergeSuggestion, rejected: set[tuple[str, str, str]]
+) -> bool:
     a, b = value_key(suggestion.value), value_key(suggestion.merge_into)
     return any(
         (scope, x, y) in rejected
@@ -472,10 +480,7 @@ def cooccurrence(
     if not counts:
         return pd.DataFrame(), common
     frame = (
-        pd.Series(counts)
-        .rename_axis([first, second])
-        .unstack(fill_value=0)
-        .astype(int)
+        pd.Series(counts).rename_axis([first, second]).unstack(fill_value=0).astype(int)
     )
     return frame, common
 
@@ -564,11 +569,15 @@ def _heatmap(ax, frame: pd.DataFrame, cmap_name: str = "YlOrRd") -> None:
     ax.tick_params(which="minor", length=0)
 
 
-def plot_dimension(stats: DimensionStats, path: Path, top: int = TOP_VALUES) -> Path | None:
+def plot_dimension(
+    stats: DimensionStats, path: Path, top: int = TOP_VALUES
+) -> Path | None:
     """Most frequent values of a dimension and, when dated, their use per year."""
     if not stats.values:
         return None
-    shown = [v for v, _ in sorted(stats.values.items(), key=lambda i: (-i[1], i[0]))][:top]
+    shown = [v for v, _ in sorted(stats.values.items(), key=lambda i: (-i[1], i[0]))][
+        :top
+    ]
     others = len(stats.values) - len(shown)
     years = sorted({y for v in shown for y in stats.by_year.get(v, {})})
     with_years = len(years) >= 2
@@ -609,7 +618,11 @@ def plot_dimension(stats: DimensionStats, path: Path, top: int = TOP_VALUES) -> 
 
 
 def plot_crossing(
-    first: str, second: str, frame: pd.DataFrame, common: int, path: Path,
+    first: str,
+    second: str,
+    frame: pd.DataFrame,
+    common: int,
+    path: Path,
     top: int = TOP_VALUES,
 ) -> Path:
     """Heatmap of the papers per pair of values of two dimensions."""
@@ -727,7 +740,9 @@ def render_report(
             f"{_md_cell(v)} ({n})"
             for v, n in sorted(stats.values.items(), key=lambda i: (-i[1], i[0]))[:5]
         )
-        name = stats.name + (" *(grid, unused)*" if stats.in_grid and not stats.answered else "")
+        name = stats.name + (
+            " *(grid, unused)*" if stats.in_grid and not stats.answered else ""
+        )
         lines.append(
             f"| {name} | {stats.with_value} | {stats.with_none} | {stats.pending} "
             f"| {stats.absent} | {len(stats.values)} | {top} |"
@@ -774,7 +789,10 @@ def render_report(
     else:
         lines.append("No close spellings to merge.")
     if analysis.synonyms_used:
-        lines += ["", f"{analysis.synonyms_used} spellings were merged by the synonyms table."]
+        lines += [
+            "",
+            f"{analysis.synonyms_used} spellings were merged by the synonyms table.",
+        ]
 
     lines += ["", "## Crossing dimensions", ""]
     if pairs:
@@ -792,7 +810,8 @@ def render_report(
             stacked = frame.stack()
             best = stacked[stacked > 0].sort_values(ascending=False).head(3)
             combos = ", ".join(
-                f"{_md_cell(a)} + {_md_cell(b)} ({int(n)})" for (a, b), n in best.items()
+                f"{_md_cell(a)} + {_md_cell(b)} ({int(n)})"
+                for (a, b), n in best.items()
             )
             lines.append(f"| {first} × {second} | {common} | {combos} |")
     else:
@@ -840,9 +859,13 @@ def write_outputs(
 
     with_values = [d for d in analysis.ranked() if d.values]
     for index, stats in enumerate(with_values):
-        if step(15 + int(45 * index / max(len(with_values), 1)), f"Drawing {stats.name}…"):
+        if step(
+            15 + int(45 * index / max(len(with_values), 1)), f"Drawing {stats.name}…"
+        ):
             return files
-        path = plot_dimension(stats, out_dir / f"dimension_{_safe_name(stats.name)}.png")
+        path = plot_dimension(
+            stats, out_dir / f"dimension_{_safe_name(stats.name)}.png"
+        )
         if path is not None:
             files.append(path)
 
@@ -850,7 +873,9 @@ def write_outputs(
         return files
     pairs = crossing_pairs(analysis, max_dimensions)
     for index, (first, second, frame, common) in enumerate(pairs):
-        if step(60 + int(30 * index / max(len(pairs), 1)), f"Drawing {first} × {second}…"):
+        if step(
+            60 + int(30 * index / max(len(pairs), 1)), f"Drawing {first} × {second}…"
+        ):
             return files
         name = f"cross_{_safe_name(first)}_x_{_safe_name(second)}.png"
         files.append(plot_crossing(first, second, frame, common, out_dir / name))

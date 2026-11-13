@@ -26,7 +26,12 @@ def test_snapshot_counts_annotations_and_placeholders():
         [["SAT_TASK:NER", "SAT_LANG:?", "HavePDF"], ["SAT_TASK:?"], ["free keyword"]],
         "annotate",
     )
-    assert (snapshot.papers, snapshot.annotated, snapshot.pending, snapshot.values) == (3, 1, 2, 1)
+    assert (snapshot.papers, snapshot.annotated, snapshot.pending, snapshot.values) == (
+        3,
+        1,
+        2,
+        1,
+    )
     assert snapshot.by_dimension == {"SAT_TASK": 1}
 
 
@@ -53,7 +58,9 @@ def test_compute_overview(ctx, tmp_path):
 
 async def test_opening_a_review_shows_its_overview(ctx, tmp_path):
     review = _review(ctx, tmp_path)
-    overview.record_snapshot(review.folder, [["SAT_TASK:NER"], ["SAT_TASK:?"]], "import")
+    overview.record_snapshot(
+        review.folder, [["SAT_TASK:NER"], ["SAT_TASK:?"]], "import"
+    )
     async with user_simulation(build_root(ctx)) as user:
         await user.open(f"/review/{review.id}")
         await user.should_see("Overview")
@@ -84,3 +91,22 @@ def test_snapshot_reads_workflow_tags():
     assert (snap.papers, snap.annotated, snap.pending) == (2, 1, 1)
     assert (snap.validated, snap.assigned, snap.discarded) == (1, 2, 1)
     assert snap.by_dimension == {"TASK": 1}  # workflow tags are not dimensions
+
+
+def test_snapshots_record_the_codes_added_and_removed(tmp_path):
+    """SX-20: the first keyed snapshot lists every code; later ones the changes."""
+    from scilex.gui.services import overview
+
+    overview.record_snapshot(
+        tmp_path, {"K1": ["TASK:RE", "TASK:?"], "K2": ["TASK:NER"]}, "annotate"
+    )
+    overview.record_snapshot(
+        tmp_path,
+        {"K1": ["TASK:RE", "LANG:en"], "K2": ["TASK:NER", "DELETED_BY:x"]},
+        "annotate",
+    )
+    first, second = overview.load_history(tmp_path)
+    assert first.codes_added == [["K1", "TASK:RE"], ["K2", "TASK:NER"]]
+    assert second.codes_added == [["K1", "LANG:en"]]
+    assert second.codes_removed == [["K2", "TASK:NER"]]  # discarded paper
+    assert overview.codes_at([first, second]) == {("K1", "TASK:RE"), ("K1", "LANG:en")}

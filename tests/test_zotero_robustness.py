@@ -89,3 +89,74 @@ def test_prepare_item_fetches_template_without_zotero_client():
         item = prepare_zotero_item(row, "COLL", {})
     assert item is not None
     assert item["url"] == "https://doi.org/10.1/x"
+
+
+JOURNAL_TEMPLATE = {
+    "itemType": "journalArticle",
+    "title": "",
+    "publicationTitle": "",
+    "journalAbbreviation": "",
+    "series": "",
+    "ISSN": "",
+    "url": "",
+    "DOI": "",
+    "creators": [],
+}
+CONFERENCE_TEMPLATE = {
+    "itemType": "conferencePaper",
+    "title": "",
+    "proceedingsTitle": "",
+    "conferenceName": "",
+    "series": "",
+    "url": "",
+    "DOI": "",
+    "creators": [],
+}
+
+
+def _item(row: dict, template: dict) -> dict:
+    cache = {template["itemType"]: template}
+    return prepare_zotero_item(pd.Series(row), "COLL", cache)
+
+
+def test_venue_name_goes_to_publication_and_issn_to_issn():
+    """SX-23: the export has journaltitle and issn, and no ISSN in series."""
+    item = _item(
+        {
+            "itemType": "journalArticle",
+            "title": "T",
+            "DOI": "10.1/a",
+            "journalAbbreviation": "Fontes Artis Musicae",
+            "serie": "0015-6191",
+        },
+        JOURNAL_TEMPLATE,
+    )
+    assert item["publicationTitle"] == "Fontes Artis Musicae"
+    assert item["journalAbbreviation"] == ""  # a full name is not an abbreviation
+    assert item["ISSN"] == "0015-6191"
+    assert item["series"] == ""
+
+
+def test_issn_without_hyphen_is_normalised_and_series_names_are_kept():
+    item = _item(
+        {
+            "itemType": "journalArticle",
+            "title": "T",
+            "DOI": "10.1/a",
+            "serie": "0302974x",
+        },
+        JOURNAL_TEMPLATE,
+    )
+    assert item["ISSN"] == "0302-974X" and item["series"] == ""
+    item = _item(
+        {
+            "itemType": "conferencePaper",
+            "title": "T",
+            "DOI": "10.1/a",
+            "conferenceName": "ACL 2019",
+            "serie": "Lecture Notes in Computer Science",
+        },
+        CONFERENCE_TEMPLATE,
+    )
+    assert item["series"] == "Lecture Notes in Computer Science"
+    assert item["conferenceName"] == "ACL 2019"  # year kept (profile iteration 8)

@@ -21,7 +21,8 @@ ALL = "__all__"
 class AnnotatorsCard:
     """Members table, assignment form and progress table."""
 
-    def __init__(self, review: Review):
+    def __init__(self, review: Review, *, show_assign: bool = True):
+        """``show_assign=False``: no assignment form (campaigns assign papers)."""
         self.review = review
         self.members = service.load(review.folder)
         with ui.card().classes("w-full gap-2").mark("annotators-card"):
@@ -40,7 +41,8 @@ class AnnotatorsCard:
                     "flat dense no-caps"
                 ).mark("annotators-add")
             self.table()
-            self.assign_form()
+            if show_assign:
+                self.assign_form()
             self.progress()
 
     # -- members ----------------------------------------------------------
@@ -71,15 +73,25 @@ class AnnotatorsCard:
                     .props("dense outlined")
                     .classes("w-48")
                 )
-                self.inputs.append((member, orcid, name))
+                consent = (
+                    ui.checkbox("Named in public dumps", value=member.consent_public)
+                    .tooltip(
+                        "The person agrees to be named, with their ORCID iD, in a "
+                        "knowledge graph shared publicly (⑧ Export). Without it, a "
+                        "public dump shows them as agent/<n>."
+                    )
+                    .mark("annotators-consent")
+                )
+                self.inputs.append((member, orcid, name, consent))
         ui.button("Save members", icon="save", on_click=self.save).props(
             "dense no-caps"
         ).mark("annotators-save")
 
     def save(self) -> None:
-        for member, orcid, name in self.inputs:
+        for member, orcid, name, consent in self.inputs:
             member.orcid = (orcid.value or "").strip()
             member.name = (name.value or "").strip()
+            member.consent_public = bool(consent.value)
         try:
             service.save(self.review.folder, self.members)
         except ValueError as exc:

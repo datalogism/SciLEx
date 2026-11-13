@@ -24,9 +24,11 @@ versioned or inspected by hand.
 | `zotero_sync_state.json` | sync baselines of both sides | [Zotero](../modules/zotero.md#sync) |
 | `zotero_citations.json` | frozen citation snapshot from Zotero | [⑥ Enrich](../modules/enrich.md#citations) |
 | `extension_target.yml` | Zotero collection of the next extensions | [⑤ Extend](../modules/extend.md) |
+| `config_history/<sha256>.yml` | every saved version of `scilex.yml`: effective values, defaults flagged, no secret | [⑧ Export](../modules/export.md#survey-bundle) |
 | `criteria.yml` | eligibility criteria | [Criteria](../modules/criteria.md) |
+| `criteria_history/<sha256>.yml` | every saved version of `criteria.yml` | [⑧ Export](../modules/export.md#survey-bundle) |
 | `annotation_grid.csv` | annotation dimensions | [④ Annotate](../modules/annotate.md#annotation-grid) |
-| `members.yml` | annotators: names, ORCID iDs | [④ Annotate](../modules/annotate.md#annotators) |
+| `members.yml` | annotators: names, ORCID iDs, consent to be named publicly | [④ Annotate](../modules/annotate.md#annotators) |
 | `workflow.jsonl` | append-only journal of every event | [Overview](../modules/overview.md#history) |
 | `annotation_history.jsonl` | annotation snapshots | [Overview](../modules/overview.md#review-card) |
 | `paper_log.json` | when and how each paper entered the review | [Explore](../modules/explore.md#filters) |
@@ -42,7 +44,7 @@ versioned or inspected by hand.
 | `config_used.yml` | the configuration of the collection |
 | `aggregated_results.csv` | **the corpus**: one row per paper, every column |
 | `filtering_summary.json`, `aggregation_stats.csv` | counts of each filtering phase (PRISMA) |
-| `screening.csv` | screening decisions and notes |
+| `screening.csv` | screening decisions, notes and who decided (`decided_by`) |
 | `citations_cache.json`, `citers_cache.json` | references and citing papers |
 | `<source>_cache.json` | answers of each enricher |
 | `aggregated_results_pre_snowball.csv`, `aggregated_results_snowball.csv` | snowballing backup or separate result |
@@ -52,5 +54,5 @@ versioned or inspected by hand.
 | `chart_aggregated_papers/` | Charts |
 | `graph_analysis/` | Graph, Summaries and keyword suggestions (`keyword_suggestions.md/.yml`) |
 | `coverage_per_paper.csv`, `coverage_rates.csv` | Accessibility analysis |
-| `annotations/` | annotation report tables |
-| `kg/` | knowledge graph: `<name>.ttl`, `.bib`, SHACL report |
+| `annotations/` | annotation report tables; `agreement/<date>.json`: each agreement study (sample, alpha per dimension, codes per annotator, merge) |
+| `kg/` | knowledge graph: `<name>.ttl`, `.bib`, `bundle/survey.json`, SHACL report |

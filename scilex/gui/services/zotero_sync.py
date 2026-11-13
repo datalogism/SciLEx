@@ -55,6 +55,7 @@ FIELDS: dict[str, str] = {
     "volume": "volume",
     "issue": "issue",
     "pages": "pages",
+    "shortTitle": "shortTitle",
 }
 SCREEN_PREFIX = "SCREEN:"
 SCREEN_TAGS = {
@@ -532,6 +533,138 @@ def link(review: Review, required: list[str] | None = None) -> dict[str, int]:
     api, source = _api(review)
     items, collections = _fetch_all(review, api, source)
     papers = [i for i in items if _is_paper(i)]
+    item_for = _matcher(review, papers, required)
+    by_key = {item["key"]: item for item in papers}
+
+    data = _read_results(review)
+    decisions = _decisions(review)
+    state = SyncState(
+        library_version=_library_version(api),
+        synced_at=datetime.now().isoformat(timespec="seconds"),
+        collections=collections,
+    )
+    linked = 0
+    keys = []
+    if "zotero_collections" not in data.columns:
+        data["zotero_collections"] = ""
+    data["zotero_collections"] = data["zotero_collections"].astype(object)
+    for position, row in zip(data.index, data.to_dict("records"), strict=True):
+        key = item_for(row, set(state.papers))
+        if key:
+            _take_collections(data, position, row, by_key[key])
+            linked += 1
+            state.papers[key] = {
+                "version": _item_version(by_key[key]),
+                "zotero": zotero_record(by_key[key]),
+                "local": local_record(row, decisions.get(screening.paper_key(row))),
+            }
+        keys.append(key)  # "" when every matching item is already linked
+    data[KEY_COLUMN] = keys
+    _write_results(review, data)
+    save_state(review, state)
+    forget_cache(review)
+    from scilex.gui.services import journal
+
+    journal.append(
+        review.folder,
+        "zotero-sync-link",
+        used={"zotero_library_version": state.library_version},
+        generated={"linked": linked, "papers": len(data), "zotero_items": len(papers)},
+        annotation=journal.annotation_of_results(review.results_path),
+        zotero_actors=journal.zotero_actors(
+            papers, since=journal.last_zotero_time(review.folder)
+        ),
+    )
+    return {"linked": linked, "papers": len(data), "zotero": len(papers)}
+
+
+def _take_collections(data: pd.DataFrame, position, row: dict, item: dict) -> None:
+    """The sub-corpora of a row are its item's collections in Zotero."""
+    paths = item.get("_scilex_collections")
+    if paths:
+        data.at[position, "zotero_collections"] = ";".join(paths)
+        row["zotero_collections"] = data.at[position, "zotero_collections"]
+
+
+def link_new(review: Review) -> dict[str, int]:
+    """Link the SciLEx papers not linked yet with their Zotero items.
+
+    After the first :func:`link`, papers pushed to Zotero later (⑧ Export, an
+    extension) or added to the collection by hand have no baseline: their
+    screening decision, ``DELETED_BY:`` / ``ANNOT_VALID_BY:`` tags... never
+    reach Zotero. This matches them like :func:`link` does, among the items not
+    linked yet, and merges their tags: both baselines are the tags the two
+    sides share, so the SciLEx-only tags are pushed at the next push and the
+    Zotero-only tags pulled at the next pull. Fields are taken as they are.
+
+    Returns:
+        ``{"linked": newly linked papers, "unlinked": papers still not in Zotero}``.
+    """
+    state = load_state(review)
+    if state is None:
+        raise SyncError("Link the review with Zotero first.")
+    data = _read_results(review)
+    unlinked = [
+        position
+        for position, row in zip(data.index, data.to_dict("records"), strict=True)
+        if _row_key(row) not in state.papers
+    ]
+    if not unlinked:
+        return {"linked": 0, "unlinked": 0}
+    api, source = _api(review)
+    items, _ = _fetch_all(review, api, source)
+    papers = [
+        i
+        for i in items
+        if _is_paper(i)
+        and i["key"] not in state.papers
+        and not i.get("data", {}).get("deleted")
+    ]
+    item_for = _matcher(review, papers)
+    by_key = {item["key"]: item for item in papers}
+    decisions = _decisions(review)
+    if "zotero_collections" not in data.columns:
+        data["zotero_collections"] = ""
+    data["zotero_collections"] = data["zotero_collections"].astype(object)
+    if KEY_COLUMN not in data.columns:
+        data[KEY_COLUMN] = ""
+    data[KEY_COLUMN] = data[KEY_COLUMN].astype(object)
+    taken = set(state.papers)
+    linked = 0
+    for position in unlinked:
+        row = data.loc[position].to_dict()
+        key = item_for(row, taken)
+        if not key:
+            continue
+        item = by_key[key]
+        taken.add(key)
+        data.at[position, KEY_COLUMN] = key
+        _take_collections(data, position, row, item)
+        remote = zotero_record(item)
+        local = local_record(row, decisions.get(screening.paper_key(row)))
+        shared = sorted(set(remote["tags"]) & set(local["tags"]))
+        state.papers[key] = {
+            "version": _item_version(item),
+            "zotero": {**remote, "tags": shared},
+            "local": {**local, "tags": shared},
+        }
+        linked += 1
+    if linked:
+        _write_results(review, data)
+        save_state(review, state)
+        forget_cache(review)
+        from scilex.gui.services import journal
+
+        journal.append(
+            review.folder,
+            "zotero-sync-link",
+            generated={"linked": linked, "unlinked": len(unlinked) - linked},
+        )
+    return {"linked": linked, "unlinked": len(unlinked) - linked}
+
+
+def _matcher(review: Review, papers: list[dict], required: list[str] | None = None):
+    """``item_for(row, taken)``: the free Zotero item of ``papers`` matching ``row``."""
     index: dict[str, list[str]] = {}
     for item in papers:
         data = item.get("data", {})
@@ -568,50 +701,7 @@ def link(review: Review, required: list[str] | None = None) -> dict[str, int]:
 
         return max(candidates, key=rank)  # max keeps the first of equals
 
-    data = _read_results(review)
-    decisions = _decisions(review)
-    state = SyncState(
-        library_version=_library_version(api),
-        synced_at=datetime.now().isoformat(timespec="seconds"),
-        collections=collections,
-    )
-    linked = 0
-    keys = []
-    if "zotero_collections" not in data.columns:
-        data["zotero_collections"] = ""
-    data["zotero_collections"] = data["zotero_collections"].astype(object)
-    for position, row in zip(data.index, data.to_dict("records"), strict=True):
-        key = item_for(row, set(state.papers))
-        if key:
-            # The sub-corpora are the item's collections in Zotero.
-            paths = by_key[key].get("_scilex_collections")
-            if paths:
-                data.at[position, "zotero_collections"] = ";".join(paths)
-                row["zotero_collections"] = data.at[position, "zotero_collections"]
-            linked += 1
-            state.papers[key] = {
-                "version": _item_version(by_key[key]),
-                "zotero": zotero_record(by_key[key]),
-                "local": local_record(row, decisions.get(screening.paper_key(row))),
-            }
-        keys.append(key)  # "" when every matching item is already linked
-    data[KEY_COLUMN] = keys
-    _write_results(review, data)
-    save_state(review, state)
-    forget_cache(review)
-    from scilex.gui.services import journal
-
-    journal.append(
-        review.folder,
-        "zotero-sync-link",
-        used={"zotero_library_version": state.library_version},
-        generated={"linked": linked, "papers": len(data), "zotero_items": len(papers)},
-        annotation=journal.annotation_of_results(review.results_path),
-        zotero_actors=journal.zotero_actors(
-            papers, since=journal.last_zotero_time(review.folder)
-        ),
-    )
-    return {"linked": linked, "papers": len(data), "zotero": len(papers)}
+    return item_for
 
 
 # ---------------------------------------------------------------------------
@@ -643,15 +733,21 @@ def pull(review: Review, status: SyncStatus | None = None) -> dict[str, int]:
     """Apply the Zotero changes to SciLEx (conflicting values are left as they are).
 
     Changed fields and tags of linked papers are copied, new Zotero papers are
-    added, a ``SCREEN:`` tag becomes the screening decision. Papers removed from
-    Zotero are kept (reported only).
+    added, a ``SCREEN:`` tag becomes the screening decision, and each paper's
+    collections follow Zotero (``zotero_collections``). Papers removed from
+    Zotero keep their row but lose their collections (they leave the screened
+    results, see :mod:`.collection_roles`).
     """
     from scilex.gui.services.zotero_library import item_to_row
 
-    state = load_state(review)
-    if state is None:
+    if load_state(review) is None:
         raise SyncError("Link the review with Zotero first.")
     status = status or check(review)
+    if status.zotero_new and status.local_unlinked:
+        # New items may be SciLEx papers pushed by ⑧ Export: link, don't copy.
+        link_new(review)
+    state = load_state(review)
+    status.zotero_new = [i for i in status.zotero_new if i["key"] not in state.papers]
     conflicted = {(c.key, c.what) for c in status.conflicts}
     data = _read_results(review)
     rows = {
@@ -699,6 +795,7 @@ def pull(review: Review, status: SyncStatus | None = None) -> dict[str, int]:
             decision = _screen_decision(set(zotero_record(item)["tags"]))
             if decision:
                 screening.set_decision(review, screening.paper_key(row), decision)
+    moved = _pull_collections(review, data, rows, status)
     _write_results(review, data)
 
     # New baselines for what was pulled (not for open conflicts).
@@ -742,6 +839,7 @@ def pull(review: Review, status: SyncStatus | None = None) -> dict[str, int]:
         generated={
             "updated": updated,
             "added": added,
+            "moved": moved,
             "removed": len(status.zotero_removed),
             "results_rows": len(data),
         },
@@ -750,7 +848,51 @@ def pull(review: Review, status: SyncStatus | None = None) -> dict[str, int]:
             changed_items, since=journal.last_zotero_time(review.folder)
         ),
     )
-    return {"updated": updated, "added": added, "removed": len(status.zotero_removed)}
+    return {
+        "updated": updated,
+        "added": added,
+        "moved": moved,
+        "removed": len(status.zotero_removed),
+    }
+
+
+def _pull_collections(review: Review, data: pd.DataFrame, rows: dict, status) -> int:
+    """Copy the collections of the changed items into ``zotero_collections``.
+
+    Moving a paper between collections changes no field: only the item's
+    version. A paper removed from Zotero (deleted, in the trash, out of the
+    review's scope) loses its collections, so it leaves the screened results;
+    its row stays. Returns the rows changed.
+    """
+    from scilex.gui.services import zotero_library
+
+    if not status.items and not status.zotero_removed:
+        return 0
+    try:
+        api, _ = _api(review)
+        paths = {c.key: c.path for c in zotero_library.list_collections(api)}
+    except (SyncError, ConnectionError) as exc:
+        logger.warning("Zotero collections not read: %s", exc)
+        return 0
+    if "zotero_collections" not in data.columns:
+        data["zotero_collections"] = ""
+    data["zotero_collections"] = data["zotero_collections"].astype(object)
+    wanted: dict[str, str] = {key: "" for key in status.zotero_removed}
+    for key, item in status.items.items():
+        if key in status.zotero_removed or not _is_paper(item):
+            continue
+        member = item.get("data", {}).get("collections") or []
+        wanted[key] = ";".join(sorted(paths[k] for k in member if k in paths))
+    moved = 0
+    for key, value in wanted.items():
+        index = rows.get(key)
+        if index is None:
+            continue
+        old = data.at[index, "zotero_collections"]
+        if (old if isinstance(old, str) else "") != value:
+            data.at[index, "zotero_collections"] = value
+            moved += 1
+    return moved
 
 
 def _rebase_local(

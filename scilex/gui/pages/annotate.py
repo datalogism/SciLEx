@@ -59,25 +59,191 @@ GRID_COLUMNS = [
 ]
 
 
+PARAMETERS, TEAM, CAMPAIGNS, VALIDATE, PROGRESS = (
+    "parameters",
+    "team",
+    "campaigns",
+    "validate",
+    "progress",
+)
+TABS = {
+    PARAMETERS: ("Parameters", "tune"),
+    TEAM: ("Team", "group"),
+    CAMPAIGNS: ("Campaigns", "assignment"),
+    VALIDATE: ("Validate", "fact_check"),
+    PROGRESS: ("Progress & agreement", "insights"),
+}
+NEEDS_PAPERS = (TEAM, CAMPAIGNS, VALIDATE)
+
+
 def render(ctx: AppContext, review: Review) -> None:
-    """Draw the Annotate screen of ``review``."""
+    """Draw the Annotate screen (the annotation manager) of ``review``."""
     ui.label("Annotate").classes("text-2xl font-bold")
     ui.label(
-        "Define the dimensions annotators fill in for each paper, add them as "
-        "DIMENSION:? tags to a Zotero collection, then follow the annotation progress."
+        "The annotation manager: the grid and its guideline, the team, one campaign "
+        "per collection (people and LLM annotators), the LLM proposals to validate, "
+        "and the progress and agreement of the annotation."
     ).classes("text-gray-600")
-    state = _GridState(review)
-    collection = _CollectionPicker(ctx, review)
-    _grid_card(state, collection)
-    _apply_card(ctx, review, state, collection)
-    _report_card(review, collection)
-    if review.has_results:
-        from scilex.gui.components.annotators import AnnotatorsCard
 
-        AnnotatorsCard(review)
-        from scilex.gui.components.agreement_card import AgreementCard
+    def saved_grid() -> pd.DataFrame:
+        try:
+            return service.load_review_grid(review)
+        except (OSError, ValueError):
+            return pd.DataFrame()
 
-        AgreementCard(ctx, review)
+    with ui.tabs().classes("w-full").props("align=left") as tabs:
+        for key, (label, icon) in TABS.items():
+            ui.tab(key, label=label, icon=icon).mark(f"annotate-tab-{key}")
+    drawn: set[str] = set()
+    with ui.tab_panels(tabs, value=PARAMETERS).classes("w-full min-w-0"):
+        containers = {key: ui.tab_panel(key).classes("gap-3") for key in TABS}
+
+    def show(key: str) -> None:
+        # Drawn when first opened: each tab reads its files and polls its jobs.
+        if key in drawn:
+            return
+        drawn.add(key)
+        with containers[key]:
+            if key in NEEDS_PAPERS and not review.has_results:
+                ui.label(
+                    "The review has no papers yet: collect or import them first."
+                ).classes("text-sm text-gray-500")
+            elif key == PARAMETERS:
+                from scilex.gui.components.guideline_card import GuidelineCard
+
+                state = _GridState(review)
+                collection = _CollectionPicker(ctx, review)
+                _grid_card(state, collection)
+                GuidelineCard(review, lambda: state.current()[TAG_COLUMN].tolist())
+                _apply_card(ctx, review, state, collection)
+            elif key == TEAM:
+                from scilex.gui.components.annotators import AnnotatorsCard
+
+                AnnotatorsCard(review, show_assign=False)
+            elif key == CAMPAIGNS:
+                from scilex.gui.components.campaigns_card import CampaignsCard
+
+                CampaignsCard(ctx, review, saved_grid)
+            elif key == VALIDATE:
+                from scilex.gui.components.validate_queue import ValidateQueue
+
+                ValidateQueue(review, saved_grid)
+            elif key == PROGRESS:
+                if review.has_results:
+                    _campaign_progress_card(review, saved_grid)
+                    _llm_agreement_card(review)
+                _report_card(review, _CollectionPicker(ctx, review))
+                if review.has_results:
+                    from scilex.gui.components.agreement_card import AgreementCard
+
+                    AgreementCard(ctx, review)
+
+    tabs.on_value_change(lambda event: show(event.value))
+    show(PARAMETERS)
+
+
+def _campaign_progress_card(review: Review, grid) -> None:
+    from scilex.gui.services import campaigns
+    from scilex.gui.services.extend import read_results
+
+    store = campaigns.load(review.folder)
+    with ui.card().classes("w-full gap-2").mark("annotate-campaign-progress"):
+        ui.label("Campaigns, per dimension").classes("text-lg font-bold")
+        if not store.campaigns:
+            ui.label("No campaign yet (Campaigns tab).").classes(
+                "text-sm text-gray-500"
+            )
+            return
+        try:
+            data = read_results(review.results_path)
+        except Exception:
+            data = None
+        if data is None:
+            return
+        frame = grid()
+        with ui.tabs().props("dense align=left") as tabs:
+            for campaign in store.campaigns:
+                ui.tab(campaign.id, label=campaign.label)
+        with ui.tab_panels(tabs, value=store.campaigns[0].id).classes("w-full"):
+            for campaign in store.campaigns:
+                with ui.tab_panel(campaign.id):
+                    dims = campaigns.dimensions(frame, campaign)
+                    progress = campaigns.progress(data, campaign, dims)
+                    _table(
+                        pd.DataFrame(progress.by_dimension),
+                        [
+                            ("dimension", "Dimension"),
+                            ("human", "Coded by a person"),
+                            ("proposed", "LLM proposal to validate"),
+                            ("todo", "To do"),
+                        ],
+                        f"annotate-progress-{campaign.id}",
+                    )
+
+
+def _llm_agreement_card(review: Review) -> None:
+    import math
+
+    from scilex.gui.services import llm_annotator
+    from scilex.gui.services.extend import read_results
+
+    with ui.card().classes("w-full gap-2").mark("annotate-llm-agreement"):
+        ui.label("LLM annotators against the people").classes("text-lg font-bold")
+        ui.label(
+            "For each model: how often people accepted, corrected or rejected its "
+            "proposals, and Krippendorff's alpha (MASI) between its answers and the "
+            "people's codes on the same papers and dimensions (answers on coded "
+            "dimensions: Run LLM annotators > 'Also the dimensions people already coded')."
+        ).classes("text-xs text-gray-500")
+        result = ui.column().classes("w-full gap-2")
+
+        async def build() -> None:
+            try:
+                data = read_results(review.results_path)
+                models = await run.io_bound(llm_annotator.llm_agreement, review, data)
+            except Exception as exc:
+                show_error("Cannot compare the LLMs with the people", exc)
+                return
+            result.clear()
+            with result:
+                if not models:
+                    ui.label("No LLM answer to compare yet.").classes("text-sm")
+                    return
+                for model in models:
+                    outcomes = model.outcomes
+                    share = model.acceptance
+                    ui.label(
+                        f"{model.model}: {outcomes['accepted']} accepted, "
+                        f"{outcomes['corrected']} corrected, {outcomes['rejected']} "
+                        "rejected"
+                        + ("" if math.isnan(share) else f" ({share:.0%} accepted)")
+                    ).classes("font-medium text-sm").mark("annotate-llm-outcomes")
+                    _table(
+                        pd.DataFrame(
+                            [
+                                {
+                                    "dimension": d.dimension,
+                                    "alpha": "—"
+                                    if math.isnan(d.alpha)
+                                    else f"{d.alpha:.2f}",
+                                    "level": d.level,
+                                    "papers": d.papers,
+                                }
+                                for d in model.dimensions
+                            ]
+                        ),
+                        [
+                            ("dimension", "Dimension"),
+                            ("alpha", "α (MASI)"),
+                            ("level", "Agreement"),
+                            ("papers", "Papers"),
+                        ],
+                        "annotate-llm-alpha",
+                    )
+
+        ui.button("Compare", icon="compare", on_click=build).props(
+            "outline no-caps"
+        ).mark("annotate-llm-compare")
 
 
 class _GridState:

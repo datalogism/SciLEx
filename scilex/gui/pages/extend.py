@@ -9,8 +9,10 @@ One tab per way of extending the corpus:
 - **BibTeX**: the papers of a .bib file;
 - **Zotero**: the papers of another Zotero library or collection.
 
-Each extension that adds papers gets its own collection in the review's
-Zotero group (see :mod:`scilex.gui.services.extension_collection`).
+Each extension that adds papers goes into a collection of the review's
+Zotero group, a new one by default (see
+:mod:`scilex.gui.services.extension_collection`); without a group, the
+review cannot be extended.
 """
 
 from nicegui import events, run, ui
@@ -64,18 +66,20 @@ def render(ctx: AppContext, review: Review) -> None:
     ).classes("text-gray-500")
     problem = group_problem(review)
     if problem:
+        # Every extension goes into a Zotero collection of the review's group.
         with ui.row().classes("items-center gap-2 no-wrap").mark("extend-no-group"):
-            ui.icon("warning").classes("text-warning")
+            ui.icon("block").classes("text-negative")
             ui.label(
-                problem + " Without it, extensions get no Zotero collection."
+                problem + " Every extension goes into a Zotero collection of the "
+                "review's group: choose the group before extending the review."
             ).classes("text-sm")
             ui.button(
                 "Zotero group",
                 icon="groups",
                 on_click=lambda: ui.navigate.to(f"/review/{review.id}/group"),
             ).props("flat dense no-caps")
-    else:
-        _target_card(review)
+        return
+    _target_card(review)
     with ui.tabs().classes("w-full").props("align=left") as tabs:
         for key, (label, icon) in TABS.items():
             ui.tab(key, label=label, icon=icon).mark(f"extend-tab-{key}")

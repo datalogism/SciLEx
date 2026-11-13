@@ -79,3 +79,35 @@ async def test_notice_discards_and_validates_with_the_users_orcid(ctx, review):
 
         tags = ";".join(str(t) for t in read_results(review.results_path)["tags"])
         assert f"DELETED_BY:{orcid}" in tags and f"ANNOT_VALID_BY:{orcid}" in tags
+
+
+async def test_eligibility_filter(ctx, review):
+    from scilex.gui.services import criteria as cr
+
+    items = [c for c in cr.defaults({}) if c.id == "C6"]  # DOI required
+    cr.save(review.folder, items)
+    async with user_simulation(build_root(ctx)) as user:
+        await user.open(f"/review/{review.id}/explore")
+        await user.should_see(marker="explore-eligibility", retries=20)
+        grid = user.find(marker="explore-grid").elements.pop()
+        rows = {r["title"]: r for r in grid.options["rowData"]}
+        assert rows["HyperRED"]["criteria"] == "C6"
+        assert rows["HyperRED"]["criteria_causes"] == "C6: no DOI"
+        eligibility = user.find(marker="explore-eligibility").elements.pop()
+        assert "Excluded by C6 – Referenceability (1)" in eligibility.options.values()
+        eligibility.set_value("fail:C6")
+        assert [r["title"] for r in grid.options["rowData"]] == ["HyperRED"]
+        eligibility.set_value("eligible")
+        assert {r["title"] for r in grid.options["rowData"]} == {"REBEL", "DocRED"}
+
+
+async def test_explore_from_any_step(ctx, review):
+    async with user_simulation(build_root(ctx)) as user:
+        await user.open(f"/review/{review.id}/criteria")
+        await user.should_see(marker="explore-anywhere", retries=20)
+        user.find(marker="explore-anywhere").click()
+        await user.should_see(marker="explore-grid", retries=20)
+        await user.should_see("3 of 3 papers", retries=20)
+        await user.open(f"/review/{review.id}/explore")
+        await user.should_see(marker="explore-grid", retries=20)
+        await user.should_not_see(marker="explore-anywhere")

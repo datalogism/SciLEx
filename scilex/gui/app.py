@@ -1,6 +1,7 @@
 """Entry point of the SciLEx desktop application (``scilex-gui``)."""
 
 import argparse
+import contextlib
 import logging
 import multiprocessing
 import os
@@ -104,16 +105,30 @@ def _use_native_window(args: argparse.Namespace) -> bool:
     return False
 
 
+def safe_console_streams() -> None:
+    """Make stdout/stderr accept any character (progress bars, ✓ in logs).
+
+    A windowed frozen app has no console: writers get ``os.devnull``, opened
+    in UTF-8 (the Windows default, cp1252, cannot encode "✓" and made the
+    citation fetching of the pipeline fail). A real Windows console keeps its
+    encoding but replaces what it cannot show instead of raising.
+    """
+    for name in ("stdout", "stderr"):
+        stream = getattr(sys, name)
+        if stream is None:
+            setattr(sys, name, open(os.devnull, "w", encoding="utf-8"))  # noqa: SIM115
+        elif hasattr(stream, "reconfigure"):
+            # A detached or unusual stream is left as it is.
+            with contextlib.suppress(ValueError, OSError):
+                stream.reconfigure(errors="replace")
+
+
 def main(argv: list[str] | None = None) -> int:
     """Start the desktop application."""
     # Must come first: in the frozen app every multiprocessing worker
     # re-executes this entry point.
     multiprocessing.freeze_support()
-    # A windowed frozen app has no console: give writers somewhere to go.
-    if sys.stdout is None:
-        sys.stdout = open(os.devnull, "w")  # noqa: SIM115
-    if sys.stderr is None:
-        sys.stderr = open(os.devnull, "w")  # noqa: SIM115
+    safe_console_streams()
     args = build_parser().parse_args(argv)
 
     if args.probe_native:

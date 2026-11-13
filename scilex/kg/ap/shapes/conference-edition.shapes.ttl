@@ -1,0 +1,27 @@
+# scilex-lpwc-ap -- iteration 8 -- SHACL, GENERAL level (valid for any SciLEx collection).
+# Conference editions (events, ORSD VR4): one per conference series and year, from `eventtitle`
+# and the paper's date. Papers and proceedings are bibo:presentedAt the edition.
+# One targeted node shape per file, constraints on the focus node's own triples only
+# (see ../README.md: how X-DigCheck evaluates shapes).
+
+@prefix sh:       <http://www.w3.org/ns/shacl#> .
+@prefix rdfs:     <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:      <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms:  <http://purl.org/dc/terms/> .
+@prefix bibo:     <http://purl.org/ontology/bibo/> .
+@prefix lpwc:     <https://linkedpaperswithcode.com/class/> .
+@prefix sxv:      <https://w3id.org/scilex/vocab#> .
+@prefix sxsh:     <https://w3id.org/scilex/ap/lpwc/shapes#> .
+
+sxsh:ConferenceEditionShape
+    a sh:NodeShape ;
+    rdfs:label "Conference edition (event)"@en ;
+    sh:targetClass bibo:Conference ;
+    sh:property [
+        sh:path dcterms:isPartOf ; sh:minCount 1 ; sh:maxCount 1 ; sh:class lpwc:conference ;
+        sh:message "An edition belongs to exactly one conference series." ] ;
+    sh:property [ sh:path dcterms:date ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:gYear ] ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path sxv:eventPlace ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path sxv:eventPlace ; sh:maxCount 1 ; sh:severity sh:Warning ;
+        sh:message "Several places for one edition: the eventtitles of its papers probably name different events, or `location` is the publisher's city for some of them." ] .

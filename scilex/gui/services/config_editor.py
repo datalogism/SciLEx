@@ -272,15 +272,12 @@ def _atomic_write(target: Path, text: str) -> None:
     except BaseException:
         temporary.unlink(missing_ok=True)
         raise
-    import hashlib
+    from scilex.gui.services import journal, versions
 
-    from scilex.gui.services import journal
-
-    journal.append(
-        target.parent,
-        "configure",
-        generated={"scilex.yml sha256": hashlib.sha256(text.encode("utf-8")).hexdigest()},
-    )
+    sha = versions.sha256_text(text)
+    if target.name == versions.SOURCE_FILES[versions.CONFIG]:
+        versions.record_config(target.parent, text)  # config_history/<sha256>.yml
+    journal.append(target.parent, "configure", generated={"scilex.yml sha256": sha})
 
 
 def save(review: Review, data: dict) -> Path:

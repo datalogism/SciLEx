@@ -18,9 +18,23 @@ state) and charts: papers per year, per source, per collection and per
 papers coded per dimension. Papers discarded with a `DELETED_BY:` tag are left out of
 the counts and charts.
 
+## Review workflow
+
+The Overview opens on a map of the review: the ten steps as cards in two rows (①
+Configure to ④ Annotate, then ⑤ Extend to ⑧ Export), with how far each one is (a bar
+coloured green from 75 %, amber from 40 %, red below), the three loops back in blue
+(new papers to screen after an extension, metrics for the criteria after Enrich,
+suggested keywords after Analyses) and what applies at every step (Zotero sync,
+journal, ORCID attribution, tags). Select a step to see where it stands, what is
+left to do, and a button to open it. Progress is read from the results, the
+criteria, the screening decisions, the annotation tags and the journal.
+
 ## PRISMA flow
 
-The Overview opens on a [PRISMA](https://www.prisma-statement.org/) flow diagram:
+The PRISMA flow is drawn first as a **funnel**: identified, in the corpus (after
+duplicates and filters), eligible (after the criteria and people's discards),
+screened, included, with what was lost at each stage and why beside it. Switch to
+**Diagram** for the [PRISMA](https://www.prisma-statement.org/) flow diagram:
 
 - **Identification**: the collect of `scilex.yml` (APIs, keywords, years) and its raw
   count, plus the records from other sources: each extension (new collect,
@@ -32,7 +46,7 @@ The Overview opens on a [PRISMA](https://www.prisma-statement.org/) flow diagram
 - **Enrichment**: the enrichments run on the corpus, beside the flow.
 
 **Export** draws the flow as a PRISMA-style figure, `prisma_flow.svg` and
-`prisma_flow.png`, written to the collection folder and downloaded, ready for the
+`prisma_flow.png`, plus the funnel `prisma_flow_funnel.svg`, written to the collection folder and downloaded, ready for the
 methods section of the paper.
 
 ## Review card

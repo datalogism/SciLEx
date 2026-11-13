@@ -93,12 +93,13 @@ def level(value: float) -> str:
 def codes_by_dimension(tags: Iterable[str]) -> dict[str, frozenset]:
     """``DIMENSION:value`` tags as ``{DIMENSION: {values}}`` (placeholders left out)."""
     from scilex import review_tags
+    from scilex.tagging.auto_tags import is_auto_tag
 
     found: dict[str, set] = {}
     for tag in tags:
         tag = str(tag).strip()
-        if not tag or review_tags.is_workflow_tag(tag):
-            continue
+        if not tag or review_tags.is_workflow_tag(tag) or is_auto_tag(tag):
+            continue  # LLM proposals (DIM-AUTO:value) are not codes
         dimension, sep, value = tag.partition(":")
         dimension, value = dimension.strip().upper(), value.strip()
         if not sep or not dimension or " " in dimension or not value:

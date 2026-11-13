@@ -45,6 +45,7 @@ modules/index
 modules/workspace
 modules/overview
 modules/explore
+modules/dashboard
 modules/configure
 modules/collect
 modules/criteria
@@ -120,6 +121,17 @@ the [API comparison](reference/api-comparison.md).
 Semantic Scholar, Crossref and OpenCitations (citations), Papers with Code, Linked Papers
 With Code, ORKG, Unpaywall (open access), CORE/SJR (venue ranks), OpenRouter (optional
 LLM screening).
+
+## Related projects
+
+- [scilex-lpwc-ap](https://codeberg.org/cringwald/scilex-lpwc-ap): the application
+  profile of the SciLEx knowledge graph (RML mappings, SHACL shapes, competency
+  questions), pinned in `scilex/kg/ap/` and used by
+  [⑧ Export → Knowledge graph](modules/export.md#knowledge-graph). Iteration 8, pre-release.
+- [SciLEx Annotator](https://github.com/datalogism/SciLex-LmmAnnotator): LLM-assisted
+  annotation prototype. [④ Annotate](modules/annotate.md) campaigns call it as an HTTP
+  service; its answers come back as `DIMENSION-AUTO:value` proposals that a person
+  validates.
 
 ## System requirements
 

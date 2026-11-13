@@ -15,7 +15,13 @@ def _isolated_home(tmp_path_factory, monkeypatch):
     ``%APPDATA%`` on Windows) and the package's own legacy ``api.config.yml``.
     """
     home = tmp_path_factory.mktemp("home")
-    for variable in ("HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "XDG_CONFIG_HOME"):
+    for variable in (
+        "HOME",
+        "USERPROFILE",
+        "APPDATA",
+        "LOCALAPPDATA",
+        "XDG_CONFIG_HOME",
+    ):
         monkeypatch.setenv(variable, str(home))
     for variable in ("SCILEX_KEYS", "SCILEX_CONFIG"):
         monkeypatch.delenv(variable, raising=False)

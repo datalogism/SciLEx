@@ -24,6 +24,11 @@ from scilex.settings.schema import SettingsError
 
 KIND = "export"
 KG = "kg"
+DISCLOSURES = {
+    "public": "Public (to share)",
+    "team": "Team",
+    "full": "Full",
+}
 
 
 def history_key(fmt: str) -> str:
@@ -72,10 +77,20 @@ def kg_summary(result) -> str:
         False: "has SHACL violations (see the .shacl.txt report)",
         None: "not validated",
     }[report.conforms]
-    return (
+    text = (
         f"{report.papers} papers -> {report.triples} triples in {result.turtle}; "
         f"the graph {shacl}."
     )
+    bundle = getattr(result, "bundle", None)
+    if bundle is not None:
+        text += f" Survey bundle written at the {bundle.disclosure} level."
+    suspects = getattr(report, "suspect_literals", None)
+    if suspects:
+        text += (
+            f" Warning: {len(suspects)} values look like credentials; check the "
+            "graph before sharing it."
+        )
+    return text
 
 
 def zotero_summary(counts: dict[str, int]) -> str:
@@ -84,7 +99,12 @@ def zotero_summary(counts: dict[str, int]) -> str:
         f"{counts.get('success', 0)} pushed, "
         f"{counts.get('skipped', 0)} skipped as duplicates, "
         f"{counts.get('skipped_for_incompatibility', 0)} without usable URL or type, "
-        f"{counts.get('failed', 0)} failed."
+        f"{counts.get('failed', 0)} failed"
+        + (
+            f"; {counts['linked']} linked for the sync (screening and tags follow)."
+            if counts.get("linked")
+            else "."
+        )
     )
 
 
@@ -164,6 +184,19 @@ def render(ctx: AppContext, review: Review) -> None:
                 run_statuses.append(
                     RunStatus(review, history_key(fmt), history=history)
                 )
+                if fmt == KG:
+                    disclosure = (
+                        ui.select(DISCLOSURES, value="public", label="Disclosure")
+                        .props("dense outlined")
+                        .classes("w-56")
+                        .tooltip(
+                            "Public: for a file you share (members named only with "
+                            "their consent, no notes). Team: notes, names and each "
+                            "annotator's codes. Full: also the parameters of every "
+                            "event of the journal. Never any API key."
+                        )
+                        .mark("export-kg-disclosure")
+                    )
                 if fmt == KG and kg_problem:
                     ui.label(kg_problem).classes("text-sm text-negative").mark(
                         "export-kg-missing"
@@ -327,6 +360,7 @@ def render(ctx: AppContext, review: Review) -> None:
                     output_dir=review.collection_dir / kg_export.KG_DIRNAME,
                     creator=ctx.profile.orcid_uri,
                     progress=progress,
+                    disclosure=disclosure.value or "public",
                 )
                 return kg_summary(job.result)
             if fmt == exports.ZOTERO:

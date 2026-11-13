@@ -98,7 +98,5 @@ WHERE {
     GROUP BY ?br }
   BIND (?n AS ?value)  # xsd:integer (value-compatible with the C4O nonNegativeInteger range)
   BIND (IRI(CONCAT(STR(?br), "/citation-count/1")) AS ?count)
-} ;
-
-# staging triples are not part of the output
-DELETE WHERE { ?s <urn:scilex:staging#note> ?note }
+}
+# iter4: the staging note is read again by 03b-note-lines.ru and deleted by 99-cleanup.ru

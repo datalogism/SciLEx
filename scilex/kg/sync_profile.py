@@ -54,6 +54,13 @@ PROFILE_FILES: tuple[tuple[str, str], ...] = (
     (r"mappings/functions/[^/]+\.py", "mappings/functions"),
     (r"mappings/sparql/[^/]+\.ru", "mappings/sparql"),
     (r"shapes/(manual/)?general/[^/]+\.ttl", "shapes"),
+    # iteration 4+: the mapping interface (placeholder contract, effective profile),
+    # the reference profiles a collection profile extends, the global reference tables
+    # and the JSON Schemas of the collection profile and of the survey bundle.
+    (r"mappings/ap_profile\.py", "mappings"),
+    (r"mappings/collections/_[^/]+\.json", "mappings/collections"),
+    (r"mappings/alignments/[^/]+\.json", "mappings/alignments"),
+    (r"mappings/[^/]+\.schema\.json", "mappings"),
 )
 REQUIRED_FOLDERS = ("ontology", "mappings/rml", "mappings/functions", "mappings/sparql")
 
@@ -70,7 +77,10 @@ class RemoteVersion:
 def _session() -> requests.Session:
     session = requests.Session()
     retry = Retry(
-        total=4, backoff_factor=2, status_forcelist=(429, 500, 502, 503, 504), allowed_methods=("GET",)
+        total=4,
+        backoff_factor=2,
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=("GET",),
     )
     session.mount("https://", HTTPAdapter(max_retries=retry))
     return session
@@ -106,7 +116,9 @@ def latest_version(ref: str | None = None) -> RemoteVersion:
     tags = _get(f"{API}/tags", limit=50).json()
     if tags:
         newest = max(tags, key=lambda t: t["commit"].get("created", ""))
-        return RemoteVersion(ref=newest["name"], kind="tag", commit=newest["commit"]["sha"])
+        return RemoteVersion(
+            ref=newest["name"], kind="tag", commit=newest["commit"]["sha"]
+        )
     branch = _get(API).json()["default_branch"]
     return RemoteVersion(ref=branch, kind="branch", commit=_commit_of(branch))
 
@@ -135,7 +147,11 @@ def select_files(paths: list[str], root: str) -> dict[str, str]:
         for pattern, folder in PROFILE_FILES:
             if re.fullmatch(pattern, relative):
                 selected[path] = f"{folder}/{relative.rsplit('/', 1)[-1]}"
-    missing = [f for f in REQUIRED_FOLDERS if not any(d.startswith(f + "/") for d in selected.values())]
+    missing = [
+        f
+        for f in REQUIRED_FOLDERS
+        if not any(d.startswith(f + "/") for d in selected.values())
+    ]
     if missing:
         raise LookupError(f"The profile in {root}/ has no {', '.join(missing)}")
     return selected
@@ -149,7 +165,9 @@ def _ontology_version(ttl: str) -> tuple[str, str]:
 
 def install(version: RemoteVersion, target: Path = PROFILE_DIR) -> dict:
     """Download ``version`` into ``target`` (replaced atomically) and return its metadata."""
-    tree = _get(f"{API}/git/trees/{version.commit}", recursive="true", per_page=10000).json()
+    tree = _get(
+        f"{API}/git/trees/{version.commit}", recursive="true", per_page=10000
+    ).json()
     if tree.get("truncated"):
         raise RuntimeError("The repository tree listing is truncated")
     paths = [e["path"] for e in tree["tree"] if e["type"] == "blob"]
@@ -164,7 +182,9 @@ def install(version: RemoteVersion, target: Path = PROFILE_DIR) -> dict:
             out.write_bytes(_get(f"{RAW}/{version.commit}/{source}").content)
             logger.info("%s -> %s", source, destination)
         ontology = next((staging / "ontology").glob("*.ttl"))
-        version_info, version_iri = _ontology_version(ontology.read_text(encoding="utf-8"))
+        version_info, version_iri = _ontology_version(
+            ontology.read_text(encoding="utf-8")
+        )
         metadata = {
             "repository": f"https://codeberg.org/{REPOSITORY}",
             "ref": version.ref,
@@ -192,7 +212,10 @@ def _git(checkout: Path, *args: str) -> str:
     try:
         return subprocess.run(
             ["git", "-C", str(checkout), *args],
-            capture_output=True, text=True, check=True, timeout=30,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,
         ).stdout.strip()
     except (OSError, subprocess.SubprocessError):
         return ""
@@ -218,7 +241,9 @@ def install_local(checkout: Path, target: Path = PROFILE_DIR) -> dict:
             shutil.copy2(checkout / source, out)
             logger.info("%s -> %s", source, destination)
         ontology = next((staging / "ontology").glob("*.ttl"))
-        version_info, version_iri = _ontology_version(ontology.read_text(encoding="utf-8"))
+        version_info, version_iri = _ontology_version(
+            ontology.read_text(encoding="utf-8")
+        )
         metadata = {
             "repository": f"https://codeberg.org/{REPOSITORY}",
             "ref": f"local:{checkout.name}",
@@ -242,12 +267,18 @@ def install_local(checkout: Path, target: Path = PROFILE_DIR) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--ref", help="tag, branch or commit to install (default: latest)")
     parser.add_argument(
-        "--check", action="store_true", help="only report whether a newer version exists"
+        "--ref", help="tag, branch or commit to install (default: latest)"
     )
     parser.add_argument(
-        "--local", type=Path, metavar="DIR",
+        "--check",
+        action="store_true",
+        help="only report whether a newer version exists",
+    )
+    parser.add_argument(
+        "--local",
+        type=Path,
+        metavar="DIR",
         help="install from a local checkout of the profile (unpushed iterations included)",
     )
     args = parser.parse_args(argv)

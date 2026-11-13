@@ -19,8 +19,11 @@ paper codes their own copy of it:
 from __future__ import annotations
 
 import copy
+import json
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
 
 import pandas as pd
 
@@ -31,6 +34,8 @@ logger = logging.getLogger(__name__)
 
 ROOT = "agreement"
 BATCH = 50
+# One file per computed study, in the collection folder (SX-4, ORSD SR9).
+STUDY_DIR = Path("annotations") / "agreement"
 DROP_FIELDS = ("key", "version", "dateAdded", "dateModified")
 
 
@@ -177,6 +182,17 @@ def create_copies(review: Review, plan: dict[str, list[str]]) -> CopyReport:
             if len(batch) >= BATCH:
                 flush()
     flush()
+    from scilex.gui.services import journal
+
+    journal.append(
+        review.folder,
+        "agreement-copies",
+        used={"sample": sorted(plan)},
+        generated={"created": report.created, "existing": report.existing},
+        params={"annotators": sorted({a for v in plan.values() for a in v})},
+        status="failed" if report.failed and not report.created else "completed",
+        message=report.message(),
+    )
     return report
 
 
@@ -211,19 +227,115 @@ class AgreementReport:
     annotators: list[str] = field(default_factory=list)
 
 
-def compute(review: Review) -> tuple[AgreementReport, dict]:
-    """Agreement per dimension of the review's study, and the copies read."""
+def compute(
+    review: Review, *, include_llm: bool = False
+) -> tuple[AgreementReport, dict]:
+    """Agreement per dimension of the review's study, and the copies read.
+
+    ``include_llm``: the LLM annotators' answers on the same papers count as
+    more annotators (``llm:<model>``, from :mod:`llm_annotator`); they are
+    never merged into the papers. The study is saved (:func:`save_study`) and
+    journaled.
+    """
     copies = read_copies(review)
+    if include_llm:
+        from scilex.gui.services import llm_annotator
+
+        for key, by_model in llm_annotator.coder_tags(review, set(copies)).items():
+            copies.setdefault(key, {}).update(by_model)
     studied = {key: by_coder for key, by_coder in copies.items() if len(by_coder) >= 2}
     annotators = sorted({who for by_coder in studied.values() for who in by_coder})
-    return (
-        AgreementReport(
-            dimensions=annotation_agreement.by_dimension(studied),
-            papers=len(studied),
-            annotators=annotators,
-        ),
-        studied,
+    report = AgreementReport(
+        dimensions=annotation_agreement.by_dimension(studied),
+        papers=len(studied),
+        annotators=annotators,
     )
+    try:
+        path = save_study(review, report, studied)
+    except OSError:
+        logger.warning("Cannot save the agreement study", exc_info=True)
+    else:
+        from scilex.gui.services import journal
+
+        journal.append(
+            review.folder,
+            "agreement-computed",
+            used={"sample": sorted(studied)},
+            generated={
+                "file": path.relative_to(review.collection_dir).as_posix(),
+                "alpha": {d.dimension: d.alpha for d in report.dimensions},
+            },
+            params={"annotators": annotators},
+        )
+    return report, studied
+
+
+def study_codes(studied: dict) -> list[dict]:
+    """``[{paper, annotator, dimension, value}]``: every code of every copy."""
+    rows = []
+    for paper, by_coder in sorted(studied.items()):
+        for annotator, tags in sorted(by_coder.items()):
+            coded = annotation_agreement.codes_by_dimension(tags)
+            for dimension, values in sorted(coded.items()):
+                for value in sorted(values):
+                    rows.append(
+                        {
+                            "paper": paper,
+                            "annotator": annotator,
+                            "dimension": dimension,
+                            "value": value,
+                        }
+                    )
+    return rows
+
+
+def save_study(review: Review, report: AgreementReport, studied: dict) -> Path:
+    """Write ``annotations/agreement/<at>.json`` in the collection folder.
+
+    It holds the sample (reference item keys), the annotators, per dimension
+    Krippendorff's alpha (MASI distance) with its numbers of papers and values,
+    and every code per annotator. :func:`merge` adds the merge rule and the codes
+    left to adjudicate.
+    """
+    at = datetime.now().isoformat(timespec="seconds")
+    folder = review.collection_dir / STUDY_DIR
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / f"{at.replace(':', '-')}.json"
+    body = {
+        "at": at,
+        "sample": sorted(studied),
+        "annotators": report.annotators,
+        "measures": [
+            {
+                "dimension": d.dimension,
+                "measure": "krippendorff-alpha",
+                "distance": "masi",
+                "alpha": d.alpha,
+                "papers": d.papers,
+                "values": d.values,
+            }
+            for d in report.dimensions
+        ],
+        "codes": study_codes(studied),
+        "merge": None,
+    }
+    path.write_text(json.dumps(body, ensure_ascii=False, indent=1), encoding="utf-8")
+    return path
+
+
+def load_studies(collection_dir: Path) -> list[dict]:
+    """Every saved study of a collection folder, oldest first (with its ``file``)."""
+    studies = []
+    for path in sorted((Path(collection_dir) / STUDY_DIR).glob("*.json")):
+        try:
+            body = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            logger.warning("Cannot read %s", path)
+            continue
+        if isinstance(body, dict):
+            body["file"] = (STUDY_DIR / path.name).as_posix()
+            studies.append(body)
+    return studies
 
 
 # -- 4. merge -------------------------------------------------------------------
@@ -255,7 +367,17 @@ def merge(review: Review, copies: dict, *, with_majority: bool = True) -> MergeR
     api = _api(review)
     report = MergeReport()
     updates: dict[str, tuple[int, list[str]]] = {}
+    from scilex.gui.services.campaigns import LLM_PREFIX
+
     for item_key, by_coder in copies.items():
+        # Only people write codes: LLM annotators are measured, never merged.
+        by_coder = {
+            who: tags
+            for who, tags in by_coder.items()
+            if not who.startswith(LLM_PREFIX)
+        }
+        if len(by_coder) < 2:
+            continue
         proposal = annotation_agreement.merge_proposal(by_coder)
         new_codes = proposal.agreed + (proposal.majority if with_majority else [])
         if proposal.disputed or (not with_majority and proposal.majority):
@@ -287,4 +409,44 @@ def merge(review: Review, copies: dict, *, with_majority: bool = True) -> MergeR
         outcome = api.update_item_tags(updates)
         report.papers = outcome["success"]
         report.failed += outcome["failed"]
+    _record_merge(review, report, with_majority)
     return report
+
+
+def _record_merge(review: Review, report: MergeReport, with_majority: bool) -> None:
+    """Add the merge outcome to the latest saved study and journal it."""
+    from scilex.gui.services import journal
+
+    merge_rule = {
+        "rule": "majority" if with_majority else "all",
+        "at": datetime.now().isoformat(timespec="seconds"),
+        "papers": report.papers,
+        "codes": report.codes,
+        "to_adjudicate": [
+            {"paper": paper, "code": code}
+            for paper, codes in sorted(report.disputed.items())
+            for code in codes
+        ],
+    }
+    studies = sorted((review.collection_dir / STUDY_DIR).glob("*.json"))
+    generated: dict = {"codes": report.codes, "papers": report.papers}
+    if studies:
+        try:
+            body = json.loads(studies[-1].read_text(encoding="utf-8"))
+            body["merge"] = merge_rule
+            studies[-1].write_text(
+                json.dumps(body, ensure_ascii=False, indent=1), encoding="utf-8"
+            )
+            generated["file"] = (
+                studies[-1].relative_to(review.collection_dir).as_posix()
+            )
+        except (OSError, ValueError):
+            logger.warning("Cannot record the merge in %s", studies[-1], exc_info=True)
+    journal.append(
+        review.folder,
+        "agreement-merged",
+        generated=generated,
+        params={"rule": merge_rule["rule"]},
+        status="failed" if report.failed and not report.papers else "completed",
+        message=report.message(),
+    )

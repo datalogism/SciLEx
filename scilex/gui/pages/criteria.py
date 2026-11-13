@@ -171,6 +171,8 @@ def _card(review: Review, criterion: service.Criterion, items: list, redraw) -> 
                 ui.label(result.message()).classes("text-sm font-bold").mark(
                     f"criterion-result-{criterion.id}"
                 )
+                for note in result.notes:
+                    ui.label(note).classes("text-xs text-gray-600")
                 for title, papers in (
                     ("Excluded", result.excluded),
                     ("Kept by an exception", result.spared),
@@ -243,6 +245,8 @@ def _params(criterion: service.Criterion) -> None:
                 + (", ".join(active) if active else "none set")
                 + ". The year range is C1's job."
             ).classes("text-xs text-gray-600")
+        elif kind == "metric":
+            _metric_params(params)
         elif kind == "text":
             params.setdefault("pattern", "")
             ui.input("Pattern (regular expression)").bind_value(
@@ -253,3 +257,77 @@ def _params(criterion: service.Criterion) -> None:
         ui.select(
             list(TYPES), multiple=True, label="Exception: keep these paper types"
         ).bind_value(criterion, "keep_types").classes("w-80").props("use-chips")
+
+
+def _metric_params(params: dict) -> None:
+    """Conditions on metrics: citations, PageRank, quality, venue rank…"""
+    params.setdefault("match", "all")
+    params.setdefault("missing", "keep")
+    params.setdefault("conditions", [])
+    with ui.column().classes("w-full gap-1"):
+        with ui.row().classes("items-center gap-3"):
+            ui.select(
+                {
+                    "all": "Exclude when one condition fails",
+                    "any": "Exclude when every condition fails",
+                },
+                label="Combine",
+            ).bind_value(params, "match").classes("w-72")
+            ui.select(
+                {
+                    "keep": "Keep papers whose metric is unknown",
+                    "exclude": "Exclude papers whose metric is unknown",
+                },
+                label="Unknown values",
+            ).bind_value(params, "missing").classes("w-80")
+
+        @ui.refreshable
+        def conditions() -> None:
+            for condition in params["conditions"]:
+                with ui.row().classes("items-center gap-2 no-wrap"):
+                    ui.select(
+                        {k: label for k, (label, _) in service.METRICS.items()},
+                        label="Metric",
+                    ).bind_value(condition, "metric").classes("w-80").on_value_change(
+                        lambda _: conditions.refresh()
+                    )
+                    if condition.get("metric") == "column":
+                        condition.setdefault("column", "")
+                        ui.input("Column").bind_value(condition, "column").classes(
+                            "w-48"
+                        )
+                    ui.select(service.OPERATORS, label="Rule").bind_value(
+                        condition, "op"
+                    ).classes("w-72").on_value_change(lambda _: conditions.refresh())
+                    if condition.get("op") != "age_aware":
+                        label = {
+                            "top_percent": "%",
+                            "top_n": "N",
+                        }.get(condition.get("op"), "Value")
+                        ui.number(label).bind_value(condition, "value").classes("w-28")
+                    ui.button(
+                        icon="close",
+                        on_click=lambda _, c=condition: (
+                            params["conditions"].remove(c),
+                            conditions.refresh(),
+                        ),
+                    ).props("flat round dense")
+            ui.button(
+                "Add a condition",
+                icon="add",
+                on_click=lambda: (
+                    params["conditions"].append(
+                        {"metric": "citations", "op": ">=", "value": 1}
+                    ),
+                    conditions.refresh(),
+                ),
+            ).props("flat dense no-caps").mark("criterion-add-condition")
+
+        conditions()
+        ui.label(
+            "Citations come from the collection or Enrich › Citations; citations "
+            "per year, from the corpus and PageRank from Enrich › Citation metrics. "
+            '"Top %" is computed among the papers whose metric is known. '
+            '"Enough for its age" asks 0 citations up to 18 months, then 1, 3, '
+            "5-8, 10+ as the paper gets older."
+        ).classes("text-xs text-gray-600")

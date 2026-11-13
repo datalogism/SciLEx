@@ -1,7 +1,8 @@
 """Default type of each paper: Benchmark, Review or State of the art, Dataset, Model or Method.
 
-Every paper of a review gets one ``PAPER_TYPE:<type>`` tag (a DIMENSION:value
-tag, shared through Zotero like the others). The default comes from cue words
+Every paper of a review gets at least one ``PAPER_TYPE:<type>`` tag (a
+DIMENSION:value tag, shared through Zotero like the others); a paper can have
+several types, e.g. a Model or Method paper that also releases a Dataset. The default comes from cue words
 of the title (decisive) and the abstract, and from the publication type; a
 person can change it in Zotero or SciLEx, and a type already set is never
 overwritten. A paper with no cue is a Model or Method paper, the common case.
@@ -22,6 +23,32 @@ REVIEW = "Review or State of the art"
 DATASET = "Dataset"
 MODEL = "Model or Method"
 TYPES = (BENCHMARK, REVIEW, DATASET, MODEL)
+# Who set the PAPER_TYPE tags of a paper (SX-17, ORSD SR16): ``person:<ORCID iD
+# IRI>`` (③ Screen, Explore), ``collection-role`` (a screened collection's type),
+# ``default-guess`` (⑥ Enrich > Paper types). No value: ``unknown``.
+ORIGIN_COLUMN = "paper_type_origin"
+DEFAULT_GUESS = "default-guess"
+COLLECTION_ROLE = "collection-role"
+UNKNOWN_ORIGIN = "unknown"
+
+
+def person_origin(agent_id: str) -> str:
+    """Origin of types set by a person (``person:`` + ORCID iD IRI, or unknown)."""
+    return f"person:{agent_id}" if agent_id else "person:unknown"
+
+
+def changes_types(add, remove) -> bool:
+    """True when a tag change adds or removes a ``PAPER_TYPE:`` tag."""
+    return any(str(tag).upper().startswith(PREFIX) for tag in (*add, *remove))
+
+
+def set_origin(data, index, origin: str) -> None:
+    """Record who set the types of row ``index`` of ``data``."""
+    if ORIGIN_COLUMN not in data.columns:
+        data[ORIGIN_COLUMN] = ""
+    data[ORIGIN_COLUMN] = data[ORIGIN_COLUMN].astype(object)
+    data.at[index, ORIGIN_COLUMN] = origin
+
 
 _CUES = {
     REVIEW: re.compile(
@@ -67,20 +94,47 @@ def classify(title: str, abstract: str = "", item_type: str = "") -> str:
     return MODEL
 
 
-def type_of(row) -> str | None:
-    """The ``PAPER_TYPE`` tag of a results row, if it has one."""
+def types_of(row) -> list[str]:
+    """The ``PAPER_TYPE`` tags of a results row, in tag order (may be empty)."""
+    found: list[str] = []
     for tag in review_tags.split_tags(row.get("tags")):
         if tag.upper().startswith(PREFIX):
             value = tag[len(PREFIX) :].strip()
-            if value:
-                return value
-    return None
+            if value and value not in found:
+                found.append(value)
+    return found
+
+
+def type_of(row) -> str | None:
+    """The first ``PAPER_TYPE`` tag of a results row, if it has one."""
+    found = types_of(row)
+    return found[0] if found else None
+
+
+def effective_types(row) -> list[str]:
+    """The paper's types: its tags, else ``[default]``."""
+    return types_of(row) or [
+        classify(row.get("title"), row.get("abstract"), row.get("itemType"))
+    ]
 
 
 def effective_type(row) -> str:
-    """The paper's type: its tag, else the default."""
-    return type_of(row) or classify(
-        row.get("title"), row.get("abstract"), row.get("itemType")
+    """The paper's main type (first tag, else the default); one value, for a
+    colour or a single group. Use :func:`effective_types` to count or filter."""
+    return effective_types(row)[0]
+
+
+def tag_changes(row, types: list[str]) -> tuple[list[str], list[str]]:
+    """``(add, remove)`` tags making ``types`` the paper's types (``[]``: none)."""
+    current = [
+        tag
+        for tag in review_tags.split_tags(row.get("tags"))
+        if tag.upper().startswith(PREFIX)
+    ]
+    wanted = [PREFIX + kind for kind in types]
+    return (
+        [tag for tag in wanted if tag not in current],
+        [tag for tag in current if tag not in wanted],
     )
 
 
@@ -95,5 +149,6 @@ def annotate(data) -> int:
             continue
         tags = review_tags.split_tags(row.get("tags"))
         data.at[index, "tags"] = ";".join([*tags, PREFIX + effective_type(row)])
+        set_origin(data, index, DEFAULT_GUESS)
         tagged += 1
     return tagged

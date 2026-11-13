@@ -1,0 +1,28 @@
+# scilex-lpwc-ap -- iteration 6 -- SHACL, GENERAL level (valid for any SciLEx collection).
+# Values outside the grid declaration of the collection profile (ORSD UCR4): sparql/03c types
+# them sxv:OutOfGridValue (not binary, not in a closed list, not an order of magnitude).
+# Replaces the review-specific value shapes of iter2-iter5 (ucd-binary-dimension,
+# ucd-granularity-values, ucd-order-of-magnitude): the rules now live in the profile
+# (mappings/collections/<slug>.json, dimension "values"). Warnings for the review team.
+# One targeted node shape per file; the SPARQL reads the focus node's own triples only.
+
+@prefix sh:       <http://www.w3.org/ns/shacl#> .
+@prefix rdfs:     <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:      <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:     <http://www.w3.org/2004/02/skos/core#> .
+@prefix sxv:      <https://w3id.org/scilex/vocab#> .
+@prefix sxsh:     <https://w3id.org/scilex/ap/lpwc/shapes#> .
+
+sxsh: sh:declare [ sh:prefix "skos" ; sh:namespace "http://www.w3.org/2004/02/skos/core#"^^xsd:anyURI ] .
+
+sxsh:OutOfGridValueShape
+    a sh:NodeShape ;
+    rdfs:label "Values allowed by the grid declaration"@en ;
+    sh:targetClass sxv:OutOfGridValue ;
+    sh:severity sh:Warning ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "Tag {?tag} is outside the values its grid dimension declares." ;
+        sh:prefixes sxsh: ;
+        sh:select """
+            SELECT $this ?tag WHERE { $this skos:notation ?tag . }""" ] .

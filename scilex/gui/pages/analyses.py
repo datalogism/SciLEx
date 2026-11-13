@@ -61,6 +61,41 @@ def kept_papers_filter(review: Review) -> Callable:
     return keep
 
 
+def _snowball_seed_options(review, select, checkbox, stored: dict) -> None:
+    """Seeds of the snowballing: Zotero collections, paper types, eligibility."""
+    from scilex.gui.services import snowball_scope
+    from scilex.paper_types import TYPES
+
+    collections: list[str] = []
+    if review is not None:
+        try:
+            from scilex.gui.services.extend import read_results
+
+            collections = snowball_scope.collection_options(
+                read_results(review.results_path)
+            )
+        except Exception:  # unreadable results: no collection choices
+            collections = []
+    collections = sorted(set(collections) | set(stored.get("collections") or []))
+    ui.label(
+        "Seeds: the corpus papers to start from (empty = all). A collection "
+        "includes its sub-collections; candidates already in the review are "
+        "never added again."
+    ).classes("text-xs text-gray-600")
+    with ui.row().classes("items-center gap-4 w-full"):
+        select(
+            "collections",
+            "Zotero collections",
+            collections,
+            [],
+            multiple=True,
+            with_input=True,
+            clearable=True,
+        )
+        select("paper_types", "Paper types", list(TYPES), [], multiple=True)
+        checkbox("eligible_only", "Only papers meeting the eligibility criteria")
+
+
 def kind_of(name: str) -> str:
     """Job kind of analysis ``name``."""
     return f"analysis-{name}"
@@ -206,7 +241,7 @@ def _render_analysis(
                     on_click=lambda: _run_crossref_first(ctx, review),
                 ).props("outline dense no-caps").mark(f"analysis-crossref-first-{name}")
 
-    options = _render_options(name)
+    options = _render_options(name, review)
     reason_label = (
         ui.label("").classes("text-orange-700").mark(f"analysis-reason-{name}")
     )
@@ -371,22 +406,33 @@ def _render_analysis(
     return panel
 
 
-def _render_options(name: str) -> dict:
-    """Draw the option widgets of analysis ``name``; keys match the runner's kwargs."""
+def _render_options(name: str, review: Review | None = None) -> dict:
+    """Draw the option widgets of analysis ``name``; keys match the runner's kwargs.
+
+    Snowballing settings are stored in the review (``snowball.yml``): the
+    widgets start from them and every change is saved.
+    """
+    from scilex.gui.services import snowball_scope
+
     widgets: dict = {}
+    stored = (
+        snowball_scope.load(review.folder)
+        if name == "snowball" and review is not None
+        else {}
+    )
 
     def number(key: str, label: str, value: float, **props) -> None:
-        widgets[key] = ui.number(label, value=value, **props).mark(
+        widgets[key] = ui.number(label, value=stored.get(key, value), **props).mark(
             f"analysis-opt-{name}-{key}"
         )
 
-    def select(key: str, label: str, choices, value: str) -> None:
-        widgets[key] = ui.select(choices, label=label, value=value).mark(
-            f"analysis-opt-{name}-{key}"
-        )
+    def select(key: str, label: str, choices, value, **kwargs) -> None:
+        widgets[key] = ui.select(
+            choices, label=label, value=stored.get(key, value), **kwargs
+        ).mark(f"analysis-opt-{name}-{key}")
 
     def checkbox(key: str, label: str, value: bool = False) -> None:
-        widgets[key] = ui.checkbox(label, value=value).mark(
+        widgets[key] = ui.checkbox(label, value=stored.get(key, value)).mark(
             f"analysis-opt-{name}-{key}"
         )
 
@@ -421,8 +467,12 @@ def _render_options(name: str) -> dict:
                 min=50,
                 max=100,
             )
-        elif name in ("crossref", "lpwc", "orkg"):
+        elif name in ("crossref", "lpwc", "orkg", "github", "zenodo"):
             number("limit", "Max papers (0 = all)", 0, min=0, precision=0)
+            if name == "zenodo":
+                checkbox(
+                    "datasets_only", "Only the dataset papers (PAPER_TYPE:Dataset)"
+                )
         elif name == "metrics":
             checkbox("tags", "Also as tags (CITATIONS:10^2, PAGERANK:top5%…)", True)
         elif name == "citations":
@@ -443,6 +493,24 @@ def _render_options(name: str) -> dict:
                 "Add to the collection (otherwise aggregated_results_snowball.csv)",
                 value=True,
             )
+    if name == "snowball":
+        _snowball_seed_options(review, select, checkbox, stored)
+        if review is not None:
+
+            def store(_=None) -> None:
+                settings = {
+                    key: widget.value
+                    for key, widget in widgets.items()
+                    if key in snowball_scope.KEYS
+                }
+                try:
+                    snowball_scope.save(review.folder, settings)
+                except OSError as exc:
+                    show_error("Cannot save the snowballing settings", exc)
+
+            for key, widget in widgets.items():
+                if key in snowball_scope.KEYS:
+                    widget.on_value_change(store)
         elif name == "graph":
             select(
                 "graph_type",

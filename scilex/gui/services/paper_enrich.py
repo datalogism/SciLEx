@@ -17,7 +17,10 @@ SOURCES = {
     "crossref": "Crossref (abstract, venue, licence, citations)",
     "lpwc": "Linked Papers With Code (tasks, datasets, code)",
     "orkg": "ORKG (research fields and problems)",
+    "github": "GitHub (licence of the code)",
+    "zenodo": "Zenodo (data and code deposits, licences)",
     "paper_types": "Paper type (default type tag)",
+    "short_titles": "Short title (acronym of the title)",
     "search_keywords": "Search keywords (Collect_KW tags)",
 }
 

@@ -54,6 +54,12 @@ Finds papers outside the corpus that are often cited by, or cite, the corpus pap
 them; the original file is kept once as `aggregated_results_pre_snowball.csv`. Untick
 **Add to the collection** to write `aggregated_results_snowball.csv` instead.
 
+**Seeds** narrows the corpus papers snowballing starts from: some Zotero collections
+(with their sub-collections), some [paper types](enrich.md#paper-types), and/or only
+the papers meeting the [eligibility criteria](criteria.md). Candidates already in the
+review are never added again. The settings (direction, limits, seeds, add to the
+collection) are stored in `snowball.yml` in the review folder and reused next time.
+
 ```bash
 scilex-snowball                 # --separate-file to keep a separate file
 scilex-seed --dois 10.1/abc …   # start from seed papers (DOIs, a DOI file or BibTeX)
