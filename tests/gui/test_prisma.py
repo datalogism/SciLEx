@@ -116,3 +116,17 @@ async def test_overview_exports_the_flow(ctx, review):
         user.find(marker="prisma-export").click()
         await user.should_see("PRISMA flow saved", retries=40)
     assert (review.collection_dir / "prisma_flow.svg").is_file()
+
+
+def test_review_started_from_bibtex_counts_its_papers_as_identified(ctx, tmp_path):
+    """The import that starts an empty review is identification; later ones extend."""
+    from scilex.gui.services import bibtex_import
+
+    review = ctx.workspace.create_review(tmp_path / "bib", name="bib")
+    entry = "@article{{k{0}, title={{Paper {0}}}, year={{2024}}, doi={{10.1/{0}}}}}\n"
+    bibtex_import.import_bibtex(review, entry.format(1) + entry.format(2), "a.bib")
+    bibtex_import.import_bibtex(review, entry.format(3), "b.bib")
+    flow = prisma.compute(review, None)
+    assert flow.identification.count == 2
+    assert flow.other_sources.count == 1
+    assert flow.other_sources.lines[0] == "BibTeX: 1 papers in the review"

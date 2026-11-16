@@ -58,6 +58,26 @@ def _show_report(title: str, path) -> None:
     dialog.open()
 
 
+def _start_from_papers(ctx: AppContext, review: Review) -> None:
+    """Start an empty review from a BibTeX file or a Zotero library instead.
+
+    ⑤ Extend, which holds these imports, opens only once the review has papers.
+    """
+    from scilex.gui.pages.extend import _bibtex_card, _zotero_card
+
+    with (
+        ui.expansion(
+            "Or start from papers you already have (BibTeX file, Zotero library)",
+            icon="upload_file",
+        )
+        .classes("w-full")
+        .mark("collect-start-from-papers")
+    ):
+        _bibtex_card(ctx, review)
+        ui.separator()
+        _zotero_card(ctx, review)
+
+
 def render(ctx: AppContext, review: Review, extending: bool = False) -> None:
     """Draw the Collect screen of ``review``; ``extending``: the ⑤ Extend screen.
 
@@ -88,6 +108,8 @@ def render(ctx: AppContext, review: Review, extending: bool = False) -> None:
                     icon="hub",
                     on_click=lambda: ui.navigate.to(f"/review/{review.id}/extend"),
                 ).props("outline dense")
+        else:
+            _start_from_papers(ctx, review)
 
     # Pre-flight: validate scilex.yml before offering to run.
     with ui.column().classes("gap-1"):

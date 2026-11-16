@@ -7,6 +7,10 @@ deduplication, filtering and ranking. It is the first step of a review started f
 scratch. Once the review has papers, the step leaves the sidebar and lives in
 [⑤ Extend → New collect](extend.md#new-collect).
 
+An empty review can also start from papers you already have: **Or start from papers
+you already have** opens the [BibTeX import](extend.md) and the Zotero import of
+⑤ Extend, which opens only once the review has papers.
+
 | Sub-module | What it does |
 |---|---|
 | <a href="#collection"><img src="../_static/modules/sub/collect-collection.png" height="30" alt="Collection"></a> | Parallel queries: keywords × years × APIs |

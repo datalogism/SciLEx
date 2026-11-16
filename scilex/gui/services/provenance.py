@@ -36,6 +36,9 @@ class ReviewCard:
     created_at: str = ""
     created_by: str = ""
     extensions: list[Step] = field(default_factory=list)
+    # Papers the import that started an empty review brought, by PRISMA source
+    # kind ("BibTeX", "Zotero"): identified records, not extensions.
+    origin_papers: dict[str, int] = field(default_factory=dict)
     enrichments: list[Step] = field(default_factory=list)
     # (time, annotated papers, codes), oldest first.
     annotation: list[tuple[str, int, int]] = field(default_factory=list)
@@ -115,6 +118,12 @@ def review_card(folder: Path) -> ReviewCard:
         )
         if first is not None:
             origin_event = first
+            kind = {"import-bibtex": "BibTeX", "extend-zotero": "Zotero"}.get(
+                first["activity"]
+            )
+            added = (first.get("generated") or {}).get("added")
+            if kind and added:
+                card.origin_papers[kind] = int(added)
             card.origin = {
                 "job:pipeline": journal.SCILEX_COLLECT,
                 "import-bibtex": journal.BIBTEX_IMPORT,
