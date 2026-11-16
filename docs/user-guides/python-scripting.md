@@ -11,7 +11,7 @@ import sys
 import os
 
 # Add src/ to path so crawlers and other modules are importable
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 ```
 
 Load `scilex.yml` and `keys.yml` with the same discovery rules as the CLI (`SCILEX_CONFIG`, `./scilex.yml`,
@@ -20,7 +20,7 @@ Load `scilex.yml` and `keys.yml` with the same discovery rules as the CLI (`SCIL
 ```python
 from scilex.config import SciLExConfig
 
-config = SciLExConfig.from_files()                       # or config_path="scilex.yml", keys_path="keys.yml"
+config = SciLExConfig.from_files()  # or config_path="scilex.yml", keys_path="keys.yml"
 main_config, api_config = config.main_config, config.api_config
 ```
 
@@ -57,7 +57,7 @@ import os
 import sys
 import yaml
 
-sys.path.insert(0, 'src')
+sys.path.insert(0, "src")
 from crawlers.collector_collection import CollectCollection
 
 # Ensure output directory exists
@@ -80,7 +80,7 @@ The aggregation script reads config at import time. Invoke it via `sys.argv`:
 ```python
 import sys
 
-sys.path.insert(0, 'src')
+sys.path.insert(0, "src")
 
 # Set arguments before importing
 sys.argv = ["aggregate", "--skip-citations", "--workers", "3"]
@@ -109,7 +109,7 @@ print(df.nlargest(10, "nb_citation")[["title", "nb_citation"]])
 ```python
 import sys
 
-sys.path.insert(0, 'src')
+sys.path.insert(0, "src")
 
 from export_to_bibtex import main as bibtex_main
 
@@ -122,7 +122,7 @@ bibtex_main()
 ```python
 import sys
 
-sys.path.insert(0, 'src')
+sys.path.insert(0, "src")
 
 from push_to_Zotero_collect import main as zotero_main
 
@@ -142,7 +142,7 @@ import sys
 import yaml
 
 # ── Path setup ────────────────────────────────────────────────────
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 # ── 1. Configuration ──────────────────────────────────────────────
 

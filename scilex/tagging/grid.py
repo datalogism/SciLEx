@@ -45,6 +45,7 @@ WORKFLOW_TAG_PREFIXES = (
     "AGREEMENT_COPY:",
     "SCREEN:",
     "KEEP:",  # exception to an eligibility criterion (KEEP:C1)
+    "PAPER_TYPE:",  # classification written by Enrich > Paper types
 )
 METRIC_TAG_PREFIXES = (
     "CITATIONS:",

@@ -143,6 +143,33 @@ def test_enrichment_and_extension_events_say_who_when_and_how_many(ctx, tmp_path
     assert card.scilex_users["Test User"] >= 4
 
 
+def test_new_review_is_created_by_the_user_and_first_collect_is_its_origin(
+    ctx, tmp_path
+):
+    """No inferred "unknown" creator, and the first collection is not an extension."""
+    review = ctx.workspace.create_review(tmp_path / "r", name="r")
+    review.collection_dir.mkdir(parents=True)
+    pd.DataFrame({"itemType": ["journalArticle"], "title": ["A"]}).to_csv(
+        review.results_path, sep=";", index=False
+    )
+
+    def collect(job):
+        return "1 paper"
+
+    ctx.runner.start_task(review, "p", collect, history_key="pipeline")
+    _wait(ctx, review, "p")
+    ctx.runner.start_task(review, "p", collect, history_key="pipeline")
+    _wait(ctx, review, "p")
+
+    events = journal.load(review.folder)
+    assert not [e for e in events if e.get("inferred")]
+    card = provenance.review_card(review.folder)
+    assert card.created_by == "Test User"
+    assert card.origin == journal.SCILEX_COLLECT
+    # Only the second run extends the corpus.
+    assert [s.what for s in card.extensions] == ["collection"]
+
+
 # --- annotation growth -------------------------------------------------------------------
 
 
@@ -238,6 +265,12 @@ async def test_overview_shows_the_review_card(ctx, tmp_path):
     review.collection_dir.mkdir(parents=True)
     (review.results_path).write_text(
         "itemType;title;tags\njournalArticle;A;TASK:RE\n", encoding="utf-8"
+    )
+    # The first papers came from a collection: the Zotero import extends it.
+    journal.append(
+        review.folder,
+        "job:pipeline",
+        params={"category": "extension", "mode": "collection"},
     )
     journal.append(
         review.folder,

@@ -214,7 +214,10 @@ def _number_disc(draw: ImageDraw.ImageDraw, x: int, y: int, size: int, text: str
     font = _font(HEAVY_FONTS, int(size * 0.62))
     box = draw.textbbox((0, 0), text, font=font)
     draw.text(
-        (x + (size - (box[2] - box[0])) / 2 - box[0], y + (size - (box[3] - box[1])) / 2 - box[1]),
+        (
+            x + (size - (box[2] - box[0])) / 2 - box[0],
+            y + (size - (box[3] - box[1])) / 2 - box[1],
+        ),
         text,
         font=font,
         fill="white",
@@ -235,7 +238,10 @@ def banner(number: str, title: str, height: int = 120) -> Image.Image:
         disc = int(height * 0.42)
         _number_disc(draw, stone.width - disc + 6, height - disc - 2, disc, number)
     draw.text(
-        (stone.width + gap - text_box[0], (height - (text_box[3] - text_box[1])) / 2 - text_box[1]),
+        (
+            stone.width + gap - text_box[0],
+            (height - (text_box[3] - text_box[1])) / 2 - text_box[1],
+        ),
         title,
         font=font,
         fill="black",
@@ -253,7 +259,10 @@ def badge(title: str, height: int = 44) -> Image.Image:
     image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     image.alpha_composite(stone, (0, 0))
     ImageDraw.Draw(image).text(
-        (stone.width + gap - text_box[0], (height - (text_box[3] - text_box[1])) / 2 - text_box[1]),
+        (
+            stone.width + gap - text_box[0],
+            (height - (text_box[3] - text_box[1])) / 2 - text_box[1],
+        ),
         title,
         font=font,
         fill=(40, 40, 40, 255),
@@ -266,7 +275,9 @@ def module_map(columns: int = 5) -> Image.Image:
     tile_w, tile_h, pad = 300, 210, 24
     rows = -(-len(MODULES) // columns)
     image = Image.new(
-        "RGBA", (columns * tile_w + pad * 2, rows * tile_h + pad * 2), (255, 255, 255, 0)
+        "RGBA",
+        (columns * tile_w + pad * 2, rows * tile_h + pad * 2),
+        (255, 255, 255, 0),
     )
     draw = ImageDraw.Draw(image)
     title_font = _font(HEAVY_FONTS, 30)
@@ -289,7 +300,12 @@ def module_map(columns: int = 5) -> Image.Image:
         font = title_font
         while draw.textlength(title, font=font) > room and font.size > 16:
             font = _font(HEAVY_FONTS, font.size - 1)
-        draw.text((x + 22 + stone.width + 14, y + 44 + (30 - font.size) // 2), title, font=font, fill="black")
+        draw.text(
+            (x + 22 + stone.width + 14, y + 44 + (30 - font.size) // 2),
+            title,
+            font=font,
+            fill="black",
+        )
         names = ", ".join(sub for _, sub in subs)
         line, lines = "", []
         for word in names.split(" "):
@@ -301,7 +317,9 @@ def module_map(columns: int = 5) -> Image.Image:
                 line = candidate
         lines.append(line)
         for n, text in enumerate(lines[:4]):
-            draw.text((x + 24, y + 118 + n * 20), text, font=sub_font, fill=(70, 70, 70, 255))
+            draw.text(
+                (x + 24, y + 118 + n * 20), text, font=sub_font, fill=(70, 70, 70, 255)
+            )
     return image
 
 

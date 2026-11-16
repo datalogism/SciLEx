@@ -396,7 +396,7 @@ class ExplorePage:
             mine_deleted = review_tags.tag(review_tags.DELETED, self.me)
             validated = self.me in state.validated_by
             ui.button(
-                "Unvalidate" if validated else "Validated by me",
+                "Unvalidate" if validated else "Validate",
                 icon="task_alt",
                 on_click=lambda: self.change_tags(
                     key,

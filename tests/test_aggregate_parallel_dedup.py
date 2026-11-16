@@ -80,3 +80,30 @@ def test_no_valid_doi_papers_does_not_crash():
     result, stats = simple_deduplicate(df)
     assert len(result) == 2
     assert stats["doi_removed"] == 0
+
+
+def test_doi_dedup_ignores_case_and_prefix():
+    """APIs disagree on DOI case and prefix: still one paper (real OpenAlex/arXiv pair)."""
+    df = pd.DataFrame(
+        [
+            {
+                "DOI": "10.1109/tvcg.2024.3456364",
+                "title": "KnowNet:Guided",
+                "archive": "OpenAlex",
+            },
+            {
+                "DOI": "10.1109/TVCG.2024.3456364",
+                "title": "KNOWNET: Guided",
+                "archive": "Arxiv",
+            },
+            {
+                "DOI": "https://doi.org/10.1109/TVCG.2024.3456364",
+                "title": "x",
+                "archive": "S",
+            },
+        ]
+    )
+    result, stats = simple_deduplicate(df)
+    assert len(result) == 1
+    assert stats["doi_removed"] == 2
+    assert "_doi_key" not in result.columns

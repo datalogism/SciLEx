@@ -63,15 +63,21 @@ def test_run_from_zotero_reads_live_tags(ctx, tmp_path, monkeypatch):
         {
             "key": "K1",
             "version": 3,
-            "data": {"title": "Live", "itemType": "journalArticle", "date": "2023",
-                     "tags": [{"tag": "Tool:Zephyr"}, {"tag": "Step:5"}]},
+            "data": {
+                "title": "Live",
+                "itemType": "journalArticle",
+                "date": "2023",
+                "tags": [{"tag": "Tool:Zephyr"}, {"tag": "Step:5"}],
+            },
         }
     ]
     monkeypatch.setattr(tag_review, "fetch_zotero_items", lambda folder: items)
     result = _run(ctx, review, from_zotero=True)
     assert "1 of 1 papers annotated" in result.message
     assert "Zotero" in result.message
-    source = pd.read_csv(tag_review.paths_of(review.collection_dir, review.folder).source)
+    source = pd.read_csv(
+        tag_review.paths_of(review.collection_dir, review.folder).source
+    )
     assert list(source["zotero_key"]) == ["K1"]
 
 
@@ -108,9 +114,15 @@ def test_cross_chosen_dimensions(ctx, tmp_path):
 def test_preview_cleaning_uses_synonyms(ctx, tmp_path, monkeypatch):
     review = _review(ctx, tmp_path)
     paths = tag_review.paths_of(review.collection_dir, review.folder)
-    tag_review.accept(paths, [{"dimension": "TOOL", "value": "Blendr", "merge_into": "Blender"}])
+    tag_review.accept(
+        paths, [{"dimension": "TOOL", "value": "Blendr", "merge_into": "Blender"}]
+    )
     items = [
-        {"key": k, "version": 1, "data": {"title": k, "itemType": "book", "tags": [{"tag": t}]}}
+        {
+            "key": k,
+            "version": 1,
+            "data": {"title": k, "itemType": "book", "tags": [{"tag": t}]},
+        }
         for k, t in (("A", "Tool:Blendr"), ("B", "Tool:Blender"), ("C", "Tool:Blender"))
     ]
     monkeypatch.setattr(tag_review, "fetch_zotero_items", lambda folder: items)

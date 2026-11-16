@@ -7,8 +7,13 @@ from scilex.gui.state import AppContext
 from scilex.user_profile import InvalidOrcidError, lookup_name
 
 
-def render(ctx: AppContext) -> None:
-    """Draw the ORCID form (shown instead of any page while no iD is set)."""
+def render(ctx: AppContext, gated: bool = False) -> None:
+    """Draw the ORCID form (shown instead of any page while no iD is set).
+
+    Args:
+        ctx: Application state.
+        gated: True when drawn in place of another page (no iD yet).
+    """
     profile = ctx.profile
     with ui.column().classes("p-6 gap-3 max-w-xl"):
         render_logo("w-40")
@@ -29,8 +34,10 @@ def render(ctx: AppContext) -> None:
             .classes("w-96")
             .mark("orcid-input")
         )
-        name_input = ui.input("Name (optional)", value=profile.name).classes("w-96").mark(
-            "orcid-name"
+        name_input = (
+            ui.input("Name (optional)", value=profile.name)
+            .classes("w-96")
+            .mark("orcid-name")
         )
         error = ui.label("").classes("text-negative").mark("orcid-error")
         found = ui.label("").classes("text-sm text-gray-600").mark("orcid-found")
@@ -45,7 +52,9 @@ def render(ctx: AppContext) -> None:
             if name is None:
                 error.text = "No ORCID record has this iD."
             else:
-                found.text = f"Registered on orcid.org as: {name or '(name not public)'}"
+                found.text = (
+                    f"Registered on orcid.org as: {name or '(name not public)'}"
+                )
                 if name and not name_input.value:
                     name_input.value = name
 
@@ -59,12 +68,17 @@ def render(ctx: AppContext) -> None:
             except InvalidOrcidError as exc:
                 error.text = str(exc)
                 return
-            ui.navigate.to("/")
+            # Shown by the ORCID gate the URL is already the page asked for, and
+            # navigating to the current sub-page does not draw it again.
+            if gated:
+                ui.navigate.reload()
+            else:
+                ui.navigate.to("/")
 
         with ui.row().classes("gap-2"):
             ui.button("Save", icon="check", on_click=save).mark("orcid-save")
-            ui.button("Check on orcid.org", icon="travel_explore", on_click=check).props(
-                "outline"
-            ).mark("orcid-check")
+            ui.button(
+                "Check on orcid.org", icon="travel_explore", on_click=check
+            ).props("outline").mark("orcid-check")
             if profile.is_complete:
                 ui.button("Back", on_click=lambda: ui.navigate.to("/")).props("flat")

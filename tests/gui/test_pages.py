@@ -134,3 +134,12 @@ async def test_create_review_without_folder_goes_to_scilex_home(
         await user.should_see(marker="step-configure")
 
     assert (tmp_path / "home" / "SciLEx" / "rag_kg" / "scilex.yml").is_file()
+
+
+async def test_empty_review_can_start_from_a_bibtex_file(ctx, tmp_path):
+    """⑤ Extend is locked without papers: ② Collect offers the imports instead."""
+    review = ctx.workspace.create_review(tmp_path / "bib", name="bib")
+    async with user_simulation(build_root(ctx)) as user:
+        await user.open(f"/review/{review.id}/collect")
+        await user.should_see(marker="collect-start-from-papers")
+        await user.should_see(marker="bibtex-result")

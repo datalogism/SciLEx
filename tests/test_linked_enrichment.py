@@ -57,7 +57,9 @@ def _papers():
 
 def test_arxiv_id_from_doi_url_or_eprint():
     assert le.arxiv_id({"DOI": "10.48550/arXiv.1912.09582"}) == "1912.09582"
-    assert le.arxiv_id({"url": "https://arxiv.org/pdf/1810.04805v2.pdf"}) == "1810.04805"
+    assert (
+        le.arxiv_id({"url": "https://arxiv.org/pdf/1810.04805v2.pdf"}) == "1810.04805"
+    )
     assert le.arxiv_id({"eprint": "2210.12714"}) == "2210.12714"
     assert le.arxiv_id({"url": "https://example.org/1234.5678"}) is None
 
@@ -94,15 +96,27 @@ def test_lpwc_lookup_by_arxiv_then_title(tmp_path):
     def sparql(url, kwargs):
         query = kwargs["data"]["query"]
         key = "1810.04805" if "hasArXivId" in query else "Unknown paper"
-        paper = "https://linkedpaperswithcode.com/paper/x" + ("" if "hasArXivId" in query else "2")
+        paper = "https://linkedpaperswithcode.com/paper/x" + (
+            "" if "hasArXivId" in query else "2"
+        )
         rows = [
-            {"key": {"value": key}, "paper": {"value": paper},
-             "p": {"value": "https://linkedpaperswithcode.com/property/hasTask"},
-             "o": {"value": "https://linkedpaperswithcode.com/task/ner"},
-             "label": {"value": "Named Entity Recognition"}},
-            {"key": {"value": key}, "paper": {"value": paper},
-             "p": {"value": "https://linkedpaperswithcode.com/property/hasOfficialRepository"},
-             "o": {"value": "https://linkedpaperswithcode.com/repository/github.com/a/b"}},
+            {
+                "key": {"value": key},
+                "paper": {"value": paper},
+                "p": {"value": "https://linkedpaperswithcode.com/property/hasTask"},
+                "o": {"value": "https://linkedpaperswithcode.com/task/ner"},
+                "label": {"value": "Named Entity Recognition"},
+            },
+            {
+                "key": {"value": key},
+                "paper": {"value": paper},
+                "p": {
+                    "value": "https://linkedpaperswithcode.com/property/hasOfficialRepository"
+                },
+                "o": {
+                    "value": "https://linkedpaperswithcode.com/repository/github.com/a/b"
+                },
+            },
         ]
         return Response({"results": {"bindings": rows}})
 
@@ -118,14 +132,20 @@ def test_lpwc_lookup_by_arxiv_then_title(tmp_path):
 def test_orkg_paper_fields_and_problems(tmp_path):
     paper = {
         "content": [
-            {"id": "R1", "research_fields": [{"label": "NLP"}], "contributions": [{"id": "C1"}]}
+            {
+                "id": "R1",
+                "research_fields": [{"label": "NLP"}],
+                "contributions": [{"id": "C1"}],
+            }
         ]
     }
     statements = {"content": [{"object": {"label": "Word Embeddings"}}]}
     session = Session(
         {
             "/papers": lambda url, kw: Response(
-                paper if kw["params"].get("doi") == "10.18653/v1/n19-1423" else {"content": []}
+                paper
+                if kw["params"].get("doi") == "10.18653/v1/n19-1423"
+                else {"content": []}
             ),
             "/statements": Response(statements),
         }

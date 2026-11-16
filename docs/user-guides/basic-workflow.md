@@ -148,13 +148,13 @@ uv run scilex-push-zotero
 ```python
 import pandas as pd
 
-df = pd.read_csv('output/my_review/aggregated_results.csv', delimiter=';')
+df = pd.read_csv("output/my_review/aggregated_results.csv", delimiter=";")
 
 print(f"Total papers: {len(df)}")
 print(f"\nPapers by year:")
-print(df['year'].value_counts().sort_index())
+print(df["year"].value_counts().sort_index())
 print(f"\nTop cited:")
-print(df.nlargest(10, 'nb_citation')[['title', 'nb_citation']])
+print(df.nlargest(10, "nb_citation")[["title", "nb_citation"]])
 ```
 
 ## Log Levels

@@ -15,6 +15,7 @@ from scilex.gui.components.dialogs import one_shot_dialog
 from scilex.gui.components.errors import show_error
 from scilex.gui.services import criteria as service
 from scilex.gui.services import screening
+from scilex.gui.services.consolidate import describe_filters
 from scilex.gui.services.extend import read_results
 from scilex.gui.services.workspace import Review, Workspace
 from scilex.gui.state import AppContext
@@ -236,11 +237,10 @@ def _params(criterion: service.Criterion) -> None:
                 params, "exclude_unknown"
             )
         elif kind == "quality":
-            rules = params.get("quality_filters") or {}
-            active = [k for k, v in rules.items() if v not in (None, False, [], 0)]
+            active = describe_filters(params.get("quality_filters") or {})
             ui.label(
                 "Rules of scilex.yml (quality_filters, edited in ① Configure): "
-                + (", ".join(active) if active else "none set")
+                + ("; ".join(active) if active else "none set")
                 + ". The year range is C1's job."
             ).classes("text-xs text-gray-600")
         elif kind == "text":

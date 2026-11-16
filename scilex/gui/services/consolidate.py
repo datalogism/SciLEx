@@ -53,6 +53,7 @@ import pandas as pd
 from scilex import review_tags
 from scilex.constants import extract_year, is_valid, normalize_doi
 from scilex.gui.services.workspace import Review
+from scilex.tagging.grid import is_automation_tag
 
 DEFAULT_SIMILARITY = 95
 SET_COLUMNS = {  # column -> separator of its values, united on merge
@@ -164,6 +165,16 @@ def _codes(value) -> dict[str, set[str]]:
         dimension, sep, code = tag.partition(":")
         if sep and dimension and code:
             codes.setdefault(dimension.upper(), set()).add(tag)
+    return codes
+
+
+def _annotation_codes(value) -> dict[str, set[str]]:
+    """Like :func:`_codes`, without the tags SciLEx writes itself (PAPER_TYPE…)."""
+    codes = {}
+    for dimension, tags in _codes(value).items():
+        annotations = {tag for tag in tags if not is_automation_tag(tag)}
+        if annotations:
+            codes[dimension] = annotations
     return codes
 
 
@@ -293,7 +304,7 @@ def find_duplicates(
             continue
         keep = max(group, key=lambda pos: (quality[pos], linked[pos], -pos))
         ordered = [keep, *[pos for pos in group if pos != keep]]
-        codes = [_codes(tags[pos]) for pos in ordered]
+        codes = [_annotation_codes(tags[pos]) for pos in ordered]
         differing = set()
         for dimension in set().union(*codes):
             coded = [c[dimension] for c in codes if dimension in c]
@@ -417,6 +428,38 @@ def filter_reasons(record: dict, main_config: dict) -> list[str]:
     if words and high and words > high:
         reasons.append(f"abstract of {words} words > {high}")
     return reasons
+
+
+def describe_filters(rules: dict) -> list[str]:
+    """Readable list of the exclusion rules :func:`filter_reasons` applies.
+
+    Leaves out the year range (criterion C1) and the settings of
+    ``quality_filters`` that exclude nothing (ranking, citations, reports).
+    """
+    rules = rules or {}
+    described = []
+    if rules.get("enable_itemtype_filter") and rules.get("allowed_item_types"):
+        described.append("item type in " + ", ".join(rules["allowed_item_types"]))
+    for key, text in (
+        ("require_abstract", "abstract required"),
+        ("require_doi", "DOI required"),
+        ("require_year", "year required"),
+    ):
+        if rules.get(key):
+            described.append(text)
+    if rules.get("min_author_count"):
+        described.append(f"at least {rules['min_author_count']} author(s)")
+    if rules.get("min_abstract_words"):
+        described.append(f"abstract of at least {rules['min_abstract_words']} words")
+    if rules.get("max_abstract_words"):
+        described.append(f"abstract of at most {rules['max_abstract_words']} words")
+    if (
+        described
+        and rules.get("enable_itemtype_bypass")
+        and rules.get("bypass_item_types")
+    ):
+        described.append("except for " + ", ".join(rules["bypass_item_types"]))
+    return described
 
 
 # -- plan and apply -----------------------------------------------------------

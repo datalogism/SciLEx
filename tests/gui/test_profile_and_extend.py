@@ -63,8 +63,21 @@ async def test_app_is_locked_without_orcid(ctx, tmp_path):
         await user.should_see("check digit")
         user.find(marker="orcid-input").clear().type("0000-0002-1825-0097")
         user.find(marker="orcid-save").click()
-        await user.should_see(marker="new-review")
+        # Back on the page that was asked for, not on the form or the home page.
+        await user.should_see(marker="raw-save")
+        await user.should_not_see(marker="orcid-input")
     assert ctx.profile.orcid == "0000-0002-1825-0097"
+
+
+async def test_saving_orcid_on_home_shows_the_reviews(ctx, tmp_path):
+    """The gate on "/" must give way to the home page once the iD is saved."""
+    ctx.profile = UserProfile(path=tmp_path / "nobody.yml")
+    async with user_simulation(build_root(ctx)) as user:
+        await user.open("/")
+        user.find(marker="orcid-input").type("0000-0002-1825-0097")
+        user.find(marker="orcid-save").click()
+        await user.should_see(marker="new-review")
+        await user.should_not_see(marker="orcid-input")
 
 
 # --- steps ---------------------------------------------------------------------

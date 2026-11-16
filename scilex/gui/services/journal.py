@@ -244,7 +244,11 @@ def append(
     try:
         with _lock:
             if not journal_path(folder).is_file():
-                _backfill_locked(Path(folder))
+                if activity == "created" and not inferred:
+                    # A review created now has no past to reconstruct.
+                    journal_path(folder).touch()
+                else:
+                    _backfill_locked(Path(folder))
             if annotation:
                 event["annotation"] = _with_delta(Path(folder), dict(annotation))
             _write(Path(folder), [event])

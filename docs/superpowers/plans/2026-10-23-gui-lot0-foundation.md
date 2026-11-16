@@ -41,19 +41,30 @@ API :
 ```python
 @dataclass(frozen=True)
 class Review:
-    folder: Path          # dossier de travail contenant scilex.yml
-    name: str             # champ `name` de scilex.yml
-    output_root: Path     # output_dir résolu en absolu par rapport à folder
+    folder: Path  # dossier de travail contenant scilex.yml
+    name: str  # champ `name` de scilex.yml
+    output_root: Path  # output_dir résolu en absolu par rapport à folder
     collection_dir: Path  # output_root / name
-    has_results: bool     # collection_dir / "aggregated_results.csv" existe
+    has_results: bool  # collection_dir / "aggregated_results.csv" existe
+
 
 class Workspace:
-    def __init__(self, registry_path: Path | None = None): ...  # défaut : platformdirs.user_config_path("scilex") / "gui_reviews.yml"
-    def list_reviews(self) -> list[Review]: ...       # ignore (et signale) les dossiers disparus
-    def open_review(self, folder: Path) -> Review: ... # exige scilex.yml valide, ajoute au registre
-    def create_review(self, folder: Path, name: str, template: str | None = None) -> Review: ...  # via scilex.init_templates
+    def __init__(
+        self, registry_path: Path | None = None
+    ): ...  # défaut : platformdirs.user_config_path("scilex") / "gui_reviews.yml"
+    def list_reviews(
+        self,
+    ) -> list[Review]: ...  # ignore (et signale) les dossiers disparus
+    def open_review(
+        self, folder: Path
+    ) -> Review: ...  # exige scilex.yml valide, ajoute au registre
+    def create_review(
+        self, folder: Path, name: str, template: str | None = None
+    ) -> Review: ...  # via scilex.init_templates
     def forget_review(self, folder: Path) -> None: ...
-    def load_config(self, review: Review, keys_path: Path | None = None) -> SciLExConfig: ...  # output_dir réécrit en absolu
+    def load_config(
+        self, review: Review, keys_path: Path | None = None
+    ) -> SciLExConfig: ...  # output_dir réécrit en absolu
 ```
 Réutiliser `scilex.init_templates` pour la création (lire son API publique avant ; si elle n'expose qu'un `main()` CLI, extraire une fonction `write_config(path, name, template)` testée, sans changer le comportement CLI).
 
@@ -64,15 +75,27 @@ Commit : `feat(gui): services.workspace (registre des revues)`.
 
 Extraire de `webapi/scilex_api.py` la logique de job, sans dépendance FastAPI :
 ```python
-class JobStatus(StrEnum): PENDING, RUNNING, CANCELLING, COMPLETED, FAILED, CANCELLED
+class JobStatus(StrEnum):
+    PENDING, RUNNING, CANCELLING, COMPLETED, FAILED, CANCELLED
+
 
 @dataclass
 class Job:
-    id: str; review_folder: Path; status: JobStatus; phase: str; progress: int; message: str
-    logs: list[str]; api_stats: dict; error: str | None
+    id: str
+    review_folder: Path
+    status: JobStatus
+    phase: str
+    progress: int
+    message: str
+    logs: list[str]
+    api_stats: dict
+    error: str | None
+
 
 class JobRunner:
-    def start_pipeline(self, review: Review, config: SciLExConfig, *, skip_citations: bool = False) -> Job: ...
+    def start_pipeline(
+        self, review: Review, config: SciLExConfig, *, skip_citations: bool = False
+    ) -> Job: ...
     def cancel(self, job_id: str) -> None: ...
     def get(self, job_id: str) -> Job | None: ...
     def active_job(self) -> Job | None: ...

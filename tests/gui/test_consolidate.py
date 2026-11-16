@@ -144,9 +144,39 @@ def test_default_action_discards_with_a_filter_tag(review):
     message = consolidate.apply(review, plan, merge=[])
     assert "2 filtered papers discarded" in message
     data = read_results(review.results_path)
-    tags = {str(t)[:8]: str(row) for t, row in zip(data["title"], data["tags"])}
+    tags = {
+        str(t)[:8]: str(row) for t, row in zip(data["title"], data["tags"], strict=True)
+    }
     assert tags["An old c"] == "DELETED_BY:filter:year 2015 outside 2019-2022"
     assert tags["A confer"] == "DELETED_BY:filter:no abstract"
     assert screening.load_decisions(review) == {}  # screening left alone
     # A second preview no longer lists them.
     assert consolidate.plan(review, CONFIG).filtered == []
+
+
+def test_describe_filters_lists_only_exclusion_rules():
+    rules = {
+        "require_abstract": True,
+        "min_abstract_words": 50,
+        "max_papers": 1500,
+        "relevance_weights": {"keywords": 0.5},
+        "use_openalex_citations": True,
+        "generate_quality_report": True,
+        "validate_year_range": True,
+    }
+    assert consolidate.describe_filters(rules) == [
+        "abstract required",
+        "abstract of at least 50 words",
+    ]
+    assert consolidate.describe_filters({}) == []
+
+
+def test_workflow_tags_are_not_annotation_codes(review):
+    """PAPER_TYPE differs between copies: neither a code nor a conflict."""
+    data = pd.read_csv(review.results_path, sep=";", index_col=0)
+    data.loc[0, "tags"] = "TASK:RE;PAPER_TYPE:Dataset"
+    data.loc[1, "tags"] = "TASK:RE;PAPER_TYPE:Model or Method"
+    data.to_csv(review.results_path, sep=";")
+    group = consolidate.plan(review, CONFIG).groups[0]
+    assert group.code_counts == [1, 1]
+    assert group.safe

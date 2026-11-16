@@ -134,9 +134,9 @@ def report_charts(data: pd.DataFrame, out_dir: Path, compare_by: str) -> list[Pa
     if "archive" in frame.columns:
         sources = frame.assign(
             _source=frame["archive"].map(
-                lambda v: str(v).split(";")[0].split("*")[0].strip()
-                if is_valid(v)
-                else "?"
+                lambda v: (
+                    str(v).split(";")[0].split("*")[0].strip() if is_valid(v) else "?"
+                )
             )
         )
         table = pd.crosstab(sources["_source"], sources["_group"])

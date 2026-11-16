@@ -279,7 +279,9 @@ def _atomic_write(target: Path, text: str) -> None:
     journal.append(
         target.parent,
         "configure",
-        generated={"scilex.yml sha256": hashlib.sha256(text.encode("utf-8")).hexdigest()},
+        generated={
+            "scilex.yml sha256": hashlib.sha256(text.encode("utf-8")).hexdigest()
+        },
     )
 
 

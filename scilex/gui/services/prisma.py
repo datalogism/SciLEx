@@ -132,6 +132,10 @@ def compute(review, main: dict | None = None) -> Prisma:
         if is_valid(row.get("extension_origin"))
         and str(row.get("extension_origin")).strip()
     )
+    for kind, count in card.origin_papers.items():
+        # The papers that started the review are identified, not extensions.
+        origins[kind] -= min(count, origins[kind])
+    origins = +origins  # drop the kinds left at zero
     flow.other_sources.count = sum(origins.values())
     for kind, count in origins.most_common():
         flow.other_sources.lines.append(f"{kind}: {count} papers in the review")
