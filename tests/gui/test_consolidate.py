@@ -169,3 +169,14 @@ def test_describe_filters_lists_only_exclusion_rules():
         "abstract of at least 50 words",
     ]
     assert consolidate.describe_filters({}) == []
+
+
+def test_workflow_tags_are_not_annotation_codes(review):
+    """PAPER_TYPE differs between copies: neither a code nor a conflict."""
+    data = pd.read_csv(review.results_path, sep=";", index_col=0)
+    data.loc[0, "tags"] = "TASK:RE;PAPER_TYPE:Dataset"
+    data.loc[1, "tags"] = "TASK:RE;PAPER_TYPE:Model or Method"
+    data.to_csv(review.results_path, sep=";")
+    group = consolidate.plan(review, CONFIG).groups[0]
+    assert group.code_counts == [1, 1]
+    assert group.safe

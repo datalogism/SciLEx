@@ -53,6 +53,7 @@ import pandas as pd
 from scilex import review_tags
 from scilex.constants import extract_year, is_valid, normalize_doi
 from scilex.gui.services.workspace import Review
+from scilex.tagging.grid import is_automation_tag
 
 DEFAULT_SIMILARITY = 95
 SET_COLUMNS = {  # column -> separator of its values, united on merge
@@ -164,6 +165,16 @@ def _codes(value) -> dict[str, set[str]]:
         dimension, sep, code = tag.partition(":")
         if sep and dimension and code:
             codes.setdefault(dimension.upper(), set()).add(tag)
+    return codes
+
+
+def _annotation_codes(value) -> dict[str, set[str]]:
+    """Like :func:`_codes`, without the tags SciLEx writes itself (PAPER_TYPE…)."""
+    codes = {}
+    for dimension, tags in _codes(value).items():
+        annotations = {tag for tag in tags if not is_automation_tag(tag)}
+        if annotations:
+            codes[dimension] = annotations
     return codes
 
 
@@ -293,7 +304,7 @@ def find_duplicates(
             continue
         keep = max(group, key=lambda pos: (quality[pos], linked[pos], -pos))
         ordered = [keep, *[pos for pos in group if pos != keep]]
-        codes = [_codes(tags[pos]) for pos in ordered]
+        codes = [_annotation_codes(tags[pos]) for pos in ordered]
         differing = set()
         for dimension in set().union(*codes):
             coded = [c[dimension] for c in codes if dimension in c]
