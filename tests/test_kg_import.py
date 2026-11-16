@@ -76,7 +76,9 @@ def test_export_masks_api_keys(kg_file):
 def test_clean_tables_masks_keys_in_every_field():
     data = {
         "entries": [{"ID": "a", "url": f"https://x.org/?api_key={SECRET}", "note": ""}],
-        "lists": [{"entry": "a", "field": "file", "value": f"https://x.org/?token={SECRET}"}],
+        "lists": [
+            {"entry": "a", "field": "file", "value": f"https://x.org/?token={SECRET}"}
+        ],
     }
     cleaned, _, _ = clean_tables(data)
     assert SECRET not in repr(cleaned)
@@ -116,7 +118,10 @@ def test_graph_to_items_rebuilds_the_papers(kg_file):
     second = items["roe_second_2022"]["data"]
     assert second["itemType"] == "journalArticle"
     assert second["publicationTitle"] == "Journal of Tests"
-    assert {t["tag"] for t in second["tags"]} >= {"SAT_TASK:RelationClassif", "SAT_DATASET:Tacred"}
+    assert {t["tag"] for t in second["tags"]} >= {
+        "SAT_TASK:RelationClassif",
+        "SAT_DATASET:Tacred",
+    }
 
 
 def test_create_review_from_kg(kg_file, tmp_path):
@@ -143,13 +148,13 @@ def test_create_review_from_kg(kg_file, tmp_path):
 def test_import_masks_keys_left_in_a_graph(kg_file, tmp_path):
     leaky = tmp_path / "leaky.ttl"
     leaky.write_text(
-        kg_file.read_text(encoding="utf-8").replace(
-            "REDACTED", SECRET
-        ),
+        kg_file.read_text(encoding="utf-8").replace("REDACTED", SECRET),
         encoding="utf-8",
     )
     workspace = Workspace(registry_path=tmp_path / "reviews.yml")
-    review, _ = kg_import.create_review_from_kg(workspace, tmp_path / "leaky", "leaky", leaky)
+    review, _ = kg_import.create_review_from_kg(
+        workspace, tmp_path / "leaky", "leaky", leaky
+    )
     for path in review.folder.rglob("*"):
         if path.is_file():
             assert SECRET not in path.read_text(encoding="utf-8", errors="ignore"), path

@@ -48,8 +48,12 @@ LPWC_BATCH = 40
 
 CROSSREF_COLUMNS = ("crossref_type", "crossref_cited_by", "crossref_funders", "issn")
 LPWC_COLUMNS = (
-    "lpwc_paper", "lpwc_tasks", "lpwc_methods", "lpwc_datasets",
-    "lpwc_repositories", "lpwc_conference",
+    "lpwc_paper",
+    "lpwc_tasks",
+    "lpwc_methods",
+    "lpwc_datasets",
+    "lpwc_repositories",
+    "lpwc_conference",
 )
 ORKG_COLUMNS = ("orkg_paper", "orkg_research_fields", "orkg_research_problems")
 
@@ -91,7 +95,12 @@ def _session() -> requests.Session:
 
 
 def _missing(value) -> bool:
-    return not is_valid(value) or str(value).strip() in ("", MISSING_VALUE, "nan", "None")
+    return not is_valid(value) or str(value).strip() in (
+        "",
+        MISSING_VALUE,
+        "nan",
+        "None",
+    )
 
 
 def _doi(row: dict) -> str | None:
@@ -157,11 +166,15 @@ def _join(values) -> str:
 _JATS = re.compile(r"<[^>]+>")
 
 
-def crossref_record(doi: str, session: requests.Session, mailto: str | None = None) -> dict | None:
+def crossref_record(
+    doi: str, session: requests.Session, mailto: str | None = None
+) -> dict | None:
     """Return the Crossref ``message`` of ``doi`` ({} when unknown, None on failure)."""
     params = {"mailto": mailto} if mailto else None
     try:
-        response = session.get(CROSSREF_WORKS.format(doi=doi), params=params, timeout=TIMEOUT)
+        response = session.get(
+            CROSSREF_WORKS.format(doi=doi), params=params, timeout=TIMEOUT
+        )
     except requests.RequestException as exc:
         logger.warning("Crossref %s: %s", doi, exc)
         return None
@@ -186,11 +199,15 @@ def crossref_fields(message: dict) -> dict[str, str]:
         return value[0] if isinstance(value, list) and value else value
 
     issued = (message.get("issued") or {}).get("date-parts") or [[]]
-    date = "-".join(f"{part:02d}" if i else str(part) for i, part in enumerate(issued[0] or []))
+    date = "-".join(
+        f"{part:02d}" if i else str(part) for i, part in enumerate(issued[0] or [])
+    )
     abstract = message.get("abstract")
     licence = first("license") or {}
     fields = {
-        "abstract": re.sub(r"\s+", " ", _JATS.sub(" ", abstract)).strip() if abstract else "",
+        "abstract": re.sub(r"\s+", " ", _JATS.sub(" ", abstract)).strip()
+        if abstract
+        else "",
         "journalAbbreviation": first("container-title") or "",
         "publisher": message.get("publisher") or "",
         "volume": message.get("volume") or "",
@@ -224,7 +241,10 @@ def enrich_crossref(
     _ensure_columns(data, CROSSREF_COLUMNS)
     cache = _load_cache(cache_path)
     rows = _selected(data, row_filter, limit)
-    todo = [(index, _doi(row)) for index, row in zip(rows.index, rows.to_dict("records"), strict=True)]
+    todo = [
+        (index, _doi(row))
+        for index, row in zip(rows.index, rows.to_dict("records"), strict=True)
+    ]
     todo = [(index, doi) for index, doi in todo if doi]
     try:
         for count, (index, doi) in enumerate(todo, 1):
@@ -249,7 +269,9 @@ def enrich_crossref(
                 elif _missing(data.at[index, column]):
                     data.at[index, column] = value
                     report.filled += 1
-            progress(int(100 * count / max(len(todo), 1)), f"Crossref: {count}/{len(todo)}")
+            progress(
+                int(100 * count / max(len(todo), 1)), f"Crossref: {count}/{len(todo)}"
+            )
     finally:
         _save_cache(cache_path, cache)
     return report
@@ -269,7 +291,9 @@ _LPWC_PROPS = {
 
 
 def _literal(text: str) -> str:
-    return json.dumps(text)  # a valid SPARQL string literal (escapes quotes, backslashes)
+    return json.dumps(
+        text
+    )  # a valid SPARQL string literal (escapes quotes, backslashes)
 
 
 def _lpwc_query(match_clause: str, values: list[str]) -> str:
@@ -296,7 +320,9 @@ def lpwc_lookup(
 ) -> dict[str, dict[str, str]] | None:
     """Look up papers on LPWC by ``arxiv`` id or exact ``title``; None on failure."""
     clause = (
-        "?paper fabio:hasArXivId ?key ." if by == "arxiv" else "?paper dcterms:title ?key ."
+        "?paper fabio:hasArXivId ?key ."
+        if by == "arxiv"
+        else "?paper dcterms:title ?key ."
     )
     try:
         response = session.post(
@@ -316,11 +342,16 @@ def lpwc_lookup(
         entry = found.setdefault(key, {"lpwc_paper": [b["paper"]["value"]]})
         if "p" in b:
             column = _LPWC_PROPS[b["p"]["value"].rsplit("/", 1)[-1]]
-            value = (b.get("label") or {}).get("value") or b["o"]["value"].rsplit("/", 1)[-1]
+            value = (b.get("label") or {}).get("value") or b["o"]["value"].rsplit(
+                "/", 1
+            )[-1]
             if column == "lpwc_repositories":
                 value = b["o"]["value"].split("/repository/", 1)[-1]
             entry.setdefault(column, []).append(value)
-    return {key: {col: _join(vals) for col, vals in cols.items()} for key, cols in found.items()}
+    return {
+        key: {col: _join(vals) for col, vals in cols.items()}
+        for key, cols in found.items()
+    }
 
 
 def enrich_lpwc(
@@ -399,11 +430,16 @@ def orkg_record(doi: str | None, title: str | None, session) -> dict | None:
     try:
         paper = None
         if doi:
-            found = _orkg_get(session, "/papers", {"doi": doi, "size": 1}, ORKG_PAPER_MEDIA)
+            found = _orkg_get(
+                session, "/papers", {"doi": doi, "size": 1}, ORKG_PAPER_MEDIA
+            )
             paper = next(iter(found.get("content") or []), None)
         if paper is None and title:
             found = _orkg_get(
-                session, "/papers", {"title": title, "exact": "true", "size": 1}, ORKG_PAPER_MEDIA
+                session,
+                "/papers",
+                {"title": title, "exact": "true", "size": 1},
+                ORKG_PAPER_MEDIA,
             )
             paper = next(iter(found.get("content") or []), None)
         if paper is None:
@@ -413,7 +449,10 @@ def orkg_record(doi: str | None, title: str | None, session) -> dict | None:
             statements = _orkg_get(
                 session,
                 "/statements",
-                {"subject_id": contribution["id"], "predicate_id": ORKG_RESEARCH_PROBLEM},
+                {
+                    "subject_id": contribution["id"],
+                    "predicate_id": ORKG_RESEARCH_PROBLEM,
+                },
             )
             problems += [s["object"]["label"] for s in statements.get("content") or []]
     except (requests.RequestException, ValueError, KeyError) as exc:
@@ -421,7 +460,9 @@ def orkg_record(doi: str | None, title: str | None, session) -> dict | None:
         return None
     return {
         "orkg_paper": f"https://orkg.org/paper/{paper['id']}",
-        "orkg_research_fields": _join(f.get("label") for f in paper.get("research_fields") or []),
+        "orkg_research_fields": _join(
+            f.get("label") for f in paper.get("research_fields") or []
+        ),
         "orkg_research_problems": _join(problems),
     }
 

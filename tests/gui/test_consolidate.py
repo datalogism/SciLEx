@@ -144,7 +144,9 @@ def test_default_action_discards_with_a_filter_tag(review):
     message = consolidate.apply(review, plan, merge=[])
     assert "2 filtered papers discarded" in message
     data = read_results(review.results_path)
-    tags = {str(t)[:8]: str(row) for t, row in zip(data["title"], data["tags"])}
+    tags = {
+        str(t)[:8]: str(row) for t, row in zip(data["title"], data["tags"], strict=True)
+    }
     assert tags["An old c"] == "DELETED_BY:filter:year 2015 outside 2019-2022"
     assert tags["A confer"] == "DELETED_BY:filter:no abstract"
     assert screening.load_decisions(review) == {}  # screening left alone

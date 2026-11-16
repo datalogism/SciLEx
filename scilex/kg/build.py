@@ -70,7 +70,9 @@ OCDM_FOLDERS = ("br", "ar", "ra", "id", "coding")
 # Keys of the citation dict SciLEx writes in Zotero's Extra (two generations).
 CITATION_KEYS = {"citing", "cited", "citing_dois", "cited_dois"}
 
-KG_EXTRA_HINT ="Building a knowledge graph needs the 'kg' extra: pip install 'scilex[kg]'"
+KG_EXTRA_HINT = (
+    "Building a knowledge graph needs the 'kg' extra: pip install 'scilex[kg]'"
+)
 
 
 class KgDependencyError(ImportError):
@@ -126,7 +128,9 @@ def citation_dict_line(note: str) -> str | None:
     return None
 
 
-def clean_tables(data: dict, drop_automation_tags: bool = True) -> tuple[dict, int, int]:
+def clean_tables(
+    data: dict, drop_automation_tags: bool = True
+) -> tuple[dict, int, int]:
     """Drop SciLEx automation tags and isolate the citation dict of each note.
 
     Profiles from iteration 3 map SciLEx's own tags (``Collect_KW1:...``,
@@ -219,9 +223,17 @@ def run_rml(mapping: PreparedMapping) -> Graph:
 def _store_to_ntriples(store, pyoxigraph) -> str:
     buffer = io.BytesIO()
     try:  # pyoxigraph >= 0.4
-        store.dump(buffer, format=pyoxigraph.RdfFormat.N_TRIPLES, from_graph=pyoxigraph.DefaultGraph())
+        store.dump(
+            buffer,
+            format=pyoxigraph.RdfFormat.N_TRIPLES,
+            from_graph=pyoxigraph.DefaultGraph(),
+        )
     except (AttributeError, TypeError):  # pyoxigraph 0.3 (pinned by morph-kgc 2.10)
-        store.dump(buffer, mime_type="application/n-triples", from_graph=pyoxigraph.DefaultGraph())
+        store.dump(
+            buffer,
+            mime_type="application/n-triples",
+            from_graph=pyoxigraph.DefaultGraph(),
+        )
     return buffer.getvalue().decode("utf-8")
 
 
@@ -241,7 +253,11 @@ def run_sparql(mapping: PreparedMapping, graph: Graph) -> Graph:
         before, started = len(store), time.perf_counter()
         store.update(ru.read_text(encoding="utf-8"))
         logger.info(
-            "%s: %d -> %d triples (%.1fs)", ru.name, before, len(store), time.perf_counter() - started
+            "%s: %d -> %d triples (%.1fs)",
+            ru.name,
+            before,
+            len(store),
+            time.perf_counter() - started,
         )
     return Graph().parse(data=_store_to_ntriples(store, pyoxigraph), format="nt")
 
@@ -251,7 +267,9 @@ def run_sparql(mapping: PreparedMapping, graph: Graph) -> Graph:
 # ---------------------------------------------------------------------------
 
 
-def describe_subcorpora(graph: Graph, base_iri: str, subcorpora: dict[str, list[str]]) -> None:
+def describe_subcorpora(
+    graph: Graph, base_iri: str, subcorpora: dict[str, list[str]]
+) -> None:
     """Add one ``dcat:Dataset`` per sub-corpus (Zotero collection) with its papers.
 
     ``subcorpora`` maps a collection path (``Parent / Child``) to the citation
@@ -289,7 +307,9 @@ def describe_dataset(
     for prop in (DCTERMS.title, DCTERMS.description):
         graph.remove((dataset, prop, None))
     graph.add((dataset, RDF.type, DCAT.Dataset))
-    graph.add((dataset, DCTERMS.title, Literal(f"SciLEx review: {review_name}", lang="en")))
+    graph.add(
+        (dataset, DCTERMS.title, Literal(f"SciLEx review: {review_name}", lang="en"))
+    )
     graph.add(
         (
             dataset,
@@ -309,11 +329,19 @@ def describe_dataset(
     for source in graph.objects(dataset, PROV.wasDerivedFrom):
         graph.remove((source, RDFS.label, None))
         graph.add(
-            (source, RDFS.label, Literal(f"{source_name} (Zotero BibLaTeX export of the review)", lang="en"))
+            (
+                source,
+                RDFS.label,
+                Literal(
+                    f"{source_name} (Zotero BibLaTeX export of the review)", lang="en"
+                ),
+            )
         )
 
 
-def validate(graph: Graph, report_path: Path, profile_dir: Path = PROFILE_DIR) -> bool | None:
+def validate(
+    graph: Graph, report_path: Path, profile_dir: Path = PROFILE_DIR
+) -> bool | None:
     """Validate ``graph`` against the profile's general shapes; write the report.
 
     Returns:
@@ -326,7 +354,9 @@ def validate(graph: Graph, report_path: Path, profile_dir: Path = PROFILE_DIR) -
     try:
         from pyshacl import validate as shacl_validate
     except ImportError:
-        logger.warning("pyshacl is not installed: validation skipped (%s)", KG_EXTRA_HINT)
+        logger.warning(
+            "pyshacl is not installed: validation skipped (%s)", KG_EXTRA_HINT
+        )
         return None
     shapes_graph = Graph()
     for path in shapes:

@@ -27,7 +27,7 @@ class YourAPI_collector(API_collector):
         self.max_by_page = 100
 
         if config:
-            self.api_key = config.get('yourapi', {}).get('api_key')
+            self.api_key = config.get("yourapi", {}).get("api_key")
 
         self.load_rate_limit_from_config(config)  # Always call last
 
@@ -88,35 +88,36 @@ Add to `src/crawlers/aggregate.py`:
 ```python
 from scilex.constants import MISSING_VALUE, is_valid
 
+
 def YourAPItoZoteroFormat(paper):
     """Convert YourAPI format to Zotero-compatible unified format."""
 
     # Determine item type
-    item_type = 'journalArticle'  # Default
-    pub_type = paper.get('type', '').lower()
-    if 'conference' in pub_type:
-        item_type = 'conferencePaper'
-    elif 'book' in pub_type:
-        item_type = 'book'
+    item_type = "journalArticle"  # Default
+    pub_type = paper.get("type", "").lower()
+    if "conference" in pub_type:
+        item_type = "conferencePaper"
+    elif "book" in pub_type:
+        item_type = "book"
 
     # Format authors
-    authors = paper.get('authors', [])
-    author_str = ', '.join(authors) if authors else MISSING_VALUE
+    authors = paper.get("authors", [])
+    author_str = ", ".join(authors) if authors else MISSING_VALUE
 
     return {
-        'itemType': item_type,
-        'title': paper.get('title', MISSING_VALUE),
-        'authors': author_str,
-        'abstractNote': paper.get('abstract', MISSING_VALUE),
-        'date': str(paper.get('year', MISSING_VALUE)),
-        'DOI': paper.get('doi', MISSING_VALUE),
-        'url': paper.get('url', MISSING_VALUE),
-        'publicationTitle': paper.get('journal', MISSING_VALUE),
-        'volume': str(paper.get('volume', MISSING_VALUE)),
-        'issue': str(paper.get('issue', MISSING_VALUE)),
-        'pages': paper.get('pages', MISSING_VALUE),
-        'year': str(paper.get('year', MISSING_VALUE)),
-        'citation_count': paper.get('citations', 0),
+        "itemType": item_type,
+        "title": paper.get("title", MISSING_VALUE),
+        "authors": author_str,
+        "abstractNote": paper.get("abstract", MISSING_VALUE),
+        "date": str(paper.get("year", MISSING_VALUE)),
+        "DOI": paper.get("doi", MISSING_VALUE),
+        "url": paper.get("url", MISSING_VALUE),
+        "publicationTitle": paper.get("journal", MISSING_VALUE),
+        "volume": str(paper.get("volume", MISSING_VALUE)),
+        "issue": str(paper.get("issue", MISSING_VALUE)),
+        "pages": paper.get("pages", MISSING_VALUE),
+        "year": str(paper.get("year", MISSING_VALUE)),
+        "citation_count": paper.get("citations", 0),
     }
 ```
 
@@ -128,10 +129,10 @@ In `src/crawlers/collector_collection.py`:
 
 ```python
 api_collectors = {
-    'SemanticScholar': SemanticScholar_collector,
-    'OpenAlex': OpenAlex_collector,
+    "SemanticScholar": SemanticScholar_collector,
+    "OpenAlex": OpenAlex_collector,
     # Add your collector
-    'YourAPI': YourAPI_collector,
+    "YourAPI": YourAPI_collector,
 }
 ```
 
@@ -141,10 +142,10 @@ In `src/crawlers/aggregate.py` (in the `FORMAT_CONVERTERS` dict):
 
 ```python
 FORMAT_CONVERTERS = {
-    'SemanticScholar': SemanticScholartoZoteroFormat,
-    'OpenAlex': OpenAlextoZoteroFormat,
+    "SemanticScholar": SemanticScholartoZoteroFormat,
+    "OpenAlex": OpenAlextoZoteroFormat,
     # Add your converter
-    'YourAPI': YourAPItoZoteroFormat,
+    "YourAPI": YourAPItoZoteroFormat,
 }
 ```
 
@@ -185,9 +186,10 @@ from crawlers.collectors import YourAPI_collector
 from crawlers.aggregate import YourAPItoZoteroFormat
 from scilex.config import SciLExConfig
 
+
 def test_collector():
     # Load config
-    config = SciLExConfig.from_files().api_config   # reads keys.yml
+    config = SciLExConfig.from_files().api_config  # reads keys.yml
 
     # Test collection
     collector = YourAPI_collector(config)
@@ -199,6 +201,7 @@ def test_collector():
         # Test converter
         zotero_item = YourAPItoZoteroFormat(papers[0])
         print(f"Title: {zotero_item['title']}")
+
 
 if __name__ == "__main__":
     test_collector()
@@ -215,16 +218,18 @@ For unit tests with fixtures, create `tests/test_yourapi_collector.py`:
 from unittest.mock import MagicMock
 import json
 
+
 def test_parse_page_results():
     import sys
-    sys.path.insert(0, 'src')
+
+    sys.path.insert(0, "src")
     from crawlers.collectors import YourAPI_collector
 
     collector = YourAPI_collector()
     mock_response = MagicMock()
     mock_response.json.return_value = {
         "total": 1,
-        "items": [{"title": "Test Paper", "year": 2024}]
+        "items": [{"title": "Test Paper", "year": 2024}],
     }
 
     result = collector.parsePageResults(mock_response, 1)
@@ -297,9 +302,11 @@ except requests.HTTPError as e:
 def get_offset(self, page):
     return (page - 1) * self.max_by_page
 
+
 # 1-based page (OpenAlex, OpenAIRE style)
 def get_offset(self, page):
     return page
+
 
 # 0-based page (ORKG style)
 def get_offset(self, page):

@@ -40,7 +40,9 @@ MULTI_IDENTIFIER_FIELDS = ("issn", "isbn")
 # Field values that mean "no value" (dataframe-based exports write NaN as text).
 NULL_TOKENS = {"nan", "none", "null", "n/a"}
 # BibLaTeX verbatim fields: no LaTeX inside ("%" in a URL is not a comment).
-VERBATIM_FIELDS = frozenset({"url", "urlraw", "doi", "eprint", "file", "pdf", "verba", "verbb"})
+VERBATIM_FIELDS = frozenset(
+    {"url", "urlraw", "doi", "eprint", "file", "pdf", "verba", "verbb"}
+)
 
 _TEXT_COMMANDS = {
     r"\textasciicircum": "^",
@@ -185,7 +187,9 @@ def split_separated_list(value: str) -> list[str]:
 def split_identifiers(field: str, value: str) -> list[str]:
     """Split a multi-valued ISSN / ISBN field (", " "; " " and " or spaces)."""
     values = [
-        v for v in re.split(r"[,;\s]+(?:and\s+)?", value) if len(re.sub(r"[^0-9Xx]", "", v)) >= 8
+        v
+        for v in re.split(r"[,;\s]+(?:and\s+)?", value)
+        if len(re.sub(r"[^0-9Xx]", "", v)) >= 8
     ]
     if field == "issn":  # canonical NNNN-NNNC form
         values = [
@@ -204,7 +208,10 @@ def convert_string(text: str, source: str) -> dict:
         # Zotero repeats some fields (several ``annotation``): bibtexparser 1.x,
         # used by the profile, keeps the first value; 2.x rejects the entry, and
         # its fallback entry skipped the middleware removing enclosing braces.
-        if isinstance(block, DuplicateFieldKeyBlock) and block.ignore_error_block is not None:
+        if (
+            isinstance(block, DuplicateFieldKeyBlock)
+            and block.ignore_error_block is not None
+        ):
             raw_entries.append((block.ignore_error_block, True))
         else:
             failed += 1
@@ -221,27 +228,51 @@ def convert_string(text: str, source: str) -> dict:
         seen.add(key)
         entry = {"ID": key, "ENTRYTYPE": raw.entry_type.lower()}
         fields: dict[str, str] = {}
-        for f in raw.fields:  # a repeated field keeps its first value, as in bibtexparser 1.x
-            fields.setdefault(f.key.lower(), strip_enclosing(str(f.value)) if enclosed else str(f.value))
+        for f in (
+            raw.fields
+        ):  # a repeated field keeps its first value, as in bibtexparser 1.x
+            fields.setdefault(
+                f.key.lower(),
+                strip_enclosing(str(f.value)) if enclosed else str(f.value),
+            )
         for name, value in fields.items():
             if clean(value).casefold() in NULL_TOKENS:
                 continue  # "nan" etc.: no value
             if name in MULTI_IDENTIFIER_FIELDS:
                 entry[name] = clean(value)
                 for pos, item in enumerate(split_identifiers(name, entry[name])):
-                    identifiers.append({"entry": key, "field": name, "position": pos + 1, "value": item})
+                    identifiers.append(
+                        {
+                            "entry": key,
+                            "field": name,
+                            "position": pos + 1,
+                            "value": item,
+                        }
+                    )
             elif name in NAME_LIST_FIELDS:
                 # Split on the raw value: " and " inside braces is a literal.
                 names = re.split(r"\s+and\s+(?![^{]*})", value)
                 for pos, person in enumerate(n for n in names if n.strip()):
                     creators.append(
-                        {"entry": key, "role": name, "position": pos + 1, **split_name(person)}
+                        {
+                            "entry": key,
+                            "role": name,
+                            "position": pos + 1,
+                            **split_name(person),
+                        }
                     )
                 entry[name] = clean(value)
             elif name in SEPARATED_LIST_FIELDS:
                 entry[name] = clean(value)
                 for pos, item in enumerate(split_separated_list(entry[name])):
-                    lists.append({"entry": key, "field": name, "position": pos + 1, "value": item})
+                    lists.append(
+                        {
+                            "entry": key,
+                            "field": name,
+                            "position": pos + 1,
+                            "value": item,
+                        }
+                    )
             elif name in VERBATIM_FIELDS:
                 entry[name] = clean_verbatim(value)
             else:
@@ -253,7 +284,9 @@ def convert_string(text: str, source: str) -> dict:
         del c["explicit"]
         repaired += c.pop("repaired")
     if repaired:
-        logger.info("%s: %d names in a lossy ', Given Family' form re-split", source, repaired)
+        logger.info(
+            "%s: %d names in a lossy ', Given Family' form re-split", source, repaired
+        )
     return {
         "source": source,
         "entries": entries,

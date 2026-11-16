@@ -184,9 +184,9 @@ filters:
 ```python
 import pandas as pd
 
-df = pd.read_csv('output/<name>/aggregated_results.csv', delimiter=';')
+df = pd.read_csv("output/<name>/aggregated_results.csv", delimiter=";")
 
 # Check scores
-top = df.nlargest(10, 'relevance_score')
-print(top[['title', 'relevance_score', 'quality_score', 'nb_citation']])
+top = df.nlargest(10, "relevance_score")
+print(top[["title", "relevance_score", "quality_score", "nb_citation"]])
 ```

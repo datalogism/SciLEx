@@ -66,7 +66,7 @@ def load(folder: Path) -> dict[str, RunRecord]:
         logger.warning("Ignoring unreadable run history %s: %s", path, exc)
         return {}
     records = {}
-    for key, entry in (data.items() if isinstance(data, dict) else ()):
+    for key, entry in data.items() if isinstance(data, dict) else ():
         try:
             records[key] = RunRecord(
                 key,

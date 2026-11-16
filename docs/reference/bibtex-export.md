@@ -53,12 +53,12 @@ scilex-export-bibtex
 
 ```python
 # ✓ CORRECT: file field is a direct PDF link
-if 'file' in entry:
-    pdf_bytes = requests.get(entry['file']).content
+if "file" in entry:
+    pdf_bytes = requests.get(entry["file"]).content
 
 # ✗ WRONG: url is a landing page, returns HTML not PDF
-if 'url' in entry:
-    pdf_bytes = requests.get(entry['url']).content
+if "url" in entry:
+    pdf_bytes = requests.get(entry["url"]).content
 ```
 
 ### Identifiers and Metadata

@@ -174,7 +174,7 @@ def prepare_mapping(
     udfs_text = _read(udf_files[0])
     match = _BASE_IN_UDFS.search(udfs_text)
     if not match:
-        raise ProfileError(f"No BASE = \"...\" in {udf_files[0].name}")
+        raise ProfileError(f'No BASE = "..." in {udf_files[0].name}')
     upstream_base = match.group(1)
     # What must not survive the rewrite ("" when the review reuses the profile's own base).
     leftover = "" if upstream_base == base_iri else upstream_base
@@ -209,15 +209,23 @@ def prepare_mapping(
         udfs += f"DIMENSIONS = {sorted(set(dimensions))!r}\n"
         udfs += "DIMENSIONS = set(DIMENSIONS)\n"
     # morph-kgc opens the functions file with the locale encoding (cp1252 on Windows).
-    out_udfs = _write(workdir / "functions" / udf_files[0].name, ascii_source(udfs), leftover)
+    out_udfs = _write(
+        workdir / "functions" / udf_files[0].name, ascii_source(udfs), leftover
+    )
 
     for path in ru_files:
-        out_ru.append(_write(workdir / "sparql" / path.name, rewrite(_read(path)), leftover))
+        out_ru.append(
+            _write(workdir / "sparql" / path.name, rewrite(_read(path)), leftover)
+        )
 
     roles = lpwc_roles(dimensions or [])
     if roles:
         out_ru.append(
-            _write(workdir / "sparql" / "90-scilex-grid-lifting.ru", lifting_update(base_iri, roles), "")
+            _write(
+                workdir / "sparql" / "90-scilex-grid-lifting.ru",
+                lifting_update(base_iri, roles),
+                "",
+            )
         )
     return PreparedMapping(workdir, out_rml, out_udfs, out_ru, base_iri)
 
@@ -236,7 +244,8 @@ SCILEX_PRESENCE_TAGS = ("HavePDF", "HaveHF", "HavePWC", "HaveGithub", "SciLexCol
 def is_templated(profile_dir: Path = PROFILE_DIR) -> bool:
     """True when the pinned profile's mapping uses ``{{...}}`` placeholders (iter3+)."""
     return any(
-        PLACEHOLDER_MARK in _read(p) for p in (profile_dir / "mappings" / "rml").glob("*.rml.ttl")
+        PLACEHOLDER_MARK in _read(p)
+        for p in (profile_dir / "mappings" / "rml").glob("*.rml.ttl")
     )
 
 
@@ -282,7 +291,10 @@ def collection_profile(
 def _sparql_text(text: str) -> str:
     """Escape a value placed between double quotes in Turtle / SPARQL."""
     return (
-        text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ").replace("\r", " ")
+        text.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", " ")
+        .replace("\r", " ")
     )
 
 
@@ -320,7 +332,9 @@ def _prepare_templates(
         dimensions=dimensions,
     )
     profile_path = workdir / f"{slug}.collection.json"
-    profile_path.write_text(json.dumps(profile, ensure_ascii=False, indent=1), encoding="utf-8")
+    profile_path.write_text(
+        json.dumps(profile, ensure_ascii=False, indent=1), encoding="utf-8"
+    )
     values = {
         "BASE": base_iri,
         "JSON": source_json.resolve().as_posix(),
@@ -342,13 +356,22 @@ def _prepare_templates(
     out_rml = [
         _write(workdir / "rml" / p.name, fill(_read(p), p.name), "") for p in rml_files
     ]
-    out_ru = [_write(workdir / "sparql" / p.name, fill(_read(p), p.name), "") for p in ru_files]
+    out_ru = [
+        _write(workdir / "sparql" / p.name, fill(_read(p), p.name), "")
+        for p in ru_files
+    ]
     # morph-kgc opens the functions file with the locale encoding (cp1252 on Windows).
-    out_udfs = _write(workdir / "functions" / udf_file.name, ascii_source(_read(udf_file)), "")
+    out_udfs = _write(
+        workdir / "functions" / udf_file.name, ascii_source(_read(udf_file)), ""
+    )
     roles = lpwc_roles(dimensions)
     if roles:
         out_ru.append(
-            _write(workdir / "sparql" / "90-scilex-grid-lifting.ru", lifting_update(base_iri, roles), "")
+            _write(
+                workdir / "sparql" / "90-scilex-grid-lifting.ru",
+                lifting_update(base_iri, roles),
+                "",
+            )
         )
     return PreparedMapping(
         workdir,
@@ -373,7 +396,9 @@ def ascii_source(code: str) -> str:
         code_point = ord(char)
         if code_point < 128:
             return char
-        return f"\\u{code_point:04x}" if code_point <= 0xFFFF else f"\\U{code_point:08x}"
+        return (
+            f"\\u{code_point:04x}" if code_point <= 0xFFFF else f"\\U{code_point:08x}"
+        )
 
     return "".join(escape(c) for c in code)
 

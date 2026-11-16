@@ -26,7 +26,12 @@ def test_snapshot_counts_annotations_and_placeholders():
         [["SAT_TASK:NER", "SAT_LANG:?", "HavePDF"], ["SAT_TASK:?"], ["free keyword"]],
         "annotate",
     )
-    assert (snapshot.papers, snapshot.annotated, snapshot.pending, snapshot.values) == (3, 1, 2, 1)
+    assert (snapshot.papers, snapshot.annotated, snapshot.pending, snapshot.values) == (
+        3,
+        1,
+        2,
+        1,
+    )
     assert snapshot.by_dimension == {"SAT_TASK": 1}
 
 
@@ -53,7 +58,9 @@ def test_compute_overview(ctx, tmp_path):
 
 async def test_opening_a_review_shows_its_overview(ctx, tmp_path):
     review = _review(ctx, tmp_path)
-    overview.record_snapshot(review.folder, [["SAT_TASK:NER"], ["SAT_TASK:?"]], "import")
+    overview.record_snapshot(
+        review.folder, [["SAT_TASK:NER"], ["SAT_TASK:?"]], "import"
+    )
     async with user_simulation(build_root(ctx)) as user:
         await user.open(f"/review/{review.id}")
         await user.should_see("Overview")
