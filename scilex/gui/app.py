@@ -37,7 +37,7 @@ def build_root(ctx) -> Callable[[], None]:
         @functools.wraps(page)  # keeps the signature NiceGUI reads the route data from
         def gated(*args, **kwargs):
             if not ctx.profile.is_complete:
-                profile.render(ctx)
+                profile.render(ctx, gated=True)
                 return None
             return page(*args, **kwargs)
 

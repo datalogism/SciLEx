@@ -90,7 +90,12 @@ def review_card(folder: Path) -> ReviewCard:
 
     events = journal.load(folder)
     card = ReviewCard()
-    created = next((e for e in events if e.get("activity") == "created"), None)
+    creations = [e for e in events if e.get("activity") == "created"]
+    # A recorded creation wins over one inferred from the files.
+    created = next((e for e in creations if not e.get("inferred")), None) or next(
+        iter(creations), None
+    )
+    origin_event = None  # the run that brought the first papers: not an extension
     if created is not None:
         card.origin = (created.get("params") or {}).get("origin") or journal.EMPTY
         card.origin_detail = _detail(created)
@@ -109,6 +114,7 @@ def review_card(folder: Path) -> ReviewCard:
             None,
         )
         if first is not None:
+            origin_event = first
             card.origin = {
                 "job:pipeline": journal.SCILEX_COLLECT,
                 "import-bibtex": journal.BIBTEX_IMPORT,
@@ -134,7 +140,7 @@ def review_card(folder: Path) -> ReviewCard:
             status=str(event.get("status", "completed")),
             inferred=bool(event.get("inferred")),
         )
-        if category == "extension":
+        if category == "extension" and event is not origin_event:
             step.papers = _added(event)
             card.extensions.append(step)
         elif category == "enrichment":
