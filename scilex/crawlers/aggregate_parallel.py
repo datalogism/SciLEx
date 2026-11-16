@@ -779,8 +779,16 @@ def simple_deduplicate(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         lambda cell: (parse_archive_apis(cell) or [None])[0]
     )
 
-    # STEP 1: DOI-based deduplication
-    df_output, doi_removed = _dedup_by_key(df_output, "DOI")
+    # STEP 1: DOI-based deduplication, on the normalised DOI: DOIs are
+    # case-insensitive and APIs differ in case and prefix (doi.org URL or not).
+    if "DOI" in df_output.columns:
+        df_output["_doi_key"] = df_output["DOI"].map(normalize_doi)
+        df_output, doi_removed = _dedup_by_key(
+            df_output, "_doi_key", is_valid_key=lambda key: bool(key)
+        )
+        df_output = df_output.drop(columns=["_doi_key"])
+    else:
+        doi_removed = 0
     logging.info(f"DOI deduplication: removed {doi_removed:,} duplicates")
 
     # STEP 2: Normalized title deduplication
