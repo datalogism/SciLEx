@@ -47,7 +47,7 @@ Shared with Zotero by the [sync](zotero.md#sync):
 - `DELETED_BY:<who>` — discarded: kept in the corpus but left out of the analyses,
   counts and charts (`DELETED_BY:filter:<reason>` when a rule did it).
 
-The notice of [Explore](explore.md#paper-notice) has **Validated by me** and **Discard**
+The notice of [Explore](explore.md#paper-notice) has **Validate** and **Discard**
 with your ORCID iD; Screen and Explore filter on annotation status, annotator and
 validator. These tags never count as annotation dimensions. See all
 [tag conventions](../reference/tags.md).

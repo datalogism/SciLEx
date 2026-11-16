@@ -419,6 +419,38 @@ def filter_reasons(record: dict, main_config: dict) -> list[str]:
     return reasons
 
 
+def describe_filters(rules: dict) -> list[str]:
+    """Readable list of the exclusion rules :func:`filter_reasons` applies.
+
+    Leaves out the year range (criterion C1) and the settings of
+    ``quality_filters`` that exclude nothing (ranking, citations, reports).
+    """
+    rules = rules or {}
+    described = []
+    if rules.get("enable_itemtype_filter") and rules.get("allowed_item_types"):
+        described.append("item type in " + ", ".join(rules["allowed_item_types"]))
+    for key, text in (
+        ("require_abstract", "abstract required"),
+        ("require_doi", "DOI required"),
+        ("require_year", "year required"),
+    ):
+        if rules.get(key):
+            described.append(text)
+    if rules.get("min_author_count"):
+        described.append(f"at least {rules['min_author_count']} author(s)")
+    if rules.get("min_abstract_words"):
+        described.append(f"abstract of at least {rules['min_abstract_words']} words")
+    if rules.get("max_abstract_words"):
+        described.append(f"abstract of at most {rules['max_abstract_words']} words")
+    if (
+        described
+        and rules.get("enable_itemtype_bypass")
+        and rules.get("bypass_item_types")
+    ):
+        described.append("except for " + ", ".join(rules["bypass_item_types"]))
+    return described
+
+
 # -- plan and apply -----------------------------------------------------------
 
 

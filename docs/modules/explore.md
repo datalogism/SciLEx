@@ -51,7 +51,7 @@ research problems and fields, Zotero collections, sources, screening note, and:
   exceptions (`KEEP:<criterion>`) in one click.
 
 Clicking a value filters on it; the arrows move to the previous or next paper.
-**Validated by me** adds `ANNOT_VALID_BY:<your ORCID>`; **Discard** adds
+**Validate** adds `ANNOT_VALID_BY:<your ORCID>`; **Discard** adds
 `DELETED_BY:<your ORCID>` (the paper stays in the corpus but leaves the analyses,
 counts and charts); both can be undone. The same notice opens when clicking a node of
 the [citation graph](analyses.md#graph).

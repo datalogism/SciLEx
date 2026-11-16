@@ -150,3 +150,20 @@ def test_default_action_discards_with_a_filter_tag(review):
     assert screening.load_decisions(review) == {}  # screening left alone
     # A second preview no longer lists them.
     assert consolidate.plan(review, CONFIG).filtered == []
+
+
+def test_describe_filters_lists_only_exclusion_rules():
+    rules = {
+        "require_abstract": True,
+        "min_abstract_words": 50,
+        "max_papers": 1500,
+        "relevance_weights": {"keywords": 0.5},
+        "use_openalex_citations": True,
+        "generate_quality_report": True,
+        "validate_year_range": True,
+    }
+    assert consolidate.describe_filters(rules) == [
+        "abstract required",
+        "abstract of at least 50 words",
+    ]
+    assert consolidate.describe_filters({}) == []
